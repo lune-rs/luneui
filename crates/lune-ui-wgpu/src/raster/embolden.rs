@@ -130,7 +130,7 @@ pub(super) fn grow(outline: &mut Outline, orient: Orient, dx: f32, dy: f32) {
 }
 
 // swash's per-contour `embolden`, copied as is: a rewrite that reorders float operations breaks
-// the bit-exact test below (`grow_as_before_is_swashs_embolden`).
+// the bit-exact test below (`copy_at_the_concatenated_sign_is_swashs_embolden`).
 fn embolden(points: &mut [Point], winding: u8, x_strength: f32, y_strength: f32) {
     if points.is_empty() {
         return;
