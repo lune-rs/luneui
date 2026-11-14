@@ -212,6 +212,8 @@ mod tests {
     use swash::FontRef;
 
     const SANS: &[u8] = include_bytes!("../../../apps/gallery/assets/RznSans-Regular.ttf");
+    const MONO: &[u8] =
+        include_bytes!("../../../apps/gallery/assets/RobotoMonoNerdFontMono-Regular.ttf");
 
     /// RznSans's `⅓` is two far-apart contours groups whose joined sign points inward (0.5.1
     /// drew it thinner than undilated). Its mirror (x negated) takes the mirrored push: both grow
@@ -265,5 +267,60 @@ mod tests {
             grown[0],
             grown[1]
         );
+    }
+
+    /// The second try of D3r: RobotoMono's U+E23A (a Nerd icon whose contours disagree with each
+    /// other) thins at its summed push, and the opposite push rescues it. Probed at 13 and 26
+    /// px, hinting off: floor 13499 and 55329, summed 12887 and 52750, opposite 14458 and 58748
+    /// (ink as the mask byte sum). If a font change moves this glyph, swap in another one that
+    /// the same two inequalities hold for (scan the font for `first < floor` and a `select`
+    /// that returns an image: 48 and 56 such glyphs at 13 and 26 px).
+    #[test]
+    fn the_opposite_push_rescues_a_glyph_the_summed_push_thins() {
+        let font = FontRef::from_index(MONO, 0).expect("the font parses");
+        let glyph = font.charmap().map('\u{e23a}');
+        assert_ne!(glyph, 0, "RobotoMono has U+E23A");
+        let mut ctx = ScaleContext::new();
+        let fill = FillSettings {
+            skew: false,
+            offset: Vector::new(0.0, 0.0),
+        };
+        for size in [13.0, 26.0] {
+            let mut scaler = ctx.builder(font).size(size).hint(false).build();
+            let outline = scaler
+                .scale_outline(glyph)
+                .expect("the glyph has an outline");
+            let dilation = TextRendering::SMOOTH.glyph_params(size).dilation();
+            let floor = ink(&select(&outline, [0.0, 0.0], 0, fill).expect("fills").data);
+            let pushed = |orient| {
+                let mut o = outline.clone();
+                embolden::grow(&mut o, orient, dilation[0], dilation[1]);
+                o.transform(&Transform::translation(-dilation[0], -dilation[1]));
+                fill_outline(o, fill)
+            };
+            let summed = pushed(embolden::Orient::Summed);
+            let opposite = pushed(embolden::Orient::Opposite);
+            assert!(
+                ink(&summed.data) < floor,
+                "{size} px: the summed push no longer thins U+E23A ({} >= {floor}); swap the glyph",
+                ink(&summed.data)
+            );
+            let chosen = select(&outline, dilation, floor, fill)
+                .unwrap_or_else(|| panic!("{size} px: neither push keeps the ink, it fell back"));
+            assert!(
+                ink(&chosen.data) > floor,
+                "{size} px: {} <= {floor}",
+                ink(&chosen.data)
+            );
+            // It is the opposite push, byte for byte.
+            assert_eq!(
+                chosen.data, opposite.data,
+                "{size} px: not the opposite push"
+            );
+            assert_eq!(
+                (chosen.placement.left, chosen.placement.top),
+                (opposite.placement.left, opposite.placement.top)
+            );
+        }
     }
 }

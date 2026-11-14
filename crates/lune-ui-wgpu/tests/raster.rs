@@ -384,3 +384,27 @@ fn t9_when_both_pushes_thin_the_undilated_glyph_is_drawn() {
         ink(&undilated)
     );
 }
+
+/// The same icon through the public `image`: the retry draws it grown, not undilated (the unit
+/// test in `raster.rs` pins that this is the opposite push). If a font change moves U+E23A, swap
+/// in a glyph the unit test's two inequalities hold for.
+#[test]
+fn t10_a_glyph_the_summed_push_thins_is_rescued_by_the_opposite_push() {
+    let mut r = GlyphRasterizer::new();
+    let mut mono = font("RobotoMono", MONO);
+    for size in [13.0, 26.0] {
+        let key = mono.key('\u{e23a}', size, 0.0, CacheKeyFlags::empty());
+        let undilated = mono.image(&mut r, key, GlyphParams::new(false, [0.0, 0.0]));
+        let smoothed = mono.image(&mut r, key, smooth(size, false));
+        assert!(
+            ink(&smoothed) > ink(&undilated),
+            "U+E23A at {size} px: {} <= undilated {}",
+            ink(&smoothed),
+            ink(&undilated)
+        );
+        assert!(
+            !same(&smoothed, &undilated),
+            "U+E23A at {size} px fell back"
+        );
+    }
+}
