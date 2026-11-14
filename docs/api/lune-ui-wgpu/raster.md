@@ -34,6 +34,11 @@ stem-darkening dilation on each side.
 3. An outline glyph is filled again from its outline, grown by `params.dilation()` on each
    side and moved back so it stays centred where it was, through the same scaler settings and
    mask steps cosmic-text uses. At zero dilation that gives cosmic-text's bytes exactly.
+   Each layer is pushed outwards the way FreeType finds its orientation, from the sum of its
+   contours' own areas. If the grown glyph has less ink than rule 2's image (a layer whose
+   contours disagree with each other), the opposite push is tried; if that has less ink too,
+   rule 2's image is returned, so smoothing never draws a glyph thinner than it is without
+   dilation.
 
 An app's own glyph cache must key each image by the glyph's `GlyphParams` as well as its
 `CacheKey` (two settings give two images), and must leave `DISABLE_HINTING` to this rasterizer
@@ -48,7 +53,7 @@ one).
 Deterministic: the same inputs give the same bytes on any instance; nothing is cached between
 calls.
 
-Source: `crates/lune-ui-wgpu/src/raster.rs:41`
+Source: `crates/lune-ui-wgpu/src/raster.rs:47`
 
 **Methods and associated items**
 
