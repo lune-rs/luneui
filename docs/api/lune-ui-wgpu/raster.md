@@ -48,7 +48,7 @@ one).
 Deterministic: the same inputs give the same bytes on any instance; nothing is cached between
 calls.
 
-Source: `crates/lune-ui-wgpu/src/raster.rs:39`
+Source: `crates/lune-ui-wgpu/src/raster.rs:41`
 
 **Methods and associated items**
 

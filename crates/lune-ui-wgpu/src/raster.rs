@@ -2,6 +2,8 @@
 //! [`GlyphParams`] (hinting and stem darkening) it is drawn with. The toolkit's text paths rasterize
 //! through it, and an app's own glyph renderer can too, so both draw the same pixels.
 
+mod embolden;
+
 use std::fmt;
 
 use cosmic_text::{CacheKey, CacheKeyFlags, FontSystem, SwashCache, SwashImage};
@@ -102,9 +104,9 @@ impl GlyphRasterizer {
         let mut scaler = builder.build();
         let mut outline = scaler.scale_outline(key.glyph_id)?;
         if dx != 0.0 || dy != 0.0 {
-            // `embolden` grows the box by twice the strength with its min corner fixed; the
+            // `grow` grows the box by twice the strength with its min corner fixed; the
             // translate moves it back so the growth is `dx`, `dy` on each side.
-            outline.embolden(dx, dy);
+            embolden::grow(&mut outline, embolden::Turn::AsBefore, dx, dy);
             outline.transform(&Transform::translation(-dx, -dy));
         }
         if key.flags.contains(CacheKeyFlags::FAKE_ITALIC) {

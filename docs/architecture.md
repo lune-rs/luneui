@@ -333,7 +333,7 @@ A busy loop's frames tick at `motion::Cadence` (30 a second by default, D298); a
 | `dump` (`dump.rs`) | Offscreen targets and GPU readback to PNG; no screen capture | `target`, `read_rgba`, `write_png` |
 | `custom` (`custom.rs`) | App-owned GPU drawing inside a painted layer (the hook for app-specific drawing, D8) | `CustomDraw`, `CustomFrame`, `CustomItem` |
 | `text_cache` (`text_cache.rs`) | cosmic-text shaping behind the core's `TextSystem`, including the caret, hit, line and segment queries, which read one row list per shaped text (`unicode-segmentation`, D86; D112) | `TextCache` |
-| `raster` (`raster.rs`) | The one glyph rasterizer: cosmic-text's image for `GlyphParams::OFF` and for colour glyphs, otherwise the outline filled again, dilated and re-centred (`swash`, D295); an app's own glyph renderer calls it too | `GlyphRasterizer` |
+| `raster` (`raster.rs`, `raster/embolden.rs`) | The one glyph rasterizer: cosmic-text's image for `GlyphParams::OFF` and for colour glyphs, otherwise the outline filled again, dilated and re-centred (`swash`, D295; the growth is the private `embolden` module, a copy of swash's with the push direction as an argument, D303); an app's own glyph renderer calls it too | `GlyphRasterizer` |
 | `glyph` (`glyph.rs`, `glyph/`; private) | glyphon 0.12.0's renderer (atlas, pipeline cache, viewport, text renderer, shader), vendored as is bar the changes in each file's header (MIT, D294); the atlas is keyed by `GlyphKey { CacheKey, GlyphParams }` and re-rasterizes through `GlyphRasterizer` (D296) | none public |
 | `platform` (private; `platform/{windows,other}.rs`) | The Windows DX12 backend choice | `configure` |
 
