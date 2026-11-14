@@ -30,7 +30,7 @@ The hinting flag is the toolkit's rasterization hinting. It is distinct from the
 
 ### Evidence
 
-Pinned: this repo at the font-smoothing task. Read: swash 0.2.10 `scale/mod.rs:846-882` (the outline path) and `scale/outline.rs` (`embolden`, `compute_winding`, copied into `crates/lune-ui-wgpu/src/raster/embolden.rs`, D303, D304); cosmic-text 0.19.0 `SwashCache`; Pathfinder `content/src/effects.rs` (the stem-darkening constants; licence note in `THIRD_PARTY_NOTICES.md`).
+Pinned: this repo at the font-smoothing task. Read: swash 0.2.10 `scale/mod.rs:846-882` (the outline path) and `scale/outline.rs` (`embolden`, `compute_winding`, copied into `crates/lune-ui-wgpu/src/raster/embolden.rs`, D320, D321); cosmic-text 0.19.0 `SwashCache`; Pathfinder `content/src/effects.rs` (the stem-darkening constants; licence note in `THIRD_PARTY_NOTICES.md`).
 Conflicts: none.
 
 ### Anatomy
@@ -39,7 +39,7 @@ Conflicts: none.
 - `StemDarkening::MACOS`: 0.0121 px per ppem in x, 1.25 times that in y, at most 0.3 px a side, none above 72 ppem.
 - `GlyphParams { hinting, dilation }`: the per-glyph effective values, `TextRendering::glyph_params(ppem)`; the atlas key.
 - `GlyphRasterizer`: three rules, `OFF` unchanged, outline re-filled dilated and re-centred, colour glyphs as cosmic-text drew them.
-- The push direction (D303, D304): each layer of an outline grows outwards by FreeType's orientation, the sum of its contours' own areas (`raster/embolden.rs`, a copy of swash's growth with the direction as an argument). A layer whose contours disagree can leave the grown glyph with less ink than the undilated one; then the opposite direction is tried, and if that thins too, the undilated image is drawn. SMOOTH never draws an outline glyph with less ink than the same glyph undilated.
+- The push direction (D320, D321): each layer of an outline grows outwards by FreeType's orientation, the sum of its contours' own areas (`raster/embolden.rs`, a copy of swash's growth with the direction as an argument). A layer whose contours disagree can leave the grown glyph with less ink than the undilated one; then the opposite direction is tried, and if that thins too, the undilated image is drawn. SMOOTH never draws an outline glyph with less ink than the same glyph undilated.
 - Rotated text: `TextCache::rasterize(key, &mut GlyphRasterizer, TextRendering)` keeps the `Buffer::draw` code at `OFF` and draws per glyph through the rasterizer otherwise.
 
 ### States
