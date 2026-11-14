@@ -2,13 +2,16 @@
 //! [`GlyphParams`] (hinting and stem darkening) it is drawn with. The toolkit's text paths rasterize
 //! through it, and an app's own glyph renderer can too, so both draw the same pixels.
 
+mod embolden;
+
 use std::fmt;
 
 use cosmic_text::{CacheKey, CacheKeyFlags, FontSystem, SwashCache, SwashImage};
 use lune_ui_core::text::GlyphParams;
 use swash::scale::image::Content;
+use swash::scale::outline::Outline;
 use swash::scale::{ScaleContext, Source};
-use swash::zeno::{Angle, Fill, Format, Mask, Origin, Style, Transform, Vector};
+use swash::zeno::{Angle, Format, Mask, Origin, Style, Transform, Vector};
 
 /// Rasterizes single glyphs with a [`GlyphParams`]: hinting on or off, and the outline grown by a
 /// stem-darkening dilation on each side.
@@ -23,6 +26,11 @@ use swash::zeno::{Angle, Fill, Format, Mask, Origin, Style, Transform, Vector};
 /// 3. An outline glyph is filled again from its outline, grown by `params.dilation()` on each
 ///    side and moved back so it stays centred where it was, through the same scaler settings and
 ///    mask steps cosmic-text uses. At zero dilation that gives cosmic-text's bytes exactly.
+///    Each layer is pushed outwards the way FreeType finds its orientation, from the sum of its
+///    contours' own areas. If the grown glyph has less ink than rule 2's image (a layer whose
+///    contours disagree with each other), the opposite push is tried; if that has less ink too,
+///    rule 2's image is returned, so smoothing never draws a glyph thinner than it is without
+///    dilation.
 ///
 /// An app's own glyph cache must key each image by the glyph's `GlyphParams` as well as its
 /// `CacheKey` (two settings give two images), and must leave `DISABLE_HINTING` to this rasterizer
@@ -69,7 +77,11 @@ impl GlyphRasterizer {
         if !matches!(image.source, Source::Outline) {
             return Some(image);
         }
-        Some(self.outline(fonts, key, params.dilation()).unwrap_or(image))
+        let floor = ink(&image.data);
+        Some(
+            self.outline(fonts, key, params.dilation(), floor)
+                .unwrap_or(image),
+        )
     }
 
     /// The cosmic-text cache this rasterizer draws rule 1 and 2 images with.
@@ -78,12 +90,14 @@ impl GlyphRasterizer {
     }
 
     /// Rule 3: the outline of `key`, grown by `dx`, `dy` a side and re-centred, filled as swash's
-    /// `Render` fills an outline with cosmic-text's settings.
+    /// `Render` fills an outline with cosmic-text's settings; `None` when no push keeps `floor`
+    /// ink (see [`select`]).
     fn outline(
         &mut self,
         fonts: &mut FontSystem,
         key: CacheKey,
-        [dx, dy]: [f32; 2],
+        dilation: [f32; 2],
+        floor: u64,
     ) -> Option<SwashImage> {
         let font = fonts.get_font(key.font_id, key.font_weight)?;
         let face = font.as_swash();
@@ -100,41 +114,83 @@ impl GlyphRasterizer {
             )]));
         }
         let mut scaler = builder.build();
-        let mut outline = scaler.scale_outline(key.glyph_id)?;
-        if dx != 0.0 || dy != 0.0 {
-            // `embolden` grows the box by twice the strength with its min corner fixed; the
-            // translate moves it back so the growth is `dx`, `dy` on each side.
-            outline.embolden(dx, dy);
-            outline.transform(&Transform::translation(-dx, -dy));
-        }
-        if key.flags.contains(CacheKeyFlags::FAKE_ITALIC) {
-            outline.transform(&Transform::skew(
-                Angle::from_degrees(14.0),
-                Angle::from_degrees(0.0),
-            ));
-        }
+        let outline = scaler.scale_outline(key.glyph_id)?;
         let offset = if key.flags.contains(CacheKeyFlags::PIXEL_FONT) {
             Vector::new(key.x_bin.as_float().round(), key.y_bin.as_float().round())
         } else {
             Vector::new(key.x_bin.as_float(), key.y_bin.as_float())
         };
-        let mut image = SwashImage::new();
-        // `inspect` sizes the buffer, and also sets the mask height that `placement.top` reads.
-        let placement = Mask::new(outline.path())
-            .format(Format::Alpha)
-            .origin(Origin::BottomLeft)
-            .style(Style::Fill(Fill::NonZero))
-            .offset(offset)
-            .render_offset(offset)
-            .inspect(|format, width, height| {
-                image.data.resize(format.buffer_size(width, height), 0);
-            })
-            .render_into(&mut image.data[..], None);
-        image.placement = placement;
-        image.content = Content::Mask;
-        image.source = Source::Outline;
-        Some(image)
+        let fill = FillSettings {
+            skew: key.flags.contains(CacheKeyFlags::FAKE_ITALIC),
+            offset,
+        };
+        select(&outline, dilation, floor, fill)
     }
+}
+
+/// The coverage total of a mask: the sum of its bytes, exact.
+fn ink(mask: &[u8]) -> u64 {
+    mask.iter().map(|&a| u64::from(a)).sum()
+}
+
+/// How `fill` turns an outline into a mask: the `FAKE_ITALIC` skew and the sub-pixel offset.
+#[derive(Debug, Clone, Copy)]
+struct FillSettings {
+    skew: bool,
+    offset: Vector,
+}
+
+/// Grows `outline` by `dx`, `dy` a side, moves it back by the same and fills it. Each layer is
+/// pushed out by its summed orientation; if the result has less ink than `floor` the opposite
+/// push is tried, and if that has less ink too, `None` (the caller keeps the undilated image).
+/// Zero dilation fills the outline as it is, with no check.
+fn select(
+    outline: &Outline,
+    [dx, dy]: [f32; 2],
+    floor: u64,
+    fill: FillSettings,
+) -> Option<SwashImage> {
+    if dx == 0.0 && dy == 0.0 {
+        return Some(fill_outline(outline.clone(), fill));
+    }
+    for orient in [embolden::Orient::Summed, embolden::Orient::Opposite] {
+        let mut grown = outline.clone();
+        // `grow` grows the box by twice the strength with its min corner fixed; the translate
+        // moves it back so the growth is `dx`, `dy` on each side.
+        embolden::grow(&mut grown, orient, dx, dy);
+        grown.transform(&Transform::translation(-dx, -dy));
+        let image = fill_outline(grown, fill);
+        if ink(&image.data) >= floor {
+            return Some(image);
+        }
+    }
+    None
+}
+
+/// The outline skewed for `FAKE_ITALIC` and masked as swash's `Render` masks it.
+fn fill_outline(mut outline: Outline, FillSettings { skew, offset }: FillSettings) -> SwashImage {
+    if skew {
+        outline.transform(&Transform::skew(
+            Angle::from_degrees(14.0),
+            Angle::from_degrees(0.0),
+        ));
+    }
+    let mut image = SwashImage::new();
+    // `inspect` sizes the buffer, and also sets the mask height that `placement.top` reads.
+    let placement = Mask::new(outline.path())
+        .format(Format::Alpha)
+        .origin(Origin::BottomLeft)
+        .style(Style::Fill(swash::zeno::Fill::NonZero))
+        .offset(offset)
+        .render_offset(offset)
+        .inspect(|format, width, height| {
+            image.data.resize(format.buffer_size(width, height), 0);
+        })
+        .render_into(&mut image.data[..], None);
+    image.placement = placement;
+    image.content = Content::Mask;
+    image.source = Source::Outline;
+    image
 }
 
 impl Default for GlyphRasterizer {
@@ -146,5 +202,125 @@ impl Default for GlyphRasterizer {
 impl fmt::Debug for GlyphRasterizer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GlyphRasterizer").finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lune_ui_core::text::TextRendering;
+    use swash::FontRef;
+
+    const SANS: &[u8] = include_bytes!("../../../apps/gallery/assets/RznSans-Regular.ttf");
+    const MONO: &[u8] =
+        include_bytes!("../../../apps/gallery/assets/RobotoMonoNerdFontMono-Regular.ttf");
+
+    /// RznSans's `⅓` is two far-apart contours groups whose joined sign points inward (0.5.1
+    /// drew it thinner than undilated). Its mirror (x negated) takes the mirrored push: both grow
+    /// above their own undilated ink, by the same amount within 1%.
+    #[test]
+    fn a_glyph_and_its_mirror_both_grow_above_their_floor() {
+        let font = FontRef::from_index(SANS, 0).expect("the font parses");
+        let glyph = font.charmap().map('\u{2153}');
+        assert_ne!(glyph, 0, "RznSans has the one third");
+        let mut ctx = ScaleContext::new();
+        let mut scaler = ctx.builder(font).size(26.0).hint(false).build();
+        let outline = scaler
+            .scale_outline(glyph)
+            .expect("the glyph has an outline");
+        let mut mirror = outline.clone();
+        for point in mirror.points_mut() {
+            point.x = -point.x;
+        }
+        let dilation = TextRendering::SMOOTH.glyph_params(26.0).dilation();
+        let fill = FillSettings {
+            skew: false,
+            offset: Vector::new(0.0, 0.0),
+        };
+        let mut grown = Vec::new();
+        for (name, o) in [("glyph", &outline), ("mirror", &mirror)] {
+            let floor = ink(&select(o, [0.0, 0.0], 0, fill).expect("fills").data);
+            // The first try alone, with no retry to rescue it, already clears the floor.
+            let mut first = o.clone();
+            embolden::grow(
+                &mut first,
+                embolden::Orient::Summed,
+                dilation[0],
+                dilation[1],
+            );
+            first.transform(&Transform::translation(-dilation[0], -dilation[1]));
+            let first = ink(&fill_outline(first, fill).data);
+            assert!(
+                first > floor,
+                "the {name} at its summed push: {floor} -> {first}"
+            );
+            let image = select(o, dilation, floor, fill)
+                .unwrap_or_else(|| panic!("the {name} grows, it does not fall back"));
+            let got = ink(&image.data);
+            assert!(got > floor, "the {name} grows: {floor} -> {got}");
+            grown.push(got as f64);
+        }
+        let rel = (grown[0] - grown[1]).abs() / grown[0];
+        assert!(
+            rel < 0.01,
+            "ink {} vs {} differs by {rel}",
+            grown[0],
+            grown[1]
+        );
+    }
+
+    /// The second try of D3r: RobotoMono's U+E23A (a Nerd icon whose contours disagree with each
+    /// other) thins at its summed push, and the opposite push rescues it. Probed at 13 and 26
+    /// px, hinting off: floor 13499 and 55329, summed 12887 and 52750, opposite 14458 and 58748
+    /// (ink as the mask byte sum). If a font change moves this glyph, swap in another one that
+    /// the same two inequalities hold for (scan the font for `first < floor` and a `select`
+    /// that returns an image: 48 and 56 such glyphs at 13 and 26 px).
+    #[test]
+    fn the_opposite_push_rescues_a_glyph_the_summed_push_thins() {
+        let font = FontRef::from_index(MONO, 0).expect("the font parses");
+        let glyph = font.charmap().map('\u{e23a}');
+        assert_ne!(glyph, 0, "RobotoMono has U+E23A");
+        let mut ctx = ScaleContext::new();
+        let fill = FillSettings {
+            skew: false,
+            offset: Vector::new(0.0, 0.0),
+        };
+        for size in [13.0, 26.0] {
+            let mut scaler = ctx.builder(font).size(size).hint(false).build();
+            let outline = scaler
+                .scale_outline(glyph)
+                .expect("the glyph has an outline");
+            let dilation = TextRendering::SMOOTH.glyph_params(size).dilation();
+            let floor = ink(&select(&outline, [0.0, 0.0], 0, fill).expect("fills").data);
+            let pushed = |orient| {
+                let mut o = outline.clone();
+                embolden::grow(&mut o, orient, dilation[0], dilation[1]);
+                o.transform(&Transform::translation(-dilation[0], -dilation[1]));
+                fill_outline(o, fill)
+            };
+            let summed = pushed(embolden::Orient::Summed);
+            let opposite = pushed(embolden::Orient::Opposite);
+            assert!(
+                ink(&summed.data) < floor,
+                "{size} px: the summed push no longer thins U+E23A ({} >= {floor}); swap the glyph",
+                ink(&summed.data)
+            );
+            let chosen = select(&outline, dilation, floor, fill)
+                .unwrap_or_else(|| panic!("{size} px: neither push keeps the ink, it fell back"));
+            assert!(
+                ink(&chosen.data) > floor,
+                "{size} px: {} <= {floor}",
+                ink(&chosen.data)
+            );
+            // It is the opposite push, byte for byte.
+            assert_eq!(
+                chosen.data, opposite.data,
+                "{size} px: not the opposite push"
+            );
+            assert_eq!(
+                (chosen.placement.left, chosen.placement.top),
+                (opposite.placement.left, opposite.placement.top)
+            );
+        }
     }
 }

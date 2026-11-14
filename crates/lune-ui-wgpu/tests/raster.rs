@@ -3,7 +3,7 @@
 
 use cosmic_text::fontdb::{Database, ID};
 use cosmic_text::{CacheKey, CacheKeyFlags, FontSystem, SwashCache, SwashImage, Weight};
-use lune_ui_core::text::GlyphParams;
+use lune_ui_core::text::{GlyphParams, TextRendering};
 use lune_ui_wgpu::raster::GlyphRasterizer;
 use swash::scale::Source;
 
@@ -45,6 +45,21 @@ impl Font {
             .map(ch);
         assert_ne!(glyph, 0, "{}: no glyph for {ch:?}", self.name);
         CacheKey::new(self.id, glyph, size, (x, 0.0), Weight::NORMAL, flags).0
+    }
+
+    /// The key of glyph id `glyph` (no character lookup).
+    fn glyph_key(&self, glyph: u16, size: f32, flags: CacheKeyFlags) -> CacheKey {
+        CacheKey::new(self.id, glyph, size, (0.0, 0.0), Weight::NORMAL, flags).0
+    }
+
+    /// How many glyph ids the face has.
+    fn glyph_count(&mut self) -> u16 {
+        self.fonts
+            .get_font(self.id, Weight::NORMAL)
+            .expect("the face is in the system")
+            .as_swash()
+            .glyph_metrics(&[])
+            .glyph_count()
     }
 
     fn image(&mut self, r: &mut GlyphRasterizer, key: CacheKey, p: GlyphParams) -> SwashImage {
@@ -228,5 +243,168 @@ fn t6_the_same_inputs_give_the_same_bytes() {
                 assert!(same(&a, &b) && same(&a, &c), "{} {ch:?} {params:?}", f.name);
             }
         }
+    }
+}
+
+/// The total coverage of an image, as an exact integer.
+fn ink(img: &SwashImage) -> u64 {
+    img.data.iter().map(|&a| u64::from(a)).sum()
+}
+
+/// SMOOTH's dilation at `size`, drawn with the given hinting.
+fn smooth(size: f32, hinting: bool) -> GlyphParams {
+    GlyphParams::new(hinting, TextRendering::SMOOTH.glyph_params(size).dilation())
+}
+
+/// Compares `key`'s image under SMOOTH's dilation with its undilated image, hinting off and on;
+/// how many pairs of images were compared.
+fn never_thinner(
+    f: &mut Font,
+    r: &mut GlyphRasterizer,
+    key: CacheKey,
+    size: f32,
+    what: &str,
+) -> usize {
+    let mut checked = 0;
+    for hinting in [false, true] {
+        let undilated = r.image(&mut f.fonts, key, GlyphParams::new(hinting, [0.0, 0.0]));
+        let smoothed = r.image(&mut f.fonts, key, smooth(size, hinting));
+        let (Some(undilated), Some(smoothed)) = (undilated, smoothed) else {
+            continue;
+        };
+        assert!(
+            ink(&smoothed) >= ink(&undilated),
+            "{} {what} {size} px {:?} hinting {hinting}: {} < {}",
+            f.name,
+            key.flags,
+            ink(&smoothed),
+            ink(&undilated)
+        );
+        checked += 1;
+    }
+    checked
+}
+
+#[test]
+fn t7_smoothing_never_draws_less_ink_than_undilated() {
+    let mut r = GlyphRasterizer::new();
+    let mut checked = 0;
+    let mut sans = font("RznSans", SANS);
+    for glyph in 0..sans.glyph_count() {
+        for size in [13.0, 26.0] {
+            for flags in FLAGS {
+                let key = sans.glyph_key(glyph, size, flags);
+                checked += never_thinner(&mut sans, &mut r, key, size, &format!("glyph {glyph}"));
+            }
+        }
+    }
+    println!("t7: {checked} RznSans image pairs compared");
+    assert!(checked > 3000, "only {checked} images compared");
+    let mut mono = font("RobotoMono", MONO);
+    for ch in [
+        '\u{b1}',
+        '\u{1fc}',
+        '\u{3ac}',
+        '\u{4f4}',
+        '\u{215d}',
+        '\u{ea60}',
+        '\u{ea88}',
+        '\u{eb4c}',
+        '\u{e23a}',
+        '\u{f012b}',
+        '\u{f076e}',
+    ] {
+        for size in [13.0, 26.0] {
+            for flags in FLAGS {
+                let key = mono.key(ch, size, 0.0, flags);
+                assert!(never_thinner(&mut mono, &mut r, key, size, &format!("{ch:?}")) > 0);
+            }
+        }
+    }
+}
+
+#[test]
+fn t8_glyphs_that_thinned_before_now_grow() {
+    let mut r = GlyphRasterizer::new();
+    let mut sans = font("RznSans", SANS);
+    let mut mono = font("RobotoMono", MONO);
+    for (which, ch) in [(0, '\u{2153}'), (0, '\u{215d}'), (1, '\u{b1}')] {
+        let f = if which == 0 { &mut sans } else { &mut mono };
+        for size in [13.0, 26.0] {
+            let key = f.key(ch, size, 0.0, CacheKeyFlags::empty());
+            let off = f.image(&mut r, key, GlyphParams::OFF);
+            let undilated = f.image(&mut r, key, GlyphParams::new(false, [0.0, 0.0]));
+            let smoothed = f.image(&mut r, key, smooth(size, false));
+            let what = format!("{} {ch:?} {size} px", f.name);
+            assert!(
+                ink(&smoothed) > ink(&undilated),
+                "{what}: {} <= undilated {}",
+                ink(&smoothed),
+                ink(&undilated)
+            );
+            assert!(
+                centroid(&smoothed).2 >= centroid(&off).2,
+                "{what}: less ink than OFF"
+            );
+            // Not t4's 0.03 px: these glyphs are not symmetric. Each contour keeps its own centre
+            // while it grows, so the ink centroid moves towards the contours that gain most ink
+            // for their size (a thin bar, say): measured 0.004 to 0.13 px. A wrong translate-back
+            // moves the glyph by the dilation (0.3 px at 26 px), which this still catches.
+            let (cu, cs) = (centroid(&undilated), centroid(&smoothed));
+            println!(
+                "t8 {what}: centroid moved ({:.4}, {:.4})",
+                cs.0 - cu.0,
+                cs.1 - cu.1
+            );
+            assert!(
+                (cs.0 - cu.0).abs() < 0.15,
+                "{what}: x moved {}",
+                cs.0 - cu.0
+            );
+            assert!(
+                (cs.1 - cu.1).abs() < 0.15,
+                "{what}: y moved {}",
+                cs.1 - cu.1
+            );
+        }
+    }
+}
+
+#[test]
+fn t9_when_both_pushes_thin_the_undilated_glyph_is_drawn() {
+    let mut r = GlyphRasterizer::new();
+    let mut mono = font("RobotoMono", MONO);
+    let key = mono.key('\u{f076e}', 26.0, 0.0, CacheKeyFlags::empty());
+    let undilated = mono.image(&mut r, key, GlyphParams::new(false, [0.0, 0.0]));
+    let smoothed = mono.image(&mut r, key, smooth(26.0, false));
+    assert!(
+        same(&smoothed, &undilated),
+        "U+F076E at 26 px: ink {} vs undilated {}",
+        ink(&smoothed),
+        ink(&undilated)
+    );
+}
+
+/// The same icon through the public `image`: the retry draws it grown, not undilated (the unit
+/// test in `raster.rs` pins that this is the opposite push). If a font change moves U+E23A, swap
+/// in a glyph the unit test's two inequalities hold for.
+#[test]
+fn t10_a_glyph_the_summed_push_thins_is_rescued_by_the_opposite_push() {
+    let mut r = GlyphRasterizer::new();
+    let mut mono = font("RobotoMono", MONO);
+    for size in [13.0, 26.0] {
+        let key = mono.key('\u{e23a}', size, 0.0, CacheKeyFlags::empty());
+        let undilated = mono.image(&mut r, key, GlyphParams::new(false, [0.0, 0.0]));
+        let smoothed = mono.image(&mut r, key, smooth(size, false));
+        assert!(
+            ink(&smoothed) > ink(&undilated),
+            "U+E23A at {size} px: {} <= undilated {}",
+            ink(&smoothed),
+            ink(&undilated)
+        );
+        assert!(
+            !same(&smoothed, &undilated),
+            "U+E23A at {size} px fell back"
+        );
     }
 }
