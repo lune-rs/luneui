@@ -1,7 +1,7 @@
 //! Pixel measurements of the gradient and shadow ops (`Painter::linear`, `radial`, `shadow`)
 //! drawn through the real renderer into an offscreen `Rgba8Unorm` target at scale 1 and read back.
 //!
-//! The ops are dithered by an 8x8 ordered pattern (plan D12), so a single pixel is off by up to
+//! The ops are dithered by an 8x8 ordered pattern (D326), so a single pixel is off by up to
 //! one step but the mean of an aligned 8x8 tile is the exact value: the tests compare tile means
 //! with the exact value computed on the CPU in f64 at pixel centres, and run the same check on a
 //! CPU-rounded copy of the exact value, which must fail it (the check sees bands).
@@ -171,7 +171,7 @@ fn exact_over(c: f64, a: f64, dst: f64) -> f64 {
     c + dst * (1.0 - a / 255.0)
 }
 
-/// The mean of one output channel under the dither (plan D12): the colour is lifted to `h`
+/// The mean of one output channel under the dither (D326): the colour is lifted to `h`
 /// (half an LSB, faded in below one LSB of alpha) from both ends, then swings around that.
 fn expected_over(c: f64, a: f64, dst: f64) -> f64 {
     let h = 0.5 * a.clamp(0.0, 1.0);
@@ -183,7 +183,7 @@ fn expected_over(c: f64, a: f64, dst: f64) -> f64 {
 const FROM: [u8; 4] = [0x0d, 0x0f, 0x1a, 0xff];
 const TO: [u8; 4] = [0x14, 0x1a, 0x33, 0xff];
 
-/// The ramp parameter at the centre of pixel `(x, y)` of a rect filling `size` (plan D6).
+/// The ramp parameter at the centre of pixel `(x, y)` of a rect filling `size` (D323).
 fn ramp_t(size: Size, angle: f64, x: usize, y: usize) -> f64 {
     let (w, h) = (size.0 as f64, size.1 as f64);
     let (dx, dy) = (angle.cos(), angle.sin());
@@ -382,7 +382,7 @@ fn a_radial_light_has_exact_tile_means_and_stays_in_its_box() {
     let img = render(&mut gpu, &mut text, &scene, size);
 
     let (inner_c, inner_a) = premul_lsb(inner);
-    // The source (premultiplied colour, alpha) at pixel (x, y): D7's smooth falloff and rim.
+    // The source (premultiplied colour, alpha) at pixel (x, y): D324's smooth falloff and rim.
     let source = |x: usize, y: usize| -> ([f64; 3], f64) {
         let (dx, dy) = (x as f64 + 0.5 - cx, y as f64 + 0.5 - cy);
         let t = (dx * dx + dy * dy).sqrt() / rad;
@@ -574,6 +574,25 @@ fn a_shadow_of_a_square_rect_is_half_the_colour_at_its_edge() {
             );
         }
     }
+}
+
+#[test]
+fn a_negative_shadow_radius_draws_the_square_shadow() {
+    let Some(mut gpu) = headless_gpu() else {
+        return;
+    };
+    let mut text = text_cache();
+    let size = (240, 200);
+    let draw = |gpu: &mut Gpu, text: &mut TextCache, radius: f32| {
+        let scene = paint(text, size, |p| {
+            p.fill(Rect::new(0.0, 0.0, 240.0, 200.0), 0.0, BLACK);
+            p.shadow(Rect::new(59.5, 59.5, 120.0, 80.0), radius, 10.0, WHITE);
+        });
+        render(gpu, text, &scene, size)
+    };
+    let square = draw(&mut gpu, &mut text, 0.0);
+    let negative = draw(&mut gpu, &mut text, -5.0);
+    assert_eq!(negative, square, "a negative radius is a radius of 0");
 }
 
 #[test]
