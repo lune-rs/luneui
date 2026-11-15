@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1106 items. Left out and counted: 3370 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4856 items of the omitted impls, 1305 items of the trait impls shown as one line, 2256 synthetic impls.
+94 modules, 1107 items. Left out and counted: 3379 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4869 items of the omitted impls, 1308 items of the trait impls shown as one line, 2262 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -32,7 +32,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::json`](lune-ui-core/json.md) | 11 |
 | [`lune_ui_core::layout`](lune-ui-core/layout.md) | 11 |
 | [`lune_ui_core::motion`](lune-ui-core/motion.md) | 27 |
-| [`lune_ui_core::paint`](lune-ui-core/paint.md) | 6 |
+| [`lune_ui_core::paint`](lune-ui-core/paint.md) | 7 |
 | [`lune_ui_core::scene`](lune-ui-core/scene.md) | 18 |
 | [`lune_ui_core::shortcuts`](lune-ui-core/shortcuts.md) | 6 |
 | [`lune_ui_core::strings`](lune-ui-core/strings.md) | 11 |
@@ -494,6 +494,7 @@ Every top-level item of the four owning crates, by name.
 - [`Extent`](lune-ui-core/widgets/scroll_area.md#struct.Extent) - struct, `lune_ui_core::widgets::scroll_area`
 - [`FakeImages`](lune-ui-core/testing.md#struct.FakeImages) - struct, `lune_ui_core::testing`
 - [`FakeText`](lune-ui-core/testing.md#struct.FakeText) - struct, `lune_ui_core::testing`
+- [`Falloff`](lune-ui-core/paint.md#enum.Falloff) - enum, `lune_ui_core::paint`
 - [`field`](lune-ui-core/widgets/field.md#fn.field) - function, `lune_ui_core::widgets::field`
 - [`FIELD_ICON_GAP`](lune-ui-core/widgets/search_picker.md#constant.FIELD_ICON_GAP) - constant, `lune_ui_core::widgets::search_picker`
 - [`FIELD_PADDING`](lune-ui-core/widgets/search_picker.md#constant.FIELD_PADDING) - constant, `lune_ui_core::widgets::search_picker`

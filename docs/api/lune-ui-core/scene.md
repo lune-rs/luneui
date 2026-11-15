@@ -40,7 +40,7 @@ since nothing drawn in a window may replace what is below it. `shape.color` is t
 layer replaces what is below: the result is `opacity·layer + (1 − opacity)·below`, so 1.0 is a
 plain replace and a smaller value fades the layer in without punching a hole.
 
-Source: `crates/lune-ui-core/src/scene.rs:100`
+Source: `crates/lune-ui-core/src/scene.rs:125`
 
 **Fields**
 
@@ -71,7 +71,7 @@ pub struct BackdropRequest {
 
 A blurred-backdrop region to draw, in physical pixels.
 
-Source: `crates/lune-ui-core/src/scene.rs:214`
+Source: `crates/lune-ui-core/src/scene.rs:239`
 
 **Fields**
 
@@ -111,7 +111,7 @@ pub struct BlurLimits {
 The limits of the backdrop blur: how coarse its working picture is and how wide its kernel may
 grow.
 
-Source: `crates/lune-ui-core/src/scene.rs:342`
+Source: `crates/lune-ui-core/src/scene.rs:367`
 
 **Fields**
 
@@ -168,7 +168,7 @@ pub struct CustomItem {
 
 One recorded custom draw: which supplied implementation, and where it may paint.
 
-Source: `crates/lune-ui-core/src/scene.rs:131`
+Source: `crates/lune-ui-core/src/scene.rs:156`
 
 **Fields**
 
@@ -207,7 +207,7 @@ pub struct FrameParams {
 
 What one frame is drawn at, and how its glass backdrop is blurred.
 
-Source: `crates/lune-ui-core/src/scene.rs:291`
+Source: `crates/lune-ui-core/src/scene.rs:316`
 
 **Fields**
 
@@ -281,7 +281,7 @@ pub struct ImageItem {
 
 One recorded image draw. All rects are physical pixels.
 
-Source: `crates/lune-ui-core/src/scene.rs:159`
+Source: `crates/lune-ui-core/src/scene.rs:184`
 
 **Fields**
 
@@ -344,7 +344,7 @@ One layer's items, grouped by kind, each kind in record order. They draw as: acr
 shapes, path fills, customs, images, text, then the over shapes and strokes (the geometry that
 draws above the text).
 
-Source: `crates/lune-ui-core/src/scene.rs:184`
+Source: `crates/lune-ui-core/src/scene.rs:209`
 
 **Fields**
 
@@ -389,7 +389,7 @@ pub struct LayerGeometry {
 One z-layer of the frame: acrylic (replace blend, or a constant blend when faded), shapes under
 text, path fills, text (drawn by the caller), then shapes and strokes over text.
 
-Source: `crates/lune-ui-core/src/scene.rs:108`
+Source: `crates/lune-ui-core/src/scene.rs:133`
 
 **Fields**
 
@@ -427,7 +427,7 @@ pub struct OverlayLayer {
 
 What one overlay drew: a draw layer of its own, after the fixed layer it sits on.
 
-Source: `crates/lune-ui-core/src/scene.rs:226`
+Source: `crates/lune-ui-core/src/scene.rs:251`
 
 **Fields**
 
@@ -460,7 +460,7 @@ pub struct RoundClip {
 
 A rounded clip: the rect (physical px) and corner radius; radius 0 means none.
 
-Source: `crates/lune-ui-core/src/scene.rs:151`
+Source: `crates/lune-ui-core/src/scene.rs:176`
 
 **Fields**
 
@@ -489,7 +489,7 @@ pub struct Scene {
 
 One painted frame: every layer. [`Self::in_order`](scene.md#method.Scene.in_order) is the draw order.
 
-Source: `crates/lune-ui-core/src/scene.rs:236`
+Source: `crates/lune-ui-core/src/scene.rs:261`
 
 **Fields**
 
@@ -550,7 +550,7 @@ pub struct Shape {
 }
 ```
 
-One rounded-rect instance (fill, ring or acrylic).
+One rounded-rect instance: a fill, a ring, an acrylic or frost layer, a gradient or a shadow.
 
 Source: `crates/lune-ui-core/src/scene.rs:57`
 
@@ -558,13 +558,43 @@ Source: `crates/lune-ui-core/src/scene.rs:57`
 
 - <a id="structfield.Shape.rect"></a>`pub rect: [f32; 4]`
 
+  Physical rect (x, y, w, h).
+
 - <a id="structfield.Shape.radii"></a>`pub radii: [f32; 4]`
+
+  Corner radii in physical px: top-left, top-right, bottom-right, bottom-left.
 
 - <a id="structfield.Shape.color"></a>`pub color: [f32; 4]`
 
+  Premultiplied colour, faded by the transform stack's alpha (frost and acrylic keep it
+  unfaded). For a gradient, the colour at `t = 0` (linear) or at the centre (radial); for a
+  shadow, the shadow colour.
+
 - <a id="structfield.Shape.under"></a>`pub under: [f32; 4]`
 
+  The second premultiplied colour, by kind (`params[0]`, `params[2]`):
+  - acrylic (`params[2]` 1): the layer below, which feeds the antialiased edge;
+  - linear (kind 2) and radial (kind 3): the colour at `t = 1` (linear) or at the rim
+    (radial), faded like `color`;
+  - every other kind: zero.
+
 - <a id="structfield.Shape.params"></a>`pub params: [f32; 4]`
+
+  What the shape is, by `params[0]` (the kind) and `params[2]`:
+  - kind 0, `params[2]` 0: a fill;
+  - kind 1: a ring, `params[1]` its width in physical px;
+  - kind 0, `params[2]` 1: an acrylic, `params[3]` the noise flag;
+  - kind 0, `params[2]` 2: a frost, `params[1]` its alpha, `params[3]` the noise flag
+    ([`Self::is_frost`](scene.md#method.Shape.is_frost));
+  - kind 2: a linear gradient, `params[1]` its angle in radians, clockwise on screen (0 runs
+    left to right); the ramp spans `rect` along that direction;
+  - kind 3: a radial gradient over the ellipse inscribed in `rect`, `params[1]` its falloff
+    (0 linear, 1 smooth, 2 Gaussian);
+  - kind 4: a soft shadow of the rounded rect `rect`, `params[1]` its Gaussian sigma in
+    physical px (0: no blur). The renderer pads the quad by `4 sigma + 1` px per side.
+
+  Kinds 2 to 4 are dithered by the renderer; a plain fill is exact. A renderer that does not
+  know a kind should draw `color` over `rect` as a fill.
 
 - <a id="structfield.Shape.clip"></a>`pub clip: [f32; 4]`
 
@@ -615,7 +645,7 @@ pub struct StrokeVertex {
 
 One vertex of a tessellated, antialiased stroke (triangle list).
 
-Source: `crates/lune-ui-core/src/scene.rs:82`
+Source: `crates/lune-ui-core/src/scene.rs:107`
 
 **Fields**
 
@@ -663,7 +693,7 @@ pub struct TextItem {
 
 One text draw: the shaped text's key, its position and clip, and a glyph scale.
 
-Source: `crates/lune-ui-core/src/scene.rs:120`
+Source: `crates/lune-ui-core/src/scene.rs:145`
 
 **Fields**
 
@@ -701,7 +731,7 @@ pub enum ImageSource {
 
 Where an [`ImageItem`](scene.md#struct.ImageItem)'s pixels come from.
 
-Source: `crates/lune-ui-core/src/scene.rs:140`
+Source: `crates/lune-ui-core/src/scene.rs:165`
 
 **Variants**
 

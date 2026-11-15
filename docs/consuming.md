@@ -208,6 +208,26 @@ D304 to D319. A picture can be drawn by part and sampled per draw and rewritten 
 
 **Using it.** `apps/gallery/src/panels.rs` and the `docked-panels` page are the worked example: three panels in a group, a shape each, a drag by `DockDrag` over `window_frame`s with `move_windows`, a menu window placed by `place_popup`. The live check is `cargo run -p gallery -- --smoke-panels` (by hand, in a logged-in GUI session; it ran on Windows, and every macOS half is compile-only).
 
+## 0.6.1 to 0.6.2: gradients and soft shadows
+
+D323 to D327. `Painter` gains a per-pixel linear gradient, a per-pixel radial gradient and an analytic soft shadow, dithered in the shader by about half a level of the target's depth, so a large dark wash shows no bands. Additive, hence 0.6.2: no struct gains a field, no trait a required method, no enum a variant that a match must name, so **nothing breaks** and nothing needs to change. `Globals`, `RawInput` and `FrameOutput` do not change. The pixel gate reads zero delta on every scene of 0.6.1.
+
+**Additions.**
+
+| item | what it is |
+| --- | --- |
+| `Painter::linear(r, radius, from, to, angle)` | a rect with one corner radius filled from `from` to `to` per pixel along `angle` (radians, clockwise on screen: 0 left to right, π/2 top to bottom); the corners lie on the ends of the ramp (D323) |
+| `Painter::radial(center, radius, inner, outer, falloff)`, `paint::Falloff` (`Linear`, `Smooth`, `Gaussian`; `#[non_exhaustive]`) | the ellipse inscribed in `center ± radius`, `inner` at the centre and `outer` at the rim; nothing outside it (D324) |
+| `Painter::shadow(r, radius, sigma, color)` | the rounded rect `r` blurred by a Gaussian of `sigma` logical px, drawn whole (not cut out under `r`); the quad pads `4 sigma + 1` physical px per side and each pixel evaluates 16 slices of erf, so a large sigma costs fill rate (D325) |
+
+All three draw below the layer's text like `fill`, under the transform stack, its fade, the clip and the rounded clip, and they record and replay like the other ops. Colours interpolate premultiplied.
+
+**A renderer of your own that reads `Scene` must draw `Shape.params[0]` kinds 2 to 4.** The new ops are `Shape`s in `LayerGeometry::under`, so a renderer that knows only kinds 0 and 1 draws them as flat fills of `Shape.color` (the library's `lune-ui-wgpu` draws them right). `scene.rs` documents the encoding: kind 2, a linear gradient (`params[1]` the angle in radians, clockwise on screen); kind 3, a radial gradient over the ellipse inscribed in `rect` (`params[1]` the falloff, 0 linear, 1 smooth, 2 Gaussian); kind 4, a soft shadow of the rounded rect `rect` (`params[1]` the Gaussian sigma in physical px, the quad padded by `4 sigma + 1`). For kinds 2 and 3 the second colour (`t = 1`, or the rim) is `Shape.under`; both colours are premultiplied and faded like a fill's. `params[2]` is 0.
+
+**Dither.** The renderer adds an 8x8 ordered dither to these three kinds only, with an amplitude set per target format when the pipelines are built: `Rgba8Unorm` and `Bgra8Unorm` 1/255, `Rgb10a2Unorm` 1/1023, `Rgba16Unorm` 1/65535, and none for every other format. Honest gap: the `*Srgb` formats and the float formats draw these ops undithered, and the table is not final (a display shallower than its surface format needs the display's depth as a second input). A plain fill stays exact, so an app's pixel goldens of flat colours do not move; a golden that holds a gradient or a shadow is new. The limits of the lift (a dark channel is lifted on average by at most half a level) are in `render.gradient-dither`.
+
+**Using it.** The gallery's `gradients` page (`apps/gallery/src/pages/gradients.rs`) is the worked example: a vertical wash, two radial lights and a card with a coloured shadow and a glow.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
