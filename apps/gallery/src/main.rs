@@ -273,22 +273,31 @@ fn dump_scenes(r: &mut Renderer, dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Draws a scene twice with `draw` into a fresh target and writes it as `<name>.png`.
-fn dump_one(
+/// Draws a scene twice with `draw` into a fresh target and returns its RGBA bytes.
+fn render_one(
     r: &mut Renderer,
-    dir: &Path,
     name: &str,
     size: (u32, u32),
     mut draw: impl FnMut(&mut Renderer, &wgpu::TextureView) -> Result<(), String>,
-) -> Result<(), String> {
+) -> Result<Vec<u8>, String> {
     let texture = dump::target(&r.gpu.device, r.frame.format(), size);
     let view = texture.create_view(&Default::default());
     for _ in 0..2 {
         draw(r, &view).map_err(|e| format!("scene {name}: {e}"))?;
         r.gpu.end_frame(&mut r.text);
     }
-    let rgba = dump::read_rgba(&r.gpu.device, &r.gpu.queue, &texture)
-        .map_err(|e| format!("scene {name}: {e}"))?;
+    dump::read_rgba(&r.gpu.device, &r.gpu.queue, &texture).map_err(|e| format!("scene {name}: {e}"))
+}
+
+/// Draws a scene twice with `draw` into a fresh target and writes it as `<name>.png`.
+fn dump_one(
+    r: &mut Renderer,
+    dir: &Path,
+    name: &str,
+    size: (u32, u32),
+    draw: impl FnMut(&mut Renderer, &wgpu::TextureView) -> Result<(), String>,
+) -> Result<(), String> {
+    let rgba = render_one(r, name, size, draw)?;
     dump::write_png(&dir.join(format!("{name}.png")), size, &rgba)
         .map_err(|e| format!("scene {name}: {e}"))?;
     eprintln!("dumped {name}.png");
@@ -324,5 +333,121 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
         let err = text_override(Some(OsStr::from_bytes(&[0x6f, 0xff]))).expect_err("not Unicode");
         assert!(err.contains("LUNEUI_GALLERY_TEXT"), "{err}");
+    }
+
+    /// The channels of `#141a33` and `#0d0f1a`, the fade's two ends.
+    const FADE_FROM: [f64; 3] = [20.0, 26.0, 51.0];
+    const FADE_TO: [f64; 3] = [13.0, 15.0, 26.0];
+
+    /// Renders the gradients page's scene `id` as the dump does and returns its size and RGBA.
+    fn render_gradient_scene(r: &mut Renderer, id: &str) -> ((u32, u32), Vec<u8>) {
+        let page = PAGES
+            .iter()
+            .find(|p| p.id == "gradients")
+            .expect("the gradients page");
+        let PageKind::Ui(ui) = page.kind else {
+            panic!("the gradients page is a Ui page");
+        };
+        let scene = ui.scenes.iter().find(|s| s.id == id).expect("the scene");
+        let size = scene.size();
+        let s = scene.scale;
+        let (display, out) = run_scene(page.id, scene, &mut r.text).expect("run the scene");
+        assert!(meets_expectation(scene.expect, out.repaint));
+        let rgba = render_one(r, &scene.name(), size, |r, view| {
+            draw_scene(r, &display, s, view, size)
+        })
+        .expect("render");
+        (size, rgba)
+    }
+
+    /// The mean of channel `ch` of each aligned 8x8 tile, row-major.
+    fn tile_means(size: (u32, u32), f: impl Fn(usize, usize) -> f64) -> Vec<f64> {
+        let (w, h) = (size.0 as usize, size.1 as usize);
+        assert!(w % 8 == 0 && h % 8 == 0, "{w}x{h} is not whole tiles");
+        let mut out = Vec::with_capacity(w / 8 * (h / 8));
+        for ty in 0..h / 8 {
+            for tx in 0..w / 8 {
+                let mut sum = 0.0;
+                for y in 0..8 {
+                    for x in 0..8 {
+                        sum += f(tx * 8 + x, ty * 8 + y);
+                    }
+                }
+                out.push(sum / 64.0);
+            }
+        }
+        out
+    }
+
+    /// The largest difference between neighbouring tile means (right and below).
+    fn max_adjacent_step(size: (u32, u32), means: &[f64]) -> f64 {
+        let (nx, ny) = (size.0 as usize / 8, size.1 as usize / 8);
+        let mut worst: f64 = 0.0;
+        for ty in 0..ny {
+            for tx in 0..nx {
+                let m = means[ty * nx + tx];
+                if tx + 1 < nx {
+                    worst = worst.max((means[ty * nx + tx + 1] - m).abs());
+                }
+                if ty + 1 < ny {
+                    worst = worst.max((means[(ty + 1) * nx + tx] - m).abs());
+                }
+            }
+        }
+        worst
+    }
+
+    fn max_tile_error(a: &[f64], b: &[f64]) -> f64 {
+        a.iter()
+            .zip(b)
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0, f64::max)
+    }
+
+    /// The dump's `gradient-linear-fade` (the whole frame is the opaque fade): every 8x8 tile mean
+    /// is the exact ramp's, the steps between tiles are at most 1 LSB, and the same ramp rounded
+    /// on the CPU fails the check, so the check can see bands. It also shows that the dither
+    /// reaches the `Bgra8Unorm` pipelines the dump uses.
+    #[test]
+    fn the_dumped_linear_fade_has_no_bands() {
+        let gpu = match pollster::block_on(Gpu::new(gpu::instance(None), None)) {
+            Ok(g) => g,
+            Err(e) => {
+                assert!(
+                    !std::env::var("LUNEUI_REQUIRE_GPU").is_ok_and(|v| v == "1"),
+                    "no GPU adapter: {e}"
+                );
+                println!("skipped: no GPU adapter");
+                return;
+            }
+        };
+        let mut r = offscreen_renderer(gpu);
+        let (size, img) = render_gradient_scene(&mut r, "gradient-linear-fade");
+        let (w, h) = (size.0 as usize, size.1 as usize);
+        let exact = |y: usize, ch: usize| {
+            FADE_FROM[ch] + (FADE_TO[ch] - FADE_FROM[ch]) * ((y as f64 + 0.5) / h as f64)
+        };
+
+        let mut control: f64 = 0.0;
+        for ch in 0..3 {
+            let want = tile_means(size, |_, y| exact(y, ch));
+            let got = tile_means(size, |x, y| f64::from(img[(y * w + x) * 4 + ch]));
+            let err = max_tile_error(&got, &want);
+            assert!(err <= 0.2, "channel {ch}: tile mean error {err:.4} LSB");
+            let step = max_adjacent_step(size, &got);
+            assert!(
+                step <= 1.0,
+                "channel {ch}: adjacent tile step {step:.4} LSB"
+            );
+            let rounded = tile_means(size, |_, y| exact(y, ch).round());
+            control = control.max(max_tile_error(&rounded, &want));
+        }
+        assert!(
+            control > 0.4,
+            "the CPU-rounded control's tile error is only {control:.4} LSB"
+        );
+        for p in img.chunks_exact(4) {
+            assert_eq!(p[3], 255);
+        }
     }
 }
