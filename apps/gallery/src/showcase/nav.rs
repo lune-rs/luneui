@@ -24,7 +24,15 @@ pub(crate) struct Group {
 pub(crate) const GROUPS: &[Group] = &[
     Group {
         name: "Foundation",
-        pages: &["ui", "focus", "image", "primitives", "theme", "motion"],
+        pages: &[
+            "ui",
+            "focus",
+            "image",
+            "primitives",
+            "gradients",
+            "theme",
+            "motion",
+        ],
     },
     Group {
         name: "Widgets",

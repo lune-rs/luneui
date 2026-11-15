@@ -145,6 +145,32 @@ impl Xform {
     }
 }
 
+/// How a radial gradient ([`Painter::radial`]) falls from its inner colour to its outer one, on
+/// `u`, the distance from the centre over the radius, clamped to 0 to 1. The shape is the weight of
+/// the inner colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Falloff {
+    /// The straight ramp, `1 - u`.
+    Linear,
+    /// The smoothstep ramp, `1 - u^2 (3 - 2u)`: no slope at the centre or the rim.
+    Smooth,
+    /// A Gaussian bell of sigma `radius / 3`, renormalised to reach 0 at the rim:
+    /// `(e^(-4.5 u^2) - e^(-4.5)) / (1 - e^(-4.5))`.
+    Gaussian,
+}
+
+impl Falloff {
+    /// The code `Shape.params[1]` carries for a radial gradient.
+    fn code(self) -> f32 {
+        match self {
+            Self::Linear => 0.0,
+            Self::Smooth => 1.0,
+            Self::Gaussian => 2.0,
+        }
+    }
+}
+
 /// One recorded painter call (see [`Painter::start_recording`]).
 #[derive(Debug, Clone)]
 enum Op {
@@ -161,6 +187,9 @@ enum Op {
     FillRadii(Rect, [f32; 4], Rgba),
     FillOver(Rect, f32, [f32; 4]),
     Ring(Rect, f32, f32, Rgba, bool),
+    Linear(Rect, f32, Rgba, Rgba, f32),
+    Radial([f32; 2], [f32; 2], Rgba, Rgba, Falloff),
+    Shadow(Rect, f32, f32, Rgba),
     Acrylic(Rect, [f32; 4], [f32; 4], [f32; 4], bool),
     Frost(Rect, [f32; 4], [f32; 4], bool),
     Backdrop(Rect, f32, f32, f32),
@@ -367,6 +396,13 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
                 Op::FillRadii(r, radii, c) => self.fill_radii(*r, *radii, *c),
                 Op::FillOver(r, radius, c) => self.fill_over(*r, *radius, *c),
                 Op::Ring(r, radius, w, c, above) => self.ring(*r, *radius, *w, *c, *above),
+                Op::Linear(r, radius, from, to, angle) => {
+                    self.linear(*r, *radius, *from, *to, *angle);
+                }
+                Op::Radial(center, radius, inner, outer, falloff) => {
+                    self.radial(*center, *radius, *inner, *outer, *falloff);
+                }
+                Op::Shadow(r, radius, sigma, c) => self.shadow(*r, *radius, *sigma, *c),
                 Op::Acrylic(r, radii, c, under, noise) => {
                     self.acrylic_radii(*r, *radii, *c, *under, *noise);
                 }
@@ -729,6 +765,72 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
     pub fn fill_radii(&mut self, r: Rect, radii: [f32; 4], color: Rgba) {
         self.rec(|| Op::FillRadii(r, radii, color));
         let sh = self.shape(r, radii, premul(color));
+        self.geo().under.push(sh);
+    }
+
+    /// A linear gradient from `from` to `to` inside `r`, below this layer's text, evaluated per
+    /// pixel and dithered by the renderer (about half a step of the target's depth), so a large
+    /// dark wash shows no bands. `angle` is in radians, clockwise on screen (y down): 0 runs `from`
+    /// at the left edge to `to` at the right, a quarter turn (pi / 2) from the top to the bottom.
+    /// The ramp spans the rect along that direction, so the corners lie on 0 and 1. Colours are
+    /// interpolated premultiplied: a fade to a transparent colour leaves no dark fringe. A
+    /// non-finite angle counts as 0. The fade of a [`Self::push_xform`] applies to both colours.
+    pub fn linear(&mut self, r: Rect, radius: f32, from: Rgba, to: Rgba, angle: f32) {
+        self.rec(|| Op::Linear(r, radius, from, to, angle));
+        let mut sh = self.shape(r, [radius; 4], premul(from));
+        let angle = if angle.is_finite() { angle } else { 0.0 };
+        sh.params = [2.0, angle, 0.0, 0.0];
+        sh.under = self.fade(premul(to));
+        self.geo().under.push(sh);
+    }
+
+    /// A radial gradient below this layer's text, per pixel and dithered like [`Self::linear`]:
+    /// `inner` at `center`, `outer` at the rim of the ellipse inscribed in `center` plus or minus
+    /// `radius` (x, y), shaped by `falloff`. Nothing is drawn outside the ellipse (its rim is
+    /// antialiased), so an `outer` of transparent colour makes a light that fades out, and an
+    /// opaque `outer` ends in a visible edge. Colours are interpolated premultiplied. A `radius`
+    /// that is not finite and above zero on both axes draws nothing.
+    pub fn radial(
+        &mut self,
+        center: [f32; 2],
+        radius: [f32; 2],
+        inner: Rgba,
+        outer: Rgba,
+        falloff: Falloff,
+    ) {
+        self.rec(|| Op::Radial(center, radius, inner, outer, falloff));
+        let [rx, ry] = radius;
+        if !(rx.is_finite() && ry.is_finite() && rx > 0.0 && ry > 0.0) {
+            return;
+        }
+        let rect = Rect::new(center[0] - rx, center[1] - ry, 2.0 * rx, 2.0 * ry);
+        let mut sh = self.shape(rect, [0.0; 4], premul(inner));
+        sh.params = [3.0, falloff.code(), 0.0, 0.0];
+        sh.under = self.fade(premul(outer));
+        self.geo().under.push(sh);
+    }
+
+    /// A soft shadow of the rounded rect `r` (one `radius`), below this layer's text: the shape
+    /// blurred by a Gaussian of `sigma` logical px (a CSS blur radius is about twice that), in
+    /// `color`. The whole blurred shape is drawn, not cut out under `r`; an offset or a spread is
+    /// the app's to make by moving or growing `r`. It is evaluated analytically per pixel and
+    /// dithered like [`Self::linear`]. A `sigma` below half a physical px (or negative, or not
+    /// finite) draws the plain antialiased fill.
+    ///
+    /// Cost: the quad pads `4 sigma + 1` physical px on every side (a `sigma` of 40 logical px at
+    /// scale 2 pads 321 px), and every pixel it covers evaluates 16 slices of the error function.
+    /// There is no cap, since one would visibly clip the shadow: keep `sigma` to what the shadow
+    /// needs.
+    pub fn shadow(&mut self, r: Rect, radius: f32, sigma: f32, color: Rgba) {
+        self.rec(|| Op::Shadow(r, radius, sigma, color));
+        let mut sh = self.shape(r, [radius; 4], premul(color));
+        let phys = sigma * self.scale_k() * self.s;
+        let phys = if phys.is_finite() && phys > 0.0 {
+            phys
+        } else {
+            0.0
+        };
+        sh.params = [4.0, phys, 0.0, 0.0];
         self.geo().under.push(sh);
     }
 

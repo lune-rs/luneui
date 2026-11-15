@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 97 |
+| done | 101 |
 | external | 4 |
-| **total** | **103** |
+| **total** | **107** |
 
 ## core
 
@@ -27,8 +27,11 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [core.icon](core/icon.md) | Codicon glyph constants | done | luneterm, wane | Codicon glyph constants and a glyph helper; the app supplies the icon font |
 | [core.image](core/image.md) | Image drawing | done | lunegit, wane | Image primitive: app-decoded RGBA drawn into a rect with a fit mode, alpha, optional corner radius, a part of the picture (sprite sheets) and per-draw sampling; explicit resource lifetime and in-place rect updates |
 | [core.input](core/input.md) | Input model | done | any | Plain-data RawInput in, FrameOutput out; the windowing adapter translates both |
+| [core.linear-gradient](core/linear-gradient.md) | Linear gradient | done | any | Painter::linear, a per-pixel two-colour ramp over a rounded rect at any angle, interpolated premultiplied and dithered to the target's format (D323) |
 | [core.painter](core/painter.md) | Immediate-mode painter | done | luneterm | Painter: ordered layers, fills, rings, strokes, acrylic, text, clip, transform and hit regions, building a plain-data Scene; holds the aggregate table of new primitives |
+| [core.radial-gradient](core/radial-gradient.md) | Radial gradient | done | any | Painter::radial, a per-pixel ellipse gradient from an inner to an outer colour with linear, smooth or Gaussian falloff, dithered to the target's format (D324) |
 | [core.scene](core/scene.md) | Display list | done | any | Plain-data Scene the painter builds and a renderer consumes; the draw-order contract |
+| [core.soft-shadow](core/soft-shadow.md) | Soft shadow | done | any | Painter::shadow, an analytic Gaussian blur of a rounded rect (erf in x, 16 slices in y), coloured freely, dithered to the target's format; its cost is stated in its doc (D325) |
 | [core.tab-outline](core/tab-outline.md) | Tab outline geometry | done | luneterm | Tab-chrome outline loop geometry |
 | [core.testing](core/testing.md) | Seam fakes and contract suites | done | any | Public testing module: RecordingRenderer, FakeText, ScriptedInput, NullMaterial and the contract suites |
 | [core.theme](core/theme.md) | Theme tokens and Lunegit dark preset | done | luneterm | Theme token struct, the lunegit_dark preset and the near_black glass look (its tunables file), with the WINDOW, PANEL and CARD glass layers |
@@ -43,6 +46,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [render.dump](render/dump.md) | Offscreen frame dump | done | luneterm | Offscreen target, GPU readback and PNG writer for frame goldens |
 | [render.frame](render/frame.md) | Frame pass sequence | done | luneterm | FrameRenderer: one target's scene, blur, target pass sequence over the core Scene |
 | [render.gpu](render/gpu.md) | Shared GPU | done | luneterm | One shared Gpu (device, queue, noise texture, per-format pipelines and glyph atlas) for any number of targets |
+| [render.gradient-dither](render/gradient-dither.md) | Gradient dither | done | any | Format-aware ordered dither for the per-pixel gradient and shadow kinds (8x8 Bayer, lifted base, ±0.5 LSB of an 8-bit or 10-bit target; off for sRGB and float targets) (D326) |
 | [render.surface](render/surface.md) | Window surface | in-progress | any | One window's swapchain on the shared Gpu: acquire, present, resize; no winit dependency |
 
 ## platform

@@ -494,6 +494,7 @@ mod tests {
         ("focus", Press(Role::Switch, "Dialog over the controls")),
         ("image", Press(Role::Radio, "alpha 0.5")),
         ("primitives", Press(Role::Radio, "dash")),
+        ("gradients", Press(Role::Radio, "Linear fade")),
         ("theme", Press(Role::Radio, "Blue")),
         ("motion", Press(Role::Switch, "Flip the swatches")),
         // Data.

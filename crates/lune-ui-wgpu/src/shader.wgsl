@@ -26,7 +26,7 @@ struct ShapeIn {
     @location(1) radii: vec4<f32>,  // tl, tr, br, bl
     @location(2) color: vec4<f32>,
     @location(3) under: vec4<f32>,  // acrylic: what this layer replaces (for AA edges)
-    @location(4) params: vec4<f32>, // kind (0 fill, 1 ring), ring width, acrylic flag, noise flag
+    @location(4) params: vec4<f32>, // kind (0 fill, 1 ring, 2 linear, 3 radial, 4 shadow), p1, acrylic flag, noise flag
     @location(5) clip: vec4<f32>,
     @location(6) round: vec4<f32>,    // rounded clip rect (x, y, w, h)
     @location(7) round_r: f32,        // its corner radius; 0 = none
@@ -48,7 +48,9 @@ struct ShapeOut {
 @vertex
 fn vs_shape(@builtin(vertex_index) vi: u32, s: ShapeIn) -> ShapeOut {
     let corner = vec2<f32>(f32(vi & 1u), f32((vi >> 1u) & 1u));
-    let p = s.rect.xy - vec2<f32>(1.0) + corner * (s.rect.zw + vec2<f32>(2.0));
+    // A shadow spreads 4 sigma past its rect (params.y is sigma in px); every other kind, 1 px.
+    let pad = 1.0 + select(0.0, 4.0 * s.params.y, s.params.x > 3.5);
+    let p = s.rect.xy - vec2<f32>(pad) + corner * (s.rect.zw + vec2<f32>(2.0 * pad));
     var o: ShapeOut;
     o.pos = to_ndc(p);
     o.p = p;
@@ -85,13 +87,72 @@ fn add_noise(c: vec4<f32>, n: vec4<f32>) -> vec4<f32> {
     return vec4<f32>(n.rgb * na + c.rgb * (1.0 - na), na + c.a * (1.0 - na));
 }
 
+// Set per target format when the pipeline is built (`gpu.rs`, `dither_lsb`): half a step of the
+// target's depth is the dither's swing either way; 0 means no dither.
+override dither_lsb: f32 = 0.0;
+
+// An 8x8 ordered (Bayer) threshold in (0, 1) from an integer pixel position: each of its 64
+// values once per aligned tile, so the mean over a tile is exactly 0.5.
+fn bayer8(q: vec2<u32>) -> f32 {
+    let a = (q.x ^ q.y) & 7u;
+    let b = q.y & 7u;
+    let m = ((a & 1u) << 5u) | ((b & 1u) << 4u) | ((a & 2u) << 2u)
+          | ((b & 2u) << 1u) | ((a & 4u) >> 1u) | ((b & 4u) >> 2u);
+    return (f32(m) + 0.5) / 64.0;
+}
+
+// Dither a premultiplied gradient or shadow colour at the fragment `frag` (its position, pixel
+// centre): lift the colour to `h` from both ends of the range, then swing it by the Bayer value
+// within +-h, h being half a step, faded in below one step of alpha. The swing is additive in the
+// over blend, so it reaches the blended result for any background. Alpha is left alone.
+fn dither(c: vec4<f32>, frag: vec2<f32>) -> vec4<f32> {
+    if dither_lsb <= 0.0 { return c; }
+    let h = 0.5 * dither_lsb * clamp(c.a / dither_lsb, 0.0, 1.0);
+    let n = (bayer8(vec2<u32>(frag)) - 0.5) * 2.0 * h;
+    let base = clamp(c.rgb, vec3<f32>(h), vec3<f32>(1.0 - h));
+    return vec4<f32>(base + vec3<f32>(n), c.a);
+}
+
+// Abramowitz and Stegun 7.1.26, |error| < 1.5e-7, odd extension.
+fn erf_approx(x: f32) -> f32 {
+    let a = abs(x);
+    let t = 1.0 / (1.0 + 0.3275911 * a);
+    let y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t
+        + 0.254829592) * t * exp(-a * a);
+    return select(-y, y, x >= 0.0);
+}
+
+// The standard normal CDF.
+fn phi(z: f32) -> f32 {
+    return 0.5 * (1.0 + erf_approx(z * 0.70710678));
+}
+
+// A rounded rect (half extents `half`, one radius `rad`) blurred by a Gaussian of `sigma`, at `q`
+// from its centre. x is exact (erf); y is summed over 16 slices, each with its exact Gaussian mass.
+fn shadow_value(q: vec2<f32>, half: vec2<f32>, rad: f32, sigma: f32) -> f32 {
+    let y0 = max(-half.y, q.y - 4.0 * sigma);
+    let y1 = min(half.y, q.y + 4.0 * sigma);
+    if y1 <= y0 { return 0.0; }
+    var value = 0.0;
+    for (var k = 0u; k < 16u; k = k + 1u) {
+        let a = mix(y0, y1, f32(k) / 16.0);
+        let b = mix(y0, y1, f32(k + 1u) / 16.0);
+        let ym = 0.5 * (a + b);
+        let w = phi((b - q.y) / sigma) - phi((a - q.y) / sigma);
+        let dy = max(0.0, abs(ym) - (half.y - rad));
+        let x1 = half.x - rad + sqrt(max(0.0, rad * rad - dy * dy));
+        value += w * (phi((x1 - q.x) / sigma) - phi((-x1 - q.x) / sigma));
+    }
+    return value;
+}
+
 @fragment
 fn fs_shape(i: ShapeOut) -> @location(0) vec4<f32> {
     if clipped(i.p, i.clip) { discard; }
     let center = i.rect.xy + i.rect.zw * 0.5;
     let d = sd_round_rect(i.p - center, i.rect.zw * 0.5, i.radii);
     var cov: f32;
-    if i.params.x > 0.5 {
+    if i.params.x > 0.5 && i.params.x < 1.5 {
         let w = i.params.y;
         cov = clamp(w * 0.5 + 0.5 - abs(d + w * 0.5), 0.0, 1.0);
     } else {
@@ -111,6 +172,41 @@ fn fs_shape(i: ShapeOut) -> @location(0) vec4<f32> {
         let top = add_noise(i.color, n);
         let below = select(add_noise(i.under, n), vec4<f32>(0.0), i.under.a <= 0.0);
         return mix(below, top, cov);
+    }
+    let half = i.rect.zw * 0.5;
+    if i.params.x > 3.5 {
+        // Shadow: `params.y` is sigma in px; under half a px it is the plain antialiased fill.
+        let sigma = i.params.y;
+        if sigma >= 0.5 {
+            let rad = clamp(i.radii.x, 0.0, min(half.x, half.y));
+            let v = shadow_value(i.p - center, half, rad, sigma);
+            return dither(i.color * (v * round_clip(i.p, i.round, i.round_r)), i.pos.xy);
+        }
+        return dither(i.color * cov, i.pos.xy);
+    }
+    if i.params.x > 2.5 {
+        // Radial: the ellipse inscribed in the rect, `color` at the centre, `under` at the rim;
+        // `params.y` picks the falloff (0 linear, 1 smooth, 2 Gaussian) of the inner weight.
+        let t = length((i.p - center) / max(half, vec2<f32>(1e-6)));
+        let u = min(t, 1.0);
+        var k = 1.0 - u;
+        if i.params.y > 1.5 {
+            k = (exp(-4.5 * u * u) - exp(-4.5)) / (1.0 - exp(-4.5));
+        } else if i.params.y > 0.5 {
+            k = 1.0 - u * u * (3.0 - 2.0 * u);
+        }
+        let edge = clamp((1.0 - t) * min(half.x, half.y) + 0.5, 0.0, 1.0);
+        let col = mix(i.under, i.color, k) * (edge * round_clip(i.p, i.round, i.round_r));
+        return dither(col, i.pos.xy);
+    }
+    if i.params.x > 1.5 {
+        // Linear: `color` at t = 0 to `under` at t = 1 along the angle `params.y`, the ramp
+        // spanning the rect so the corners lie on 0 and 1.
+        let dir = vec2<f32>(cos(i.params.y), sin(i.params.y));
+        let span = abs(half.x * dir.x) + abs(half.y * dir.y);
+        var t = 0.0;
+        if span > 0.0 { t = clamp(dot(i.p - center, dir) / (2.0 * span) + 0.5, 0.0, 1.0); }
+        return dither(mix(i.color, i.under, t) * cov, i.pos.xy);
     }
     return i.color * cov;
 }

@@ -11,7 +11,7 @@ summary: Painter: ordered layers, fills, rings, strokes, acrylic, text, clip, tr
 
 ## What it is
 
-`Painter<H>`: immediate-mode layers (`LAYER_COUNT`), `fill`, `fill_radii`, `fill_over`, `ring`, `acrylic`, `custom`, `text`, `text_in`, `text_centered`, `measure`, `stroke`, clip (`set_clip`), transform (`set_xform`), and `hit`/`hovered` over an app-defined hit type `H`. Also `Rect`, `StrokeStyle`, `polyline_length`. The painter builds a `Scene` (`Painter.scene`, see `core.scene`) and shapes text through `&mut dyn TextSystem` (`Painter::new(s, window, text, hover, theme)`); it has no GPU, window or cosmic-text type in its signature.
+`Painter<H>`: immediate-mode layers (`LAYER_COUNT`), `fill`, `fill_radii`, `fill_over`, `ring`, `acrylic`, `linear`, `radial`, `shadow`, `custom`, `text`, `text_in`, `text_centered`, `measure`, `stroke`, clip (`set_clip`), transform (`set_xform`), and `hit`/`hovered` over an app-defined hit type `H`. Also `Rect`, `StrokeStyle`, `polyline_length`. The painter builds a `Scene` (`Painter.scene`, see `core.scene`) and shapes text through `&mut dyn TextSystem` (`Painter::new(s, window, text, hover, theme)`); it has no GPU, window or cosmic-text type in its signature.
 
 ## Needs
 
@@ -31,7 +31,7 @@ Conflicts: none between sources. The painter is the moved, pixel-gated code, so 
 
 ### Anatomy
 
-- Existing primitives (the SF11 vocabulary, mapped to the methods that implement them): `fill` [R crates/lune-ui-core/src/paint.rs:215], `fill-radii` [R crates/lune-ui-core/src/paint.rs:219], `fill-over` [R crates/lune-ui-core/src/paint.rs:225], `ring` [R crates/lune-ui-core/src/paint.rs:231], `acrylic` [R crates/lune-ui-core/src/paint.rs:243], `backdrop` [R crates/lune-ui-core/src/paint.rs:189], `text` (with `text_in`, `text_centered`, `measure`) [R crates/lune-ui-core/src/paint.rs:274-311], `icon` (a glyph drawn through the text path) [R crates/lune-ui-core/src/icon.rs:22], `stroke`, `stroke-sweep` and `stroke-comet` (one tessellated polyline; `Painter::stroke_sweep` and `Painter::stroke_comet` are `StrokeStyle.mode` 1 and 2, drawn by the shader; a style's lengths and centre are logical px of the drawing space, and `stroke` turns them into the shader's units through the transform stack, so a recorded `Op::Stroke` replays right in another painter's space) [R crates/lune-ui-core/src/paint.rs:64-72,329], [R crates/lune-ui-wgpu/src/shader.wgsl:106,150-157], `custom` [R crates/lune-ui-core/src/paint.rs:254], `clip-rect` (`set_clip`) [R crates/lune-ui-core/src/paint.rs:167], `xform` (`set_xform`: scale about an origin, a vertical offset and an alpha) [R crates/lune-ui-core/src/paint.rs:171,86-93].
+- Existing primitives (the SF11 vocabulary, mapped to the methods that implement them): `fill` [R crates/lune-ui-core/src/paint.rs:215], `fill-radii` [R crates/lune-ui-core/src/paint.rs:219], `fill-over` [R crates/lune-ui-core/src/paint.rs:225], `ring` [R crates/lune-ui-core/src/paint.rs:231], `acrylic` [R crates/lune-ui-core/src/paint.rs:243], `backdrop` [R crates/lune-ui-core/src/paint.rs:189], `text` (with `text_in`, `text_centered`, `measure`) [R crates/lune-ui-core/src/paint.rs:274-311], `icon` (a glyph drawn through the text path) [R crates/lune-ui-core/src/icon.rs:22], `stroke`, `stroke-sweep` and `stroke-comet` (one tessellated polyline; `Painter::stroke_sweep` and `Painter::stroke_comet` are `StrokeStyle.mode` 1 and 2, drawn by the shader; a style's lengths and centre are logical px of the drawing space, and `stroke` turns them into the shader's units through the transform stack, so a recorded `Op::Stroke` replays right in another painter's space) [R crates/lune-ui-core/src/paint.rs:64-72,329], [R crates/lune-ui-wgpu/src/shader.wgsl:106,150-157], `linear`, `radial` and `shadow` (0.6.2; D323 to D325, per-pixel kinds 2 to 4 with the dither of `render.gradient-dither`) [R crates/lune-ui-core/src/paint.rs:778,793,824], `custom` [R crates/lune-ui-core/src/paint.rs:254], `clip-rect` (`set_clip`) [R crates/lune-ui-core/src/paint.rs:167], `xform` (`set_xform`: scale about an origin, a vertical offset and an alpha) [R crates/lune-ui-core/src/paint.rs:171,86-93].
 - Order: layers draw back to front; inside a layer the draw-order contract is in [core.scene]. Every primitive records on the layer set by `on` [R crates/lune-ui-core/src/paint.rs:162].
 - Every primitive method records plain data into the `Scene`; none touches a GPU, window or text-shaping type [core.scene].
 - Rule for a new primitive: it is a method on `Painter` that records into `Scene`, with a recording-fake test and a gallery scene; the wgpu adapter draws it; the pixel gate stays at zero delta for every existing scene [D47].
@@ -71,7 +71,7 @@ None: the painter draws text it is given.
 
 ### Painter primitives
 
-- Existing: fill, fill-radii, fill-over, ring, acrylic, backdrop, text, icon, stroke, stroke-sweep, stroke-comet, custom, clip-rect, xform.
+- Existing: fill, fill-radii, fill-over, ring, acrylic, backdrop, text, icon, stroke, stroke-sweep, stroke-comet, custom, clip-rect, xform, linear, radial, shadow (the last three built in 0.6.2, D323 to D325).
 - New: image, rotate, dash, clip-rounded, sector, path-fill, arc.
 
 The aggregate of every `New:` item in the catalogue (the list C5 gives M5; R-core-10). "First milestone" is the earliest consumer; M5 adds the whole set so later milestones draw without painter work.
@@ -86,7 +86,7 @@ The aggregate of every `New:` item in the catalogue (the list C5 gives M5; R-cor
 | path-fill | data.pie-chart | M8 (not used by the pie: a fan through `sector` is a whole disc at a sweep of 2π, so no path fill is needed; the primitive stays built, M7's tab strip tints with `Painter::fill_path`) | [L src/Lunegit.Desktop/Controls/StoragePieChartControl.cs:140-158] |
 | arc | data.pie-chart | M8 (not used by the pie: `sector` covers it; the lane graph's dot first used `Painter::arc` and is a closed `Painter::stroke` since D172, because `arc` flattens on the centre radius) | [L src/Lunegit.Desktop/Controls/StoragePieChartControl.cs:132] |
 
-Not needed by any entry (no row): `linear-gradient` and `shadow`. No Lunegit or Wane component read draws either (Wane's panel states "no shadow", [W docs/ui/components.md:249-262]); they are added only when a spec needs them. Of the other entries, 78 list `New: none` (two more since the page and the panel took the M5 clip-rounded), 8 read `n/a` (no painter section applies) and 4 are external (no painter section); counted by script over the `### Painter primitives` subsections.
+At M11 no entry needed `linear-gradient` or `shadow` (no row); 0.6.2 builds them for `core.linear-gradient`, `core.radial-gradient` and `core.soft-shadow`. No Lunegit or Wane component read draws either (Wane's panel states "no shadow", [W docs/ui/components.md:249-262]); they are added only when a spec needs them. Of the other entries, 78 list `New: none` (two more since the page and the panel took the M5 clip-rounded), 8 read `n/a` (no painter section applies) and 4 are external (no painter section); counted by script over the `### Painter primitives` subsections.
 
 ### Acceptance
 
@@ -107,7 +107,7 @@ Not needed by any entry (no row): `linear-gradient` and `shadow`. No Lunegit or 
 
 ## Open questions
 
-- None on the seam: the painter depends on core types only (M2 steps 2 and 5). The seven M5 primitives are built (D105); `linear-gradient` and `shadow` are not, because no entry needs them. It lives in `lune-ui-core`, which has no dependencies (boundary rules 7 and 8).
+- None on the seam: the painter depends on core types only (M2 steps 2 and 5). The seven M5 primitives are built (D105); `linear-gradient` and `shadow` were not, because no entry needed them at M11; 0.6.2 builds them (D323 to D325). It lives in `lune-ui-core`, which has no dependencies (boundary rules 7 and 8).
 
 ## Notes for the planner
 

@@ -23,7 +23,7 @@ pub struct Ops {
 Painter calls recorded by [`Painter::start_recording`](paint.md#method.Painter.start_recording), owned and `'static`, to replay later
 with [`Painter::replay`](paint.md#method.Painter.replay) (an overlay's exit frame replays what the app drew inside it).
 
-Source: `crates/lune-ui-core/src/paint.rs:189`
+Source: `crates/lune-ui-core/src/paint.rs:218`
 
 **Methods and associated items**
 
@@ -62,7 +62,7 @@ pub struct Painter<'a, H> {
 Records one frame's drawing into a [`Scene`](scene.md#struct.Scene) and the hit regions of what it drew, at scale `s`.
 Draw calls are in logical px; the painter turns them into physical px.
 
-Source: `crates/lune-ui-core/src/paint.rs:232`
+Source: `crates/lune-ui-core/src/paint.rs:261`
 
 **Fields**
 
@@ -247,6 +247,16 @@ Source: `crates/lune-ui-core/src/paint.rs:232`
   for any case [`Self::image`](paint.md#method.Painter.image) draws nothing for, nor for a part with no area (`w` or `h`
   0). A part past the picture's edge is dropped by the renderer, not here.
 
+- <a id="method.Painter.linear"></a>`pub fn linear(&mut self, r: Rect, radius: f32, from: Rgba, to: Rgba, angle: f32)`
+
+  A linear gradient from `from` to `to` inside `r`, below this layer's text, evaluated per
+  pixel and dithered by the renderer (about half a step of the target's depth), so a large
+  dark wash shows no bands. `angle` is in radians, clockwise on screen (y down): 0 runs `from`
+  at the left edge to `to` at the right, a quarter turn (pi / 2) from the top to the bottom.
+  The ramp spans the rect along that direction, so the corners lie on 0 and 1. Colours are
+  interpolated premultiplied: a fade to a transparent colour leaves no dark fringe. A
+  non-finite angle counts as 0. The fade of a [`Self::push_xform`](paint.md#method.Painter.push_xform) applies to both colours.
+
 - <a id="method.Painter.measure"></a>`pub fn measure(&mut self, spec: &Spec) -> (f32, f32)`
 
   The size of `spec` in logical px at this painter's scale.
@@ -316,6 +326,26 @@ Source: `crates/lune-ui-core/src/paint.rs:232`
 
   Adds `xform` inside the current ones: it applies first, the earlier ones after it.
 
+- <a id="method.Painter.radial"></a>
+
+  ```rust
+  pub fn radial(
+      &mut self,
+      center: [f32; 2],
+      radius: [f32; 2],
+      inner: Rgba,
+      outer: Rgba,
+      falloff: Falloff,
+  )
+  ```
+
+  A radial gradient below this layer's text, per pixel and dithered like [`Self::linear`](paint.md#method.Painter.linear):
+  `inner` at `center`, `outer` at the rim of the ellipse inscribed in `center` plus or minus
+  `radius` (x, y), shaped by `falloff`. Nothing is drawn outside the ellipse (its rim is
+  antialiased), so an `outer` of transparent colour makes a light that fades out, and an
+  opaque `outer` ends in a visible edge. Colours are interpolated premultiplied. A `radius`
+  that is not finite and above zero on both axes draws nothing.
+
 - <a id="method.Painter.replay"></a>`pub fn replay(&mut self, ops: &Ops)`
 
   Replays `ops` through this painter's own methods, so the result depends on its current
@@ -345,6 +375,20 @@ Source: `crates/lune-ui-core/src/paint.rs:232`
 - <a id="method.Painter.set_xform"></a>`pub fn set_xform(&mut self, xform: Option<Xform>)`
 
   Replaces the transform stack: with `xform` as its only entry, or empty for `None`.
+
+- <a id="method.Painter.shadow"></a>`pub fn shadow(&mut self, r: Rect, radius: f32, sigma: f32, color: Rgba)`
+
+  A soft shadow of the rounded rect `r` (one `radius`), below this layer's text: the shape
+  blurred by a Gaussian of `sigma` logical px (a CSS blur radius is about twice that), in
+  `color`. The whole blurred shape is drawn, not cut out under `r`; an offset or a spread is
+  the app's to make by moving or growing `r`. It is evaluated analytically per pixel and
+  dithered like [`Self::linear`](paint.md#method.Painter.linear). A `sigma` below half a physical px (or negative, or not
+  finite) draws the plain antialiased fill.
+
+  Cost: the quad pads `4 sigma + 1` physical px on every side (a `sigma` of 40 logical px at
+  scale 2 pads 321 px), and every pixel it covers evaluates 16 slices of the error function.
+  There is no cap, since one would visibly clip the shadow: keep `sigma` to what the shadow
+  needs.
 
 - <a id="method.Painter.start_recording"></a>`pub fn start_recording(&mut self)`
 
@@ -584,6 +628,50 @@ Source: `crates/lune-ui-core/src/paint.rs:113`
 - `impl Copy for Xform`
 - `impl Debug for Xform`
 
+## Enums
+
+<a id="enum.Falloff"></a>
+### Enum `Falloff`
+
+```rust
+#[non_exhaustive]
+pub enum Falloff {
+    Linear,
+    Smooth,
+    Gaussian,
+}
+```
+
+How a radial gradient ([`Painter::radial`](paint.md#method.Painter.radial)) falls from its inner colour to its outer one, on
+`u`, the distance from the centre over the radius, clamped to 0 to 1. The shape is the weight of
+the inner colour.
+
+Source: `crates/lune-ui-core/src/paint.rs:153`
+
+**Variants**
+
+- <a id="variant.Falloff.Linear"></a>`Linear`
+
+  The straight ramp, `1 - u`.
+
+- <a id="variant.Falloff.Smooth"></a>`Smooth`
+
+  The smoothstep ramp, `1 - u^2 (3 - 2u)`: no slope at the centre or the rim.
+
+- <a id="variant.Falloff.Gaussian"></a>`Gaussian`
+
+  A Gaussian bell of sigma `radius / 3`, renormalised to reach 0 at the rim:
+  `(e^(-4.5 u^2) - e^(-4.5)) / (1 - e^(-4.5))`.
+
+**Trait implementations**
+
+- `impl Clone for Falloff`
+- `impl Copy for Falloff`
+- `impl Debug for Falloff`
+- `impl Eq for Falloff`
+- `impl PartialEq for Falloff`
+- `impl StructuralPartialEq for Falloff`
+
 ## Functions
 
 <a id="fn.polyline_length"></a>
@@ -595,7 +683,7 @@ pub fn polyline_length(pts: &[[f32; 2]]) -> f32
 
 The length of the closed loop through `pts`, the closing segment included.
 
-Source: `crates/lune-ui-core/src/paint.rs:1450`
+Source: `crates/lune-ui-core/src/paint.rs:1552`
 
 ## Re-exports
 

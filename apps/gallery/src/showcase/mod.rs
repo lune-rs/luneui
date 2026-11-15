@@ -141,7 +141,7 @@ const SEARCH: &[&str] = &["search"];
 const FOUND_ROWS: &[&str] = &["sidebar", "found"];
 /// The row key of the table page in the sidebar: `Target::Page(index of "table").key()`, which
 /// `the_table_scenes_row_key_is_the_first_match_of_the_search` pins.
-const TABLE_ROW: u64 = 100 + 61;
+const TABLE_ROW: u64 = 100 + 62;
 
 const SCENES: &[UiScene] = &[
     UiScene {
@@ -960,13 +960,20 @@ mod tests {
         );
     }
 
+    /// The tree row of the Widgets group while only Foundation is open: row 0 is Foundation, its
+    /// pages follow, then Widgets. Derived from the groups, so a new Foundation page moves it.
+    fn widgets_row() -> usize {
+        assert_eq!(nav::GROUPS[1].name, "Widgets");
+        1 + nav::GROUPS[0].pages.len()
+    }
+
     #[test]
     fn a_click_on_a_tree_row_selects_it() {
         let mut rig = Rig::new();
         rig.frame();
         let lay = SCENE_LAYOUT;
-        // Open Widgets (row 7: the six Foundation pages sit under row 0), then press its Button row.
-        let widgets = 7;
+        // Open Widgets (the row after Foundation's own row and its pages), then press its Button row.
+        let widgets = widgets_row();
         rig.click_at(lay.tree_row(widgets));
         rig.settle();
         assert_eq!(
@@ -1362,10 +1369,13 @@ mod tests {
         rig.frame();
         rig.settle();
         let lay = SCENE_LAYOUT;
-        let widgets = 7;
-        rig.click_at(lay.tree_row(widgets));
+        // Only locale's group is open: the group headers above it come first (row = its index), so
+        // the first page row of the group is the one after it. Derived, not counted.
+        let locale = nav::index_of("locale").expect("the locale page");
+        let first = nav::group_of(locale).expect("locale sits in a group") + 1;
+        rig.click_at(lay.tree_row(first));
         rig.settle();
-        rig.click_at(lay.tree_row(widgets + 1));
+        rig.click_at(lay.tree_row(first + 1));
         rig.settle();
         assert_ne!(
             PAGES[rig.shell.page].id, "locale",
