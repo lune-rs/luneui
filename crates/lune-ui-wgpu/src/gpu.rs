@@ -382,6 +382,8 @@ impl Gpu {
         };
 
         let premultiplied_over = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
+        // The shader's `dither_lsb` override: half a step of this target's depth (0 = no dither).
+        let dither = [("dither_lsb", dither_lsb(format))];
         let make = |label: &str,
                     vs: &str,
                     fs: &str,
@@ -405,7 +407,10 @@ impl Gpu {
                         blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
-                    compilation_options: Default::default(),
+                    compilation_options: wgpu::PipelineCompilationOptions {
+                        constants: &dither,
+                        ..Default::default()
+                    },
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology,
@@ -821,9 +826,43 @@ fn noise_texture(
     Ok((texture.create_view(&Default::default()), sampler))
 }
 
+/// The size of one step of `format`'s encoding in the unit range, which the shader's dither
+/// (`dither_lsb`) swings by half either way: 1/255 for the 8-bit Unorm formats, 1/1023 for
+/// `Rgb10a2Unorm`, 1/65535 for `Rgba16Unorm`. Every other format gets 0, no dither: the `*Srgb`
+/// formats (the shader writes linear values there, so a step is not a fixed size), float formats
+/// and anything not handled yet. This is not the final shape: a display whose depth is lower than
+/// its surface format's needs the display's depth as a second input (`docs/tasks/ten-bit-surface.md`).
+pub(crate) fn dither_lsb(format: wgpu::TextureFormat) -> f64 {
+    use wgpu::TextureFormat as F;
+    match format {
+        F::Rgba8Unorm | F::Bgra8Unorm => 1.0 / 255.0,
+        F::Rgb10a2Unorm => 1.0 / 1023.0,
+        F::Rgba16Unorm => 1.0 / 65535.0,
+        _ => 0.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dither_lsb_table() {
+        use wgpu::TextureFormat as F;
+        assert_eq!(dither_lsb(F::Rgba8Unorm), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Bgra8Unorm), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Rgb10a2Unorm), 1.0 / 1023.0);
+        assert_eq!(dither_lsb(F::Rgba16Unorm), 1.0 / 65535.0);
+        for none in [
+            F::Rgba16Float,
+            F::Rgba32Float,
+            F::Rgba8UnormSrgb,
+            F::Bgra8UnormSrgb,
+            F::R8Unorm,
+        ] {
+            assert_eq!(dither_lsb(none), 0.0, "{none:?}");
+        }
+    }
 
     /// Pairwise distinct values, starting with the awkward ones: -0.0, a subnormal, f32::MAX and
     /// a NaN with a payload.
