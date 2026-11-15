@@ -52,13 +52,38 @@ pub const LAYER_COUNT: usize = 7;
 /// glass menu can blur them.
 pub const SCENE_LAYERS: usize = 2;
 
-/// One rounded-rect instance (fill, ring or acrylic).
+/// One rounded-rect instance: a fill, a ring, an acrylic or frost layer, a gradient or a shadow.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Shape {
+    /// Physical rect (x, y, w, h).
     pub rect: [f32; 4],
+    /// Corner radii in physical px: top-left, top-right, bottom-right, bottom-left.
     pub radii: [f32; 4],
+    /// Premultiplied colour, faded by the transform stack's alpha (frost and acrylic keep it
+    /// unfaded). For a gradient, the colour at `t = 0` (linear) or at the centre (radial); for a
+    /// shadow, the shadow colour.
     pub color: [f32; 4],
+    /// The second premultiplied colour, by kind (`params[0]`, `params[2]`):
+    /// - acrylic (`params[2]` 1): the layer below, which feeds the antialiased edge;
+    /// - linear (kind 2) and radial (kind 3): the colour at `t = 1` (linear) or at the rim
+    ///   (radial), faded like `color`;
+    /// - every other kind: zero.
     pub under: [f32; 4],
+    /// What the shape is, by `params[0]` (the kind) and `params[2]`:
+    /// - kind 0, `params[2]` 0: a fill;
+    /// - kind 1: a ring, `params[1]` its width in physical px;
+    /// - kind 0, `params[2]` 1: an acrylic, `params[3]` the noise flag;
+    /// - kind 0, `params[2]` 2: a frost, `params[1]` its alpha, `params[3]` the noise flag
+    ///   ([`Self::is_frost`]);
+    /// - kind 2: a linear gradient, `params[1]` its angle in radians, clockwise on screen (0 runs
+    ///   left to right); the ramp spans `rect` along that direction;
+    /// - kind 3: a radial gradient over the ellipse inscribed in `rect`, `params[1]` its falloff
+    ///   (0 linear, 1 smooth, 2 Gaussian);
+    /// - kind 4: a soft shadow of the rounded rect `rect`, `params[1]` its Gaussian sigma in
+    ///   physical px (0: no blur). The renderer pads the quad by `4 sigma + 1` px per side.
+    ///
+    /// Kinds 2 to 4 are dithered by the renderer; a plain fill is exact. A renderer that does not
+    /// know a kind should draw `color` over `rect` as a fill.
     pub params: [f32; 4],
     /// Physical clip rect (x, y, w, h); zero width = no clip.
     pub clip: [f32; 4],
