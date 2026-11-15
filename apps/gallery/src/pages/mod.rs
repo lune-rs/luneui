@@ -180,6 +180,8 @@ pub(crate) static PAGES: &[&Page] = &[
     &crate::showcase::labs::tokens::PAGE,
     &crate::showcase::labs::clipboard::PAGE,
     &crate::showcase::labs::json::PAGE,
+    &crate::showcase::labs::depth::PAGE,
+    &crate::showcase::labs::banding::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

@@ -8,12 +8,16 @@
 //! - motion: the fifteen kinds and the seven easings, each replayed on demand;
 //! - tokens: every theme colour, font size and radius;
 //! - clipboard: text copy and paste, on a press only;
-//! - json: the bounded JSON reader on text typed in.
+//! - json: the bounded JSON reader on text typed in;
+//! - depth: what each window depth changes on the glass window, over the desktop;
+//! - banding: large dark gradients, dithered, with the live format and dither step.
 //!
 //! Only the blur lab asks for a backdrop; the shell asks for none.
 
+pub(crate) mod banding;
 pub(crate) mod blur;
 pub(crate) mod clipboard;
+pub(crate) mod depth;
 pub(crate) mod effects;
 pub(crate) mod glass;
 pub(crate) mod json;

@@ -26,13 +26,13 @@ use lune_ui::material::{self, Material};
 use lune_ui::motion::{Cadence, MotionTier};
 use lune_ui::shortcuts::Shortcuts;
 use lune_ui::strings::{DisplayFormat, StringTable};
-use lune_ui::surface::{Acquired, WindowSurface};
+use lune_ui::surface::{Acquired, SurfaceDepth, SurfaceOptions, WindowSurface};
 use lune_ui::tray::TrayState;
 use lune_ui::ui::{FrameConfig, Ui, UiStore};
 use lune_ui::window::glass_attributes;
 
 use crate::own_chrome::{OWN_CHROME, OwnChrome, WindowLook};
-use crate::page::{FrameTweaks, Page, PageKind, PageState, Stage, register_images};
+use crate::page::{FrameTweaks, Page, PageKind, PageState, Stage, SurfaceLive, register_images};
 use crate::panels::PanelsHost;
 use crate::popover::{AppEvent, TrayHost, event_loop, route_tray_events};
 use crate::showcase;
@@ -242,6 +242,35 @@ pub(crate) fn window_title(page: &Page) -> String {
     format!("luneui gallery - {}", page.title)
 }
 
+/// The options to put on the surface when the page wants a depth it does not have: `current` with
+/// the wanted depth, and nothing when the page has no wish or it is already asked for. Every
+/// other field of `current` (the present mode, the latency, the display, `opaque`) stays.
+fn depth_change(wanted: Option<SurfaceDepth>, current: SurfaceOptions) -> Option<SurfaceOptions> {
+    wanted
+        .filter(|depth| *depth != current.depth)
+        .map(|depth| SurfaceOptions { depth, ..current })
+}
+
+/// Puts the depth the page asks for on the surface (`depth_change`) and tells the page what the
+/// surface is. A new format means a new renderer state and the custom draw's pipeline for it.
+/// Never call it while a texture from `acquire` is alive. Returns whether the surface changed.
+fn apply_depth(state: &mut dyn PageState, surface: &mut WindowSurface, r: &mut Renderer) -> bool {
+    let next = depth_change(state.surface_depth(), surface.options());
+    if let Some(next) = next {
+        surface.set_options(&r.gpu, next);
+        if r.frame.follow(&mut r.gpu, surface) {
+            r.fill = custom::Fill::new(&r.gpu.device, surface.format());
+        }
+    }
+    state.surface_applied(SurfaceLive {
+        format: surface.format(),
+        depth: surface.depth(),
+        alpha: surface.alpha_mode(),
+        display_bits: surface.options().display_bits,
+    });
+    next.is_some()
+}
+
 /// Puts the live tray in while the hosted page has a tray control (the `tray` page) and takes it
 /// out otherwise. An item that cannot be made (no tray here, or the OS refused) is reported once
 /// and the page draws without it. Returns whether the tray surface's flow must be reset.
@@ -317,6 +346,12 @@ impl App {
             translator,
             output,
         } = shown;
+        // The depth is the page's to ask for, and it changes the surface, so it comes before a
+        // texture is acquired (wgpu refuses to configure a surface with one alive). A new format
+        // means a new renderer state and the custom draw's pipeline for it.
+        if let Some(state) = self.state.as_mut() {
+            apply_depth(&mut **state, surface, r);
+        }
         let frame = match surface.acquire(&r.gpu)? {
             Acquired::Frame(frame) => frame,
             Acquired::Skip => return Ok(()),
@@ -456,6 +491,10 @@ impl App {
         let speed = state.time_scale();
         window.pre_present_notify();
         surface.present(&r.gpu, frame);
+        // A depth chosen in this frame is applied now (no texture is alive) and drawn next.
+        if apply_depth(&mut **state, surface, r) {
+            window.request_redraw();
+        }
         r.gpu.end_frame(&mut r.text);
         let (mut flow, redraw) = control_flow(self.clock.in_real_time(repaint, speed), self.start);
         if poll_tray && flow == ControlFlow::Wait {
@@ -703,6 +742,34 @@ mod tests {
             assert_eq!(shortcut(&ch("q"), mods), Some(Shortcut::Quit));
         }
         assert_eq!(shortcut(&ch("]"), ModifiersState::empty()), None);
+    }
+
+    #[test]
+    fn the_depth_is_applied_only_when_the_page_asks_for_another() {
+        use SurfaceDepth::{Auto, Eight, Ten};
+        let now = SurfaceOptions::default();
+        assert_eq!(depth_change(None, now), None, "no wish");
+        assert_eq!(depth_change(Some(Auto), now), None, "wanted is applied");
+        let ten = depth_change(Some(Ten), now).expect("a change");
+        assert_eq!((ten.depth, ten.present_mode), (Ten, now.present_mode));
+        // A present-mode-only change elsewhere keeps the depth: the page still wants Ten, the
+        // surface already asked for it, and nothing is applied.
+        let no_vsync = SurfaceOptions {
+            present_mode: wgpu::PresentMode::AutoNoVsync,
+            ..ten
+        };
+        assert_eq!(depth_change(Some(Ten), no_vsync), None);
+        // And a depth change keeps that present mode and the display.
+        let back = depth_change(
+            Some(Eight),
+            SurfaceOptions {
+                display_bits: Some(10),
+                ..no_vsync
+            },
+        )
+        .expect("a change");
+        assert_eq!(back.present_mode, wgpu::PresentMode::AutoNoVsync);
+        assert_eq!(back.display_bits, Some(10));
     }
 
     #[test]

@@ -22,6 +22,7 @@ use lune_ui::paint::Rect;
 use lune_ui::scene::{BlurLimits, FrameParams, Scene};
 use lune_ui::shortcuts::Shortcuts;
 use lune_ui::strings::{DisplayFormat, StringTable};
+use lune_ui::surface::SurfaceDepth;
 use lune_ui::testing::ScriptedInput;
 use lune_ui::text::{TextRendering, TextSystem};
 use lune_ui::theme::Theme;
@@ -190,6 +191,20 @@ pub(crate) trait PageState {
     /// The window told the page whether its last `material` took.
     fn material_applied(&mut self, _result: Result<(), String>) {}
 
+    /// The depth the window's surface should have, when the page chooses one; read at the start
+    /// of every frame, before the frame's texture is acquired. `None` leaves it.
+    fn surface_depth(&self) -> Option<SurfaceDepth> {
+        None
+    }
+
+    /// The host changed the depth the page asked for through another control: the page shows it.
+    /// The default ignores it.
+    fn set_surface_depth(&mut self, _depth: SurfaceDepth) {}
+
+    /// What the window's surface is, told once a frame before the page draws. Never called in a
+    /// dump, where the page's live line says so.
+    fn surface_applied(&mut self, _live: SurfaceLive) {}
+
     /// How fast the page's clock runs against the real one (1.0 is real time). Window mode only:
     /// the app passes time in, so slow motion needs nothing of the toolkit.
     fn time_scale(&self) -> f32 {
@@ -206,6 +221,20 @@ pub(crate) trait PageState {
     /// field of the page, which the showcase draws at the top of its settings pane. A knob's
     /// default is what the page draws without it. The default has none.
     fn knobs(&mut self, _ui: &mut Ui<'_>, _panel: &mut Knobs<'_>) {}
+}
+
+/// The window surface as configured: what the live lines of the depth pages and the settings
+/// pane show.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SurfaceLive {
+    /// The colour format of the surface.
+    pub(crate) format: wgpu::TextureFormat,
+    /// The depth that format gives (never `Auto`).
+    pub(crate) depth: SurfaceDepth,
+    /// The composite alpha mode.
+    pub(crate) alpha: wgpu::CompositeAlphaMode,
+    /// The bits per channel of the display the window is on, when known.
+    pub(crate) display_bits: Option<u8>,
 }
 
 /// What the page asks of the draw of a frame, besides the display list it makes.

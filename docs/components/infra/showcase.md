@@ -31,9 +31,9 @@ None from a consumer: this is the gallery's own tool, not a toolkit component. I
 ## Existing code
 
 `apps/gallery/src/showcase/mod.rs` (the shell: panes, hosting, scene replay), `nav.rs` (the groups, the tree
-rows and the search), `settings.rs` (the global settings), `knobs.rs` (the knob rows), `labs/` (the seven labs).
-`PageState` gained the hooks `knobs`, `tier`, `frame_params`, `material`, `time_scale`, `zoom`, `inject` and
-`epoch` (`apps/gallery/src/page.rs`); `window.rs` applies them.
+rows and the search), `settings.rs` (the global settings), `knobs.rs` (the knob rows), `labs/` (the nine labs).
+`PageState` gained the hooks `knobs`, `tier`, `frame_params`, `material`, `time_scale`, `zoom`, `inject`, `epoch`, `surface_depth`, `set_surface_depth` and `surface_applied` (`apps/gallery/src/page.rs`);
+`window.rs` applies them (the surface depth between frames: `set_options`, then `FrameRenderer::follow`).
 
 ## Spec
 
@@ -64,7 +64,11 @@ overlay come last: an open modal blocks the pane. Every page of the sidebar has 
 
 Glass (the three layers over stripes and colour), Blur (a backdrop over moving content), Effects (custom draw, glass off, the tab outline), Motion (the 15 kinds and 7 easings,
 each replayed on a press), Tokens (every theme colour, size and radius), Clipboard (copy and paste on a press
-only), JSON (the bounded reader on typed text).
+only), JSON (the bounded reader on typed text), Window depth (`lab-depth`: a fade of alpha, a soft shadow, a
+translucent fill and a dark ramp on the glass window, with the live format, depth, alpha mode and display
+bits; its knob and the settings pane's "Surface depth" are one choice), Gradient banding (`lab-banding`:
+large dark ramps and a radial light, dithered for the window's format, beside the same ramp in 8-bit steps,
+with the live dither step).
 
 ### Gallery scenes
 
@@ -73,6 +77,8 @@ only), JSON (the bounded reader on typed text).
 - `showcase-settings`: the settings pane under another theme, a reduced tier, half speed, a wider blur and no noise.
 - `showcase-lab-motion`: the motion lab, chosen by a cue: the seven easings and fifteen kinds at rest.
 - `showcase-table`: a search for the table, then a press on its row, which takes the content pane.
+- `lab-depth`: the window depth lab alone in a window (1x and 2x): a fade of alpha, a soft shadow, a translucent fill and a dark ramp on the window glass; its live line reads "not a window" in a dump.
+- `lab-banding`: the gradient banding lab alone in a window: a dark ramp dithered and in 8-bit steps, a radial light and a vertical ramp.
 
 ### Build
 
