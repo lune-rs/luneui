@@ -6,6 +6,21 @@
 //! [`WindowSurface::with_options`], [`WindowSurface::set_options`]); the defaults present as
 //! 0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 until the app tells the display's
 //! depth.
+//!
+//! # Changing the depth of a live window
+//!
+//! Set the options between frames, never while a texture from [`WindowSurface::acquire`] is
+//! alive; then re-target the window's renderer, and rebuild what the app made for the old format:
+//!
+//! ```ignore
+//! surface.set_options(&gpu, SurfaceOptions { depth: SurfaceDepth::Float16, ..surface.options() });
+//! if renderer.follow(&mut gpu, &surface) {
+//!     // The format changed: build the `CustomDraw` pipelines again from `surface.format()`.
+//! }
+//! ```
+//!
+//! `..surface.options()` keeps the present mode, latency, display depth and `opaque` as they are;
+//! `..SurfaceOptions::default()` would reset them.
 
 use crate::gpu::Gpu;
 
