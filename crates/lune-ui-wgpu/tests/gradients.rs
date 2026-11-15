@@ -577,7 +577,6 @@ fn a_shadow_of_a_square_rect_is_half_the_colour_at_its_edge() {
 }
 
 #[test]
-#[ignore = "blocked: T7's negative control (> 0.4 LSB) is above what the exact strip can show: the rounded strip's tile error is 0.3594 LSB; see notes.md"]
 fn a_black_shadow_over_grey_has_exact_tile_means() {
     let Some(mut gpu) = headless_gpu() else {
         return;
@@ -654,12 +653,21 @@ fn a_black_shadow_over_grey_has_exact_tile_means() {
             "ch {ch}: adjacent tile step differs from the exact strip's by {step_err:.4} LSB"
         );
     }
-    // Negative control: the CPU-rounded exact strip has bands the check sees.
+    // Negative control: the CPU-rounded exact strip fails this test's own tile-mean check
+    // (limit 0.2 LSB against the expected means).
     let rounded = tile_means(size, |x, y| exact_fn(x, y).round());
     let control = max_tile_error(&rounded, &exact);
+    let step_control = max_step_difference(size, &rounded, &exact);
+    println!(
+        "shadow over grey: rounded control: tile error {control:.4}, step error {step_control:.4} LSB"
+    );
     assert!(
-        control > 0.4,
+        control > 0.2,
         "the rounded control's tile error is only {control:.4} LSB"
+    );
+    assert!(
+        step_control > 0.25,
+        "the rounded control's step error is only {step_control:.4} LSB"
     );
 
     for y in 0..size.1 {
