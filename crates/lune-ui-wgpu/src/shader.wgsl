@@ -178,7 +178,7 @@ fn fs_shape(i: ShapeOut) -> @location(0) vec4<f32> {
         // Shadow: `params.y` is sigma in px; under half a px it is the plain antialiased fill.
         let sigma = i.params.y;
         if sigma >= 0.5 {
-            let rad = min(i.radii.x, min(half.x, half.y));
+            let rad = clamp(i.radii.x, 0.0, min(half.x, half.y));
             let v = shadow_value(i.p - center, half, rad, sigma);
             return dither(i.color * (v * round_clip(i.p, i.round, i.round_r)), i.pos.xy);
         }
