@@ -141,7 +141,7 @@ const SEARCH: &[&str] = &["search"];
 const FOUND_ROWS: &[&str] = &["sidebar", "found"];
 /// The row key of the table page in the sidebar: `Target::Page(index of "table").key()`, which
 /// `the_table_scenes_row_key_is_the_first_match_of_the_search` pins.
-const TABLE_ROW: u64 = 100 + 61;
+const TABLE_ROW: u64 = 100 + 62;
 
 const SCENES: &[UiScene] = &[
     UiScene {
