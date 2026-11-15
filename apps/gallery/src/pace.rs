@@ -420,7 +420,7 @@ impl Probe {
                     &shown.r.gpu,
                     SurfaceOptions {
                         present_mode: wgpu::PresentMode::AutoNoVsync,
-                        ..SurfaceOptions::default()
+                        ..shown.surface.options()
                     },
                 );
             }

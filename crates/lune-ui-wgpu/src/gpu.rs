@@ -221,12 +221,21 @@ pub fn instance(display: Option<Box<dyn wgpu::wgt::WgpuHasDisplayHandle>>) -> wg
 
 impl Gpu {
     /// Opens the device. `compatible` is a surface the adapter must be able to present to;
-    /// `None` opens a headless device (offscreen targets only).
+    /// `None` opens a headless device (offscreen targets only). It asks for the 16-bit normalised
+    /// texture formats (`TEXTURE_FORMAT_16BIT_NORM` with `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`)
+    /// where the adapter has them, so a window of [`SurfaceDepth::Unorm16`](crate::surface::SurfaceDepth)
+    /// can resolve; no other feature.
     pub async fn new(
         instance: wgpu::Instance,
         compatible: Option<&wgpu::Surface<'_>>,
     ) -> Result<Gpu, String> {
-        Self::new_with_features(instance, compatible, wgpu::Features::empty()).await
+        Self::new_with_features(
+            instance,
+            compatible,
+            wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+        )
+        .await
     }
 
     /// [`new`](Self::new) that also asks for the optional device `wanted` features. Only those
