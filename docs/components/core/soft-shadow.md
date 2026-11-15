@@ -13,14 +13,14 @@ summary: Painter::shadow, an analytic Gaussian blur of a rounded rect (erf in x,
 
 `Painter::shadow(r, radius, sigma, color)` draws the rounded rect `r` blurred by a Gaussian of `sigma`
 logical px (a CSS blur radius is about 2σ). It is the whole blurred shape, not cut out under `r`; an
-offset or a spread is the app's, made by moving or growing `r` (D8). It is evaluated per pixel: x by
-the error function, y by 16 slices, each with its exact Gaussian mass (D14). It is recorded as one
+offset or a spread is the app's, made by moving or growing `r` (D325). It is evaluated per pixel: x by
+the error function, y by 16 slices, each with its exact Gaussian mass (D325). It is recorded as one
 shape of kind 4 with no second colour. A `sigma` below half a physical px draws the plain
 antialiased fill.
 
 ## Needs
 
-- A soft shadow and glow without a blur pass or a texture (D3, D12).
+- A soft shadow and glow without a blur pass or a texture (D325).
 - A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
 
 ## Existing code
@@ -34,7 +34,7 @@ padded by 4σ + 1 physical px.
 ### Evidence
 
 Pinned: this repo 7f9640b (branch `orch/smooth-gradients`). Read: `crates/lune-ui-core/src/paint.rs:824-840`,
-`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (D8 and D14 are the source).
+`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (D325 is the source).
 
 ### Anatomy
 

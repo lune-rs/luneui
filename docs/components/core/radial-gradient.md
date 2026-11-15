@@ -14,13 +14,13 @@ summary: Painter::radial, a per-pixel ellipse gradient from an inner to an outer
 `Painter::radial(center, radius, inner, outer, falloff)` fills the ellipse inscribed in
 `center ± radius` with a ramp from `inner` at the centre to `outer` at the rim, nothing drawn outside
 the ellipse (the rim is antialiased). The falloff curves are on `u = min(distance / radius, 1)`: Linear
-`1 − u`, Smooth `1 − u²(3 − 2u)`, Gaussian `(e^(−4.5u²) − e^(−4.5)) / (1 − e^(−4.5))` (D7). It is
-recorded as one shape of kind 3 and evaluated per pixel; the colours interpolate premultiplied (D9).
+`1 − u`, Smooth `1 − u²(3 − 2u)`, Gaussian `(e^(−4.5u²) − e^(−4.5)) / (1 − e^(−4.5))` (D324). It is
+recorded as one shape of kind 3 and evaluated per pixel; the colours interpolate premultiplied (D323).
 An outer of transparent colour makes a light that fades out.
 
 ## Needs
 
-- A soft light on a surface with no bands (D3, D12).
+- A soft light on a surface with no bands (D326).
 - A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
 
 ## Existing code
@@ -33,7 +33,7 @@ None before 0.6.2. Built in 0.6.2: `Painter::radial` at `crates/lune-ui-core/src
 ### Evidence
 
 Pinned: this repo 7f9640b (branch `orch/smooth-gradients`). Read: `crates/lune-ui-core/src/paint.rs:793-805`,
-`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (D7 is the source of the curves).
+`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (D324 is the source of the curves).
 
 ### Anatomy
 
@@ -97,4 +97,4 @@ n/a — no text.
 
 ## Notes for the planner
 
-The falloff curves are D7 and the shape of the light (inscribed ellipse, nothing outside it) is part of the contract, not a choice.
+The falloff curves are D324 and the shape of the light (inscribed ellipse, nothing outside it) is part of the contract, not a choice.

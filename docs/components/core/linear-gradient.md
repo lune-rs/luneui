@@ -13,13 +13,13 @@ summary: Painter::linear, a per-pixel two-colour ramp over a rounded rect at any
 
 `Painter::linear(r, radius, from, to, angle)` fills the rounded rect `r` with a ramp from `from` to
 `to`. The angle is in radians, clockwise on screen: 0 runs left to right, π/2 top to bottom. The ramp
-spans the rect's extent along that direction, so the corners lie on the two ends (D6). It is recorded
+spans the rect's extent along that direction, so the corners lie on the two ends (D323). It is recorded
 as one shape of kind 2 and evaluated per pixel in the fragment shader; the colours interpolate
-premultiplied (D9). The dither that hides banding on dark ramps is in `render.gradient-dither`.
+premultiplied (D323). The dither that hides banding on dark ramps is in `render.gradient-dither`.
 
 ## Needs
 
-- A gradient fill with no visible bands on large dark washes (D3, D12).
+- A gradient fill with no visible bands on large dark washes (D326).
 - A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
 
 ## Existing code
@@ -32,7 +32,7 @@ None before 0.6.2. Built in 0.6.2: `Painter::linear` at `crates/lune-ui-core/src
 ### Evidence
 
 Pinned: this repo 7f9640b (branch `orch/smooth-gradients`). Read: `crates/lune-ui-core/src/paint.rs:778-790`,
-`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (the decisions D6 and D9 are the source).
+`crates/lune-ui-wgpu/tests/gradients.rs`. Conflicts: none (D323 is the source).
 
 ### Anatomy
 
@@ -98,4 +98,4 @@ n/a — no text.
 
 ## Notes for the planner
 
-The dither amplitude depends on the target format (D13); see `render.gradient-dither`, which states the limits.
+The dither amplitude depends on the target format (D326); see `render.gradient-dither`, which states the limits.
