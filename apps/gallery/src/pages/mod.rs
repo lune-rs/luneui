@@ -32,6 +32,7 @@ mod filter_bar;
 mod flyout;
 mod focus;
 mod form_field;
+mod gradients;
 mod icon_rail;
 mod image;
 mod ime;
@@ -116,6 +117,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &image::PAGE,
     &shortcuts::PAGE,
     &primitives::PAGE,
+    &gradients::PAGE,
     &scroll_area::PAGE,
     &scrollbar::PAGE,
     &virtual_list::PAGE,
