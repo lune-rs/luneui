@@ -20,7 +20,7 @@ premultiplied (D323). The dither that hides banding on dark ramps is in `render.
 ## Needs
 
 - A gradient fill with no visible bands on large dark washes (D326).
-- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
+- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D323).
 
 ## Existing code
 

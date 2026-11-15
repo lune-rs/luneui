@@ -21,7 +21,7 @@ An outer of transparent colour makes a light that fades out.
 ## Needs
 
 - A soft light on a surface with no bands (D326).
-- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
+- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D324).
 
 ## Existing code
 

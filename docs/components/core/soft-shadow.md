@@ -21,7 +21,7 @@ antialiased fill.
 ## Needs
 
 - A soft shadow and glow without a blur pass or a texture (D325).
-- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D5).
+- A painter primitive recorded as plain data, drawn by the wgpu adapter (D47, D325).
 
 ## Existing code
 
