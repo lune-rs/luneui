@@ -475,9 +475,10 @@ mod tests {
         match pollster::block_on(Gpu::new(crate::gpu::instance(None), None)) {
             Ok(g) => Some(g),
             Err(e) => {
-                let required = std::env::var("LUNEUI_REQUIRE_GPU").is_ok_and(|v| v == "1");
-                assert!(!required, "no GPU adapter: {e}");
-                println!("skipped: no GPU adapter");
+                // No `LUNEUI_REQUIRE_GPU` here: library `src` reads no environment (boundary
+                // rule 4). These tests need crate-private state, so they skip without an adapter;
+                // the integration tests under `tests/` are the ones that can be made to fail.
+                println!("skipped: no GPU adapter ({e})");
                 None
             }
         }
