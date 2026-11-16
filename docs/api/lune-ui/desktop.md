@@ -21,6 +21,7 @@ Source: `crates/lune-ui/src/lib.rs:28`
 | `ShapeFollower` | Struct | [`lune_ui_platform::desktop::ShapeFollower`](../lune-ui-platform/desktop.md#struct.ShapeFollower) |
 | `ShapeMode` | Enum | [`lune_ui_platform::desktop::ShapeMode`](../lune-ui-platform/desktop.md#enum.ShapeMode) |
 | `WindowShape` | Struct | [`lune_ui_core::desktop::WindowShape`](../lune-ui-core/desktop.md#struct.WindowShape) |
+| `display_depth` | Function | [`lune_ui_platform::desktop::display_depth`](../lune-ui-platform/desktop.md#fn.display_depth) |
 | `monitor_at` | Function | [`lune_ui_core::desktop::monitor_at`](../lune-ui-core/desktop.md#fn.monitor_at) |
 | `monitors` | Function | [`lune_ui_platform::desktop::monitors`](../lune-ui-platform/desktop.md#fn.monitors) |
 | `move_windows` | Function | [`lune_ui_platform::desktop::move_windows`](../lune-ui-platform/desktop.md#fn.move_windows) |

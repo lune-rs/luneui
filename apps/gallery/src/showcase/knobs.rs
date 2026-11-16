@@ -530,6 +530,8 @@ mod tests {
         ("lab-blur", Slide("Panel width", 0.0)),
         ("lab-effects", Press(Role::Radio, "History")),
         ("lab-json", Press(Role::Radio, "A mistake")),
+        ("lab-depth", Press(Role::Radio, "10-bit")),
+        ("lab-banding", Press(Role::Radio, "16-bit float")),
     ];
 
     /// Pages that have no knob, with the reason. A page not on this list must have one.

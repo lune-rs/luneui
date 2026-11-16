@@ -89,10 +89,13 @@ impl From<&StrokeVertex> for GpuStrokeVertex {
     }
 }
 
-/// The pipelines and the glyph atlas of one colour target format, shared by every
-/// [`FrameRenderer`](crate::frame::FrameRenderer) that draws in that format.
+/// The pipelines and the glyph atlas of one colour target format and dither amplitude, shared by
+/// every [`FrameRenderer`](crate::frame::FrameRenderer) that draws in that format at that
+/// amplitude (the dither is baked into the pipelines).
 pub(crate) struct FormatState {
     pub(crate) format: wgpu::TextureFormat,
+    /// The dither amplitude of the pipelines: [`dither_lsb`] of the format and the display.
+    pub(crate) dither: f64,
     acrylic_pipeline: wgpu::RenderPipeline,
     /// The acrylic shader blended in at a constant opacity (`src·c + dst·(1 − c)`).
     acrylic_fade_pipeline: wgpu::RenderPipeline,
@@ -128,7 +131,8 @@ pub struct Gpu {
     pub(crate) glyphs: GlyphRasterizer,
     /// The text settings (as bits) the draws of this app frame used; cleared by `end_frame`.
     text_bits_seen: Vec<RenderingBits>,
-    /// Created on first use, looked up linearly (a handful of formats at most).
+    /// One per (format, dither amplitude), created on first use, looked up linearly (a handful at
+    /// most) and never evicted.
     pub(crate) formats: Vec<FormatState>,
     /// Set by the device's lost callback; read by [`Gpu::is_lost`].
     lost: Arc<AtomicBool>,
@@ -221,12 +225,21 @@ pub fn instance(display: Option<Box<dyn wgpu::wgt::WgpuHasDisplayHandle>>) -> wg
 
 impl Gpu {
     /// Opens the device. `compatible` is a surface the adapter must be able to present to;
-    /// `None` opens a headless device (offscreen targets only).
+    /// `None` opens a headless device (offscreen targets only). It asks for the 16-bit normalised
+    /// texture formats (`TEXTURE_FORMAT_16BIT_NORM` with `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`)
+    /// where the adapter has them, so a window of [`SurfaceDepth::Unorm16`](crate::surface::SurfaceDepth)
+    /// can resolve; no other feature.
     pub async fn new(
         instance: wgpu::Instance,
         compatible: Option<&wgpu::Surface<'_>>,
     ) -> Result<Gpu, String> {
-        Self::new_with_features(instance, compatible, wgpu::Features::empty()).await
+        Self::new_with_features(
+            instance,
+            compatible,
+            wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+                | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES,
+        )
+        .await
     }
 
     /// [`new`](Self::new) that also asks for the optional device `wanted` features. Only those
@@ -350,17 +363,24 @@ impl Gpu {
         self.lost.load(Ordering::Acquire)
     }
 
-    /// The index of `format`'s shared state in `formats`, created on first use.
-    pub(crate) fn format_index(&mut self, format: wgpu::TextureFormat) -> usize {
-        if let Some(i) = self.formats.iter().position(|f| f.format == format) {
+    /// The index in `formats` of the shared state for `format` drawn for a display of
+    /// `display_bits`, created on first use. The key is the format and the dither amplitude
+    /// ([`dither_lsb`]), so two displays whose amplitude is the same share one state.
+    pub(crate) fn format_index(
+        &mut self,
+        format: wgpu::TextureFormat,
+        display_bits: Option<u8>,
+    ) -> usize {
+        let dither = dither_lsb(format, display_bits);
+        if let Some(i) = self.formats.iter().position(|f| f.is(format, dither)) {
             return i;
         }
-        let state = self.format_state(format);
+        let state = self.format_state(format, dither);
         self.formats.push(state);
         self.formats.len() - 1
     }
 
-    fn format_state(&self, format: wgpu::TextureFormat) -> FormatState {
+    fn format_state(&self, format: wgpu::TextureFormat, dither_amplitude: f64) -> FormatState {
         let device = &self.device;
         let shape_attrs = wgpu::vertex_attr_array![
             0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4, 4 => Float32x4,
@@ -383,7 +403,7 @@ impl Gpu {
 
         let premultiplied_over = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
         // The shader's `dither_lsb` override: half a step of this target's depth (0 = no dither).
-        let dither = [("dither_lsb", dither_lsb(format))];
+        let dither = [("dither_lsb", dither_amplitude)];
         let make = |label: &str,
                     vs: &str,
                     fs: &str,
@@ -502,6 +522,7 @@ impl Gpu {
         let atlas = TextAtlas::new(device, &self.queue, &self.glyph_cache, format);
         FormatState {
             format,
+            dither: dither_amplitude,
             acrylic_pipeline,
             acrylic_fade_pipeline,
             shape_pipeline,
@@ -676,6 +697,12 @@ impl Gpu {
 }
 
 impl FormatState {
+    /// Whether this state is the one for `format` at the dither amplitude `dither` (the cache
+    /// key; compared by bits so the key is exact).
+    pub(crate) fn is(&self, format: wgpu::TextureFormat, dither: f64) -> bool {
+        self.format == format && self.dither.to_bits() == dither.to_bits()
+    }
+
     /// Everything of `layer` that goes below its text; `globals` is the target's bind group.
     pub(crate) fn draw_below_text(
         &self,
@@ -826,20 +853,30 @@ fn noise_texture(
     Ok((texture.create_view(&Default::default()), sampler))
 }
 
-/// The size of one step of `format`'s encoding in the unit range, which the shader's dither
-/// (`dither_lsb`) swings by half either way: 1/255 for the 8-bit Unorm formats, 1/1023 for
-/// `Rgb10a2Unorm`, 1/65535 for `Rgba16Unorm`. Every other format gets 0, no dither: the `*Srgb`
-/// formats (the shader writes linear values there, so a step is not a fixed size), float formats
-/// and anything not handled yet. This is not the final shape: a display whose depth is lower than
-/// its surface format's needs the display's depth as a second input (`docs/tasks/ten-bit-surface.md`).
-pub(crate) fn dither_lsb(format: wgpu::TextureFormat) -> f64 {
+/// The size of one step of what a target shows, in the unit range, which the shader's dither
+/// (`dither_lsb`) swings by half either way: the larger of the format's step and the display's.
+///
+/// The format's step is 1/255 for the 8-bit Unorm formats, 1/1023 for `Rgb10a2Unorm`, 1/65535 for
+/// `Rgba16Unorm`, and 0 for the float formats (no fixed step). The display's step is
+/// `1 / (2^bits - 1)` for `display_bits` of 1 to 16 (the bits per channel of the display that
+/// holds the window; `None`, 0 or above 16 is no display step). So a float or 16-bit window on a
+/// 10-bit display is dithered at 1/1023 and an `Rgb10a2Unorm` one on an 8-bit display at 1/255.
+/// Every other format gets 0, no dither: the `*Srgb` formats (the shader writes linear values
+/// there, so a step is not a fixed size, whatever the display) and anything not handled yet.
+pub(crate) fn dither_lsb(format: wgpu::TextureFormat, display_bits: Option<u8>) -> f64 {
     use wgpu::TextureFormat as F;
-    match format {
+    let format_step = match format {
         F::Rgba8Unorm | F::Bgra8Unorm => 1.0 / 255.0,
         F::Rgb10a2Unorm => 1.0 / 1023.0,
         F::Rgba16Unorm => 1.0 / 65535.0,
+        F::Rgba16Float | F::Rgba32Float => 0.0,
+        _ => return 0.0,
+    };
+    let display_step = match display_bits {
+        Some(bits @ 1..=16) => 1.0 / f64::from((1u32 << bits) - 1),
         _ => 0.0,
-    }
+    };
+    f64::max(format_step, display_step)
 }
 
 #[cfg(test)]
@@ -849,10 +886,21 @@ mod tests {
     #[test]
     fn dither_lsb_table() {
         use wgpu::TextureFormat as F;
-        assert_eq!(dither_lsb(F::Rgba8Unorm), 1.0 / 255.0);
-        assert_eq!(dither_lsb(F::Bgra8Unorm), 1.0 / 255.0);
-        assert_eq!(dither_lsb(F::Rgb10a2Unorm), 1.0 / 1023.0);
-        assert_eq!(dither_lsb(F::Rgba16Unorm), 1.0 / 65535.0);
+        let n = |bits: u32| 1.0 / f64::from((1u32 << bits) - 1);
+        assert_eq!(dither_lsb(F::Rgba8Unorm, None), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Bgra8Unorm, None), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Bgra8Unorm, Some(10)), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Rgb10a2Unorm, None), 1.0 / 1023.0);
+        assert_eq!(dither_lsb(F::Rgb10a2Unorm, Some(8)), 1.0 / 255.0);
+        assert_eq!(dither_lsb(F::Rgba16Float, None), 0.0);
+        assert_eq!(dither_lsb(F::Rgba16Float, Some(10)), n(10));
+        assert_eq!(dither_lsb(F::Rgba16Float, Some(8)), n(8));
+        assert_eq!(dither_lsb(F::Rgba16Unorm, Some(10)), n(10));
+        assert_eq!(dither_lsb(F::Rgba16Unorm, None), 1.0 / 65535.0);
+        assert_eq!(dither_lsb(F::Bgra8UnormSrgb, Some(8)), 0.0);
+        assert_eq!(dither_lsb(F::Rgba16Float, Some(0)), 0.0);
+        assert_eq!(dither_lsb(F::Rgba16Float, Some(17)), 0.0);
+        assert_eq!(dither_lsb(F::Rgba16Float, Some(16)), 1.0 / 65535.0);
         for none in [
             F::Rgba16Float,
             F::Rgba32Float,
@@ -860,8 +908,43 @@ mod tests {
             F::Bgra8UnormSrgb,
             F::R8Unorm,
         ] {
-            assert_eq!(dither_lsb(none), 0.0, "{none:?}");
+            assert_eq!(dither_lsb(none, None), 0.0, "{none:?}");
         }
+    }
+
+    /// A headless device, or `None` (after printing why) with no adapter.
+    fn headless_gpu() -> Option<Gpu> {
+        match pollster::block_on(Gpu::new(instance(None), None)) {
+            Ok(g) => Some(g),
+            Err(e) => {
+                // No `LUNEUI_REQUIRE_GPU` here: library `src` reads no environment (boundary
+                // rule 4). These tests need crate-private state, so they skip without an adapter;
+                // the integration tests under `tests/` are the ones that can be made to fail.
+                println!("skipped: no GPU adapter ({e})");
+                None
+            }
+        }
+    }
+
+    #[test]
+    fn states_are_keyed_by_format_and_dither_amplitude() {
+        use wgpu::TextureFormat::{Bgra8Unorm, Rgba16Float};
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let a = gpu.format_index(Bgra8Unorm, None);
+        // Display 10 bits: 1/1023 < 1/255, so the same amplitude, the same state.
+        assert_eq!(gpu.format_index(Bgra8Unorm, Some(10)), a);
+        assert_eq!(gpu.formats.len(), 1);
+        let b = gpu.format_index(Rgba16Float, Some(10));
+        let c = gpu.format_index(Rgba16Float, Some(8));
+        assert_ne!(b, c);
+        assert_eq!(gpu.formats.len(), 3);
+        assert_eq!(gpu.format_index(Rgba16Float, Some(10)), b);
+        assert_eq!(gpu.formats.len(), 3);
+        // Another depth with the same amplitude as an existing state reuses it.
+        assert_eq!(gpu.format_index(Rgba16Float, Some(8)), c);
+        assert!(gpu.formats[b].is(Rgba16Float, 1.0 / 1023.0));
     }
 
     /// Pairwise distinct values, starting with the awkward ones: -0.0, a subnormal, f32::MAX and

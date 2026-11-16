@@ -4,7 +4,7 @@
 //! The app paints into a [`Painter`](lune_ui_core::paint::Painter) and hands the finished [`Scene`] to
 //! [`FrameRenderer::draw`], which renders it in the [`scene`](lune_ui_core::scene) module's draw order
 //! into any target view at an explicit size and scale: a window surface (see
-//! [`WindowSurface`](crate::surface::WindowSurface)) or an offscreen texture (frame dumps). Any
+//! [`WindowSurface`]) or an offscreen texture (frame dumps). Any
 //! number of renderers share one [`Gpu`]; everything a draw writes belongs to its renderer, except
 //! the shared glyph atlas of its format and the glyph rasterizer cache.
 
@@ -13,7 +13,8 @@ use cosmic_text::Color;
 use crate::blur::{Blur, BlurPlan};
 use crate::custom::{CustomDraw, CustomFrame, CustomItem};
 use crate::glyph::{Resolution, TextArea, TextBounds, TextRenderer, Viewport};
-use crate::gpu::{Globals, Gpu};
+use crate::gpu::{Globals, Gpu, dither_lsb};
+use crate::surface::WindowSurface;
 use crate::text_cache::TextCache;
 use lune_ui_core::scene::{LAYER_COUNT, Layer, Scene};
 
@@ -22,8 +23,10 @@ pub use lune_ui_core::scene::FrameParams;
 /// Draws scenes into targets of one colour format. Use it only with the [`Gpu`] that made it.
 pub struct FrameRenderer {
     format: wgpu::TextureFormat,
-    /// Index of the format's shared state in the [`Gpu`].
+    /// Index of the shared state for the format and the display's dither in the [`Gpu`].
     format_index: usize,
+    /// The display depth the state was chosen for; with `format` it fixes the state's dither.
+    display_bits: Option<u8>,
     globals: wgpu::Buffer,
     /// Globals, the shared noise texture and sampler (the shape and stroke pipelines' group 0).
     bind_group: wgpu::BindGroup,
@@ -44,10 +47,26 @@ impl std::fmt::Debug for FrameRenderer {
 }
 
 impl FrameRenderer {
-    /// A renderer for targets of `format`; creates the format's shared pipelines and glyph atlas
-    /// in `gpu` on first use.
+    /// A renderer for targets of `format` shown on a display of unknown depth; creates the
+    /// format's shared pipelines and glyph atlas in `gpu` on first use. Same as
+    /// [`with_display`](Self::with_display) with `None`.
     pub fn new(gpu: &mut Gpu, format: wgpu::TextureFormat) -> Self {
-        let format_index = gpu.format_index(format);
+        Self::with_display(gpu, format, None)
+    }
+
+    /// A renderer for targets of `format` shown on a display of `display_bits` bits per channel
+    /// (`None`: unknown), which sizes the gradient dither: the larger of the format's step and the
+    /// display's, so a 16-bit float window on a 10-bit display is dithered at 1/1023. Creates the
+    /// shared pipelines and glyph atlas for that format and dither amplitude in `gpu` on first use;
+    /// a window on a display of another amplitude adds one more set (and one more glyph atlas),
+    /// which stays for the life of the `Gpu`. A display step finer than the format's changes
+    /// nothing, so such a renderer shares the `new` one's set.
+    pub fn with_display(
+        gpu: &mut Gpu,
+        format: wgpu::TextureFormat,
+        display_bits: Option<u8>,
+    ) -> Self {
+        let format_index = gpu.format_index(format, display_bits);
         let device = &gpu.device;
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals"),
@@ -82,6 +101,7 @@ impl FrameRenderer {
         Self {
             format,
             format_index,
+            display_bits,
             globals,
             bind_group,
             viewport,
@@ -90,9 +110,56 @@ impl FrameRenderer {
         }
     }
 
+    /// A renderer for `surface`: its format, and the display depth it was configured with
+    /// ([`SurfaceOptions::display_bits`](crate::surface::SurfaceOptions::display_bits)).
+    pub fn for_surface(gpu: &mut Gpu, surface: &WindowSurface) -> Self {
+        Self::with_display(gpu, surface.format(), surface.options().display_bits)
+    }
+
     /// The colour format of the targets this renderer draws into.
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
+    }
+
+    /// Re-targets the renderer to `surface` after the surface's format or display depth changed
+    /// (a [`WindowSurface::set_options`] with another depth, or the window moving to another
+    /// display); see [`follow_target`](Self::follow_target). Returns `true` when the format
+    /// changed: rebuild the app's [`CustomDraw`] pipelines from `surface.format()`. Call it
+    /// between frames, with no texture from [`WindowSurface::acquire`] alive.
+    pub fn follow(&mut self, gpu: &mut Gpu, surface: &WindowSurface) -> bool {
+        self.follow_target(gpu, surface.format(), surface.options().display_bits)
+    }
+
+    /// Re-targets the renderer to `format` shown on a display of `display_bits`, as
+    /// [`with_display`](Self::with_display) would make it, keeping its globals and viewport.
+    /// Nothing is done (and `false` returned) when its shared state already is the one for that
+    /// format and dither amplitude. Otherwise its text renderers move to the new state's glyph
+    /// atlas, and when the format differs its blur stage is made again (its textures are made
+    /// again on the next draw); returns `true` when the format differs. The state a switch leaves
+    /// behind stays in the [`Gpu`] (no eviction), so switching back builds nothing.
+    pub fn follow_target(
+        &mut self,
+        gpu: &mut Gpu,
+        format: wgpu::TextureFormat,
+        display_bits: Option<u8>,
+    ) -> bool {
+        let format_index = gpu.format_index(format, display_bits);
+        self.display_bits = display_bits;
+        if format_index == self.format_index {
+            return false;
+        }
+        let device = &gpu.device;
+        let atlas = &mut gpu.formats[format_index].atlas;
+        self.layers = (0..LAYER_COUNT)
+            .map(|_| TextRenderer::new(atlas, device, wgpu::MultisampleState::default(), None))
+            .collect();
+        self.format_index = format_index;
+        let changed = format != self.format;
+        if changed {
+            self.blur = Blur::new(device, format);
+            self.format = format;
+        }
+        changed
     }
 
     /// The blur stage, for debug dumps of its intermediate textures.
@@ -131,7 +198,7 @@ impl FrameRenderer {
         if gpu
             .formats
             .get(self.format_index)
-            .is_none_or(|f| f.format != self.format)
+            .is_none_or(|f| !f.is(self.format, dither_lsb(self.format, self.display_bits)))
         {
             return Err("frame renderer used with a Gpu that did not make it".into());
         }
@@ -393,5 +460,103 @@ fn draw_customs(
         pass.set_scissor_rect(x, y, w, h);
         customs[item.slot].render(pass, frame);
         pass.set_scissor_rect(0, 0, tw, th);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dump;
+    use lune_ui_core::paint::{LayerId, Painter, Rect};
+    use lune_ui_core::theme::DARK;
+    use wgpu::TextureFormat::{Bgra8Unorm, Rgb10a2Unorm, Rgba16Float};
+
+    fn headless_gpu() -> Option<Gpu> {
+        match pollster::block_on(Gpu::new(crate::gpu::instance(None), None)) {
+            Ok(g) => Some(g),
+            Err(e) => {
+                // No `LUNEUI_REQUIRE_GPU` here: library `src` reads no environment (boundary
+                // rule 4). These tests need crate-private state, so they skip without an adapter;
+                // the integration tests under `tests/` are the ones that can be made to fail.
+                println!("skipped: no GPU adapter ({e})");
+                None
+            }
+        }
+    }
+
+    /// Draws one filled scene with `renderer` into a fresh target of `format` and returns its
+    /// pixels at full precision (a validation error panics, wgpu's default handler).
+    fn draw_fill(gpu: &mut Gpu, renderer: &mut FrameRenderer, format: wgpu::TextureFormat) -> f32 {
+        let fonts: [&[u8]; 1] = [include_bytes!(
+            "../../../apps/gallery/assets/RznSans-Regular.ttf"
+        )];
+        let mut text = TextCache::new(&fonts, "RznSans", "RznSans");
+        let win = Rect::new(0.0, 0.0, 32.0, 32.0);
+        let mut p: Painter<'_, u8> = Painter::new(1.0, win, &mut text, None, DARK);
+        p.on(LayerId::Base);
+        p.fill(win, 0.0, [51, 102, 153, 255]);
+        let scene = p.scene;
+        let texture = dump::target(&gpu.device, format, (32, 32));
+        let view = texture.create_view(&Default::default());
+        let params = FrameParams {
+            size: (32, 32),
+            scale: 1.0,
+            ..FrameParams::default()
+        };
+        renderer
+            .draw(gpu, &mut text, &scene, &view, params)
+            .expect("draw");
+        let px = dump::read_rgba_f32(&gpu.device, &gpu.queue, &texture).expect("readback");
+        px[(16 * 32 + 16) * 4 + 3]
+    }
+
+    #[test]
+    fn follow_target_does_nothing_for_the_same_state() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut r = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        assert_eq!(gpu.formats.len(), 1);
+        assert!(!r.follow_target(&mut gpu, Bgra8Unorm, None));
+        // A display finer than the format changes no amplitude: the same state.
+        assert!(!r.follow_target(&mut gpu, Bgra8Unorm, Some(10)));
+        assert_eq!(gpu.formats.len(), 1);
+        assert_eq!(r.format(), Bgra8Unorm);
+    }
+
+    #[test]
+    fn follow_target_moves_to_another_format_and_draws() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut r = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        assert!(r.follow_target(&mut gpu, Rgb10a2Unorm, None));
+        assert_eq!(r.format(), Rgb10a2Unorm);
+        assert_eq!(gpu.formats.len(), 2);
+        // The fill is opaque (alpha 3/3 in the 2-bit channel).
+        assert_eq!(draw_fill(&mut gpu, &mut r, Rgb10a2Unorm), 1.0);
+        // Back: the first state is reused, nothing is built.
+        assert!(r.follow_target(&mut gpu, Bgra8Unorm, None));
+        assert_eq!(gpu.formats.len(), 2);
+        assert_eq!(draw_fill(&mut gpu, &mut r, Bgra8Unorm), 1.0);
+    }
+
+    #[test]
+    fn follow_target_with_another_display_keeps_the_format_and_changes_the_dither() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut r = FrameRenderer::new(&mut gpu, Rgba16Float);
+        let before = gpu.formats.len();
+        assert_eq!(gpu.formats[r.format_index].dither, 0.0);
+        assert!(!r.follow_target(&mut gpu, Rgba16Float, Some(10)));
+        assert_eq!(r.format(), Rgba16Float);
+        assert_eq!(gpu.formats[r.format_index].dither, 1.0 / 1023.0);
+        assert_eq!(gpu.formats.len(), before + 1);
+        assert_eq!(draw_fill(&mut gpu, &mut r, Rgba16Float), 1.0);
+        // Switching back reuses the state made first.
+        assert!(!r.follow_target(&mut gpu, Rgba16Float, None));
+        assert_eq!(gpu.formats[r.format_index].dither, 0.0);
+        assert_eq!(gpu.formats.len(), before + 1);
     }
 }

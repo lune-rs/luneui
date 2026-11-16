@@ -57,6 +57,10 @@ pub(crate) fn units_per_logical(window: &Window) -> f32 {
     window.scale_factor() as f32
 }
 
+pub(crate) fn display_depth(_window: &Window) -> Option<u8> {
+    None
+}
+
 pub(crate) fn window_at(_window: &Window, _at: DesktopPoint) -> Option<bool> {
     None
 }

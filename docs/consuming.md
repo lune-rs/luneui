@@ -91,6 +91,7 @@ the repo's `[profile.release]`: fat LTO, one codegen unit, abort on panic, strip
 on macOS, read with `wc -c`) is **10,118,544 bytes** after the font-smoothing work's steps 1 and 3 (D294, D295; 10,118,576 at 2c0e25c before vendoring glyphon's renderer, and
 unchanged by the rasterizer, since nothing in the gallery called it yet; the later steps added no dependency and were not re-read). It was 9,869,520 bytes at a9d1292, the M11 close, 9,448,688 at the M9 merge (8f499d0)
 and 9,869,408 at the M10 tip; the M10 growth is the AccessKit bridge, the tray stack and `arboard` (DECISIONS D216, D213).
+The window-depth work (D328 to D336) read **10,433,424 bytes** at 0.7.0 and **10,416,752 bytes** at a5f6237, the 0.6.2 tip it was cut from (both `wc -c` of `target/release/gallery`, macOS, same profile; a5f6237 was built from a clean `git archive`): +16,672 bytes (+0.16 %). It adds no dependency and no `Cargo.lock` package, only an `objc2-app-kit` feature on macOS (D331).
 The figure covers the gallery with every feature on, including `accesskit`; an app that leaves the feature off is smaller.
 `docs/STATE.md` keeps the latest reading. On Windows (MSVC, the same profile; `target/release/gallery.exe`, `stat -c %s`) the gallery was **13,112,320 bytes** before the docked-windows work and after its platform step (D314: `windows-sys` is already in the lock, and the linker drops what nothing calls), and **13,222,912 bytes** once the gallery's `docked-panels` page and `PanelsHost` call the new functions (D317; the growth is mostly the page and the host, not the toolkit).
 
@@ -227,6 +228,70 @@ All three draw below the layer's text like `fill`, under the transform stack, it
 **Dither.** The renderer adds an 8x8 ordered dither to these three kinds only, with an amplitude set per target format when the pipelines are built: `Rgba8Unorm` and `Bgra8Unorm` 1/255, `Rgb10a2Unorm` 1/1023, `Rgba16Unorm` 1/65535, and none for every other format. Honest gap: the `*Srgb` formats and the float formats draw these ops undithered, and the table is not final (a display shallower than its surface format needs the display's depth as a second input). A plain fill stays exact, so an app's pixel goldens of flat colours do not move; a golden that holds a gradient or a shadow is new. The limits of the lift (a dark channel is lifted on average by at most half a level) are in `render.gradient-dither`.
 
 **Using it.** The gallery's `gradients` page (`apps/gallery/src/pages/gradients.rs`) is the worked example: a vertical wash, two radial lights and a card with a coloured shadow and a glow.
+
+## 0.6.2 to 0.7.0: window depth
+
+D328 to D336. A window surface can be 8, 10 or 16 bits per channel, chosen by the app at run time, and every intermediate the window draws through follows its format. **Breaking**, hence 0.7.0: `SurfaceOptions` gains three public fields (a full literal stops compiling), and a window can now resolve to a format other than `Bgra8Unorm`, so a `CustomDraw` that built its pipeline for one format must read `CustomFrame.format`. A window the app does not touch is unchanged: `Auto` on a glass window is the 8-bit format of 0.6.2 on every OS (D330).
+
+### Choosing the depth at run time
+
+The depth is an option of the live surface, so an app lets its user pick the quality on the fly. Between frames, never while a texture from `WindowSurface::acquire` is alive (present or drop it first; wgpu refuses a configure with an outstanding texture and its default handler panics):
+
+```rust
+// 1. Change only the depth: start from the options in force, not from `default()`.
+surface.set_options(&gpu, SurfaceOptions { depth: SurfaceDepth::Float16, ..surface.options() });
+// 2. Move the window's renderer to the surface's format and display.
+if frame.follow(&mut gpu, &surface) {
+    // 3. The format changed: rebuild every pipeline the app built for the old one.
+    my_draw = MyDraw::new(&gpu.device, surface.format());
+}
+```
+
+`surface.depth()` and `surface.format()` say what was configured (`Auto` and a fallback resolve to a concrete depth: `depth()` is never `Auto`); `surface.options()` says what was asked. An explicit `Ten` is honoured on a glass window, with 4 alpha levels (D329); `Float16` and `Unorm16` fall back (`Unorm16` to `Float16`, `Float16` to `Ten` only when the window is opaque, else to 8-bit) where the surface does not list them. The gallery's `apps/gallery/src/window.rs` (`apply_depth`, `put_options`) is the worked example, and its "Window depth" page (Labs) shows the same choice live.
+
+### What changes for the app
+
+| 0.6.2 | 0.7.0 | note |
+| --- | --- | --- |
+| `SurfaceOptions { present_mode, frame_latency }` as a full literal | add `depth`, `display_bits`, `opaque`, or write `SurfaceOptions { present_mode, ..SurfaceOptions::default() }` | the defaults are `Auto`, `None`, `false`: today's format on a glass window (D328) |
+| `set_options(&gpu, SurfaceOptions { present_mode, ..SurfaceOptions::default() })` | `set_options(&gpu, SurfaceOptions { present_mode, ..surface.options() })` | `..default()` also resets the depth request and the display's depth, which re-resolves the format; a call that changes only the present mode or the latency keeps the format and the alpha mode |
+| `WindowSurface::format()` was one of two 8-bit formats | `format()` is one of `Bgra8Unorm`, `Rgba8Unorm`, `Rgb10a2Unorm`, `Rgba16Float`, `Rgba16Unorm`; `depth()` is new | build everything per format, see the warnings below |
+| `FrameRenderer::new(&mut gpu, surface.format())` | `FrameRenderer::for_surface(&mut gpu, &surface)`; `with_display(&mut gpu, format, display_bits)` for a target that is not a surface | the dither follows the format and the display (D333); `new` keeps 0.6.2's table |
+| nothing re-targeted a renderer | `FrameRenderer::follow(&mut gpu, &surface) -> bool` (and `follow_target(&mut gpu, format, display_bits)`) | `true` when the format changed: rebuild the app's `CustomDraw`s; a state left behind stays in the `Gpu` (no eviction) |
+| no display depth | `lune_ui::desktop::display_depth(&window) -> Option<u8>` into `SurfaceOptions::display_bits` | there is no helper in the facade (D332): `SurfaceOptions { display_bits: lune_ui::desktop::display_depth(&window), ..options }`; macOS main thread only; Windows and Linux return `None` (D331) |
+| `dump::read_rgba` read only 8-bit targets | reads `Rgb10a2Unorm`, `Rgba16Unorm`, `Rgba16Float` too, quantised to 8 bits; `dump::read_rgba_f32` returns four `f32` a pixel | 8-bit targets keep their bytes (D334) |
+| `Gpu::new` asked for the features it always asked for | also `TEXTURE_FORMAT_16BIT_NORM` and `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`, where the adapter has them | what makes `Rgba16Unorm` usable on a backend that offers it (Vulkan; Metal and DX12 do not list it as a surface format) |
+
+### What `Auto` gives
+
+`Auto` is the default and resolves from the surface's formats, the alpha mode and `display_bits`. It never gives `Rgba16Float` or `Rgba16Unorm`: an app that wants them asks.
+
+| window | `Auto` | on which OS |
+| --- | --- | --- |
+| glass (`opaque: false`, the default) | 8-bit: `Bgra8Unorm`, else `Rgba8Unorm` | every OS, whatever the display (D330): `Rgb10a2Unorm` would cut the window's alpha to 4 levels, and a float surface is not `Auto`'s |
+| opaque (`opaque: true`) over a display of 10 bits or more | `Rgb10a2Unorm`, else 8-bit | macOS (the read says 10 on an XDR panel); on Windows and Linux `display_depth` returns `None` today, so `Auto` gives 8-bit unless the app passes `display_bits: Some(10)` itself |
+| any, `display_bits` unknown | 8-bit | |
+
+`opaque: true` also asks for the `Opaque` alpha mode, so an opaque window is not glass: it is for an app whose window background is solid.
+
+### Warnings
+
+Each of these breaks something outside the toolkit; the first four are what the task named.
+
+- **A `CustomDraw` builds per `CustomFrame.format`.** `CustomFrame.format` was already there; a pipeline built for `Bgra8Unorm` fails validation when the window resolves to another format (a draw into an `Rgb10a2Unorm` or `Rgba16Float` target). Build per `CustomFrame.format`, or cache per format, and rebuild when `FrameRenderer::follow` returns `true` (the gallery's `Fill` is rebuilt that way).
+- **Readback and copies see another format and byte layout.** An app that reads the surface back, or copies it into its own 8-bit texture, gets `Rgb10a2Unorm` (4 bytes, 10 bits a colour channel and 2 of alpha, packed) or an 8-byte 16-bit pixel. `lune_ui::dump::read_rgba` quantises any of them to 8 bits RGBA; `read_rgba_f32` keeps the precision.
+- **Intermediates follow the window's format.** The blur's targets and the scene target are made in the renderer's format, so a deep window is deep all the way (measured offscreen, D333); a `Float16` window uses twice the memory and bandwidth of the window's targets (a 3456 x 2234 drawable 61.8 MB instead of 30.9 MB; with three drawables and the full-size scene target about +124 MB). Textures that are only sampled (the noise, pictures, the colour glyph atlas) stay 8-bit.
+- **Alpha per format, and the compositing, are not verified on a real OS.** `Rgb10a2Unorm` has a 2-bit alpha (D329: 0.6667 for a 50 % fill, measured offscreen), `Rgba16Float` and `Rgba16Unorm` have a full one. How macOS (`CAMetalLayer`, `PostMultiplied`) and Windows (DirectComposition, premultiplied) composite a 10-bit or float surface over the desktop is unverified; nothing here can read a presented frame, and the presented colour of a float surface on Metal is assumed from the colour space (`Srgb`: the layer's default, no EDR).
+- **A monitor move can change the format.** `Auto` resolves from `display_bits`, which is the display of the window; an app re-reads `display_depth` when the window changes monitor, compares first (a drag on one monitor must not query the OS every event: the gallery compares `window.current_monitor()`), then calls `set_options`, `follow` and rebuilds its per-format caches, as above. A cache keyed by format only is wrong: key it by `surface.format()` and rebuild on `follow`.
+- **The dither follows the format and the display** (D333). A float or 16-bit window on a 10-bit display is dithered at 1/1023, an `Rgb10a2Unorm` one on an 8-bit display at 1/255; with no display read the table is 0.6.2's. The `*Srgb` formats and the float formats with an unknown display are still undithered (a window never lands on a `*Srgb` format unless the surface lists no other).
+
+### Unverified here
+
+Measured: the format table and the resolver (unit tests with Metal's, DX12's and Vulkan's lists), every format offscreen (the ramp, the match to the 8-bit render, the alpha of each format), and the live switch on this Mac's window (Metal, an XDR panel: `Bgra8Unorm`, `Rgb10a2Unorm`, `Rgba16Float`, no wgpu error). Not measured: the presented colour of a float or 10-bit surface on any OS (no screen capture here); `Rgb10a2Unorm` and `Rgba16Float` windows on DX12 and Vulkan (nothing ran on Windows or Linux; the DX12 premise is read from wgpu-hal); `Rgba16Unorm` as a window (this Mac's surface does not list it); a Windows display read (not built, D331).
+
+### Release size
+
+The gallery's release build (`cargo build --release -p gallery`, the repo's profile, macOS) is **10,433,424 bytes** at 0.7.0, against **10,416,752 bytes** at a5f6237 (0.6.2, built from a clean archive of that commit): +16,672 bytes (+0.16 %), which is the resolver, the deep-format readers, the display read and the gallery's two new pages, not a new dependency. The facade gains no dependency (D332), and the only crate feature added is `objc2-app-kit`'s `objc2-core-foundation` on macOS, already in the lock.
 
 ## API changes of the library pass
 

@@ -142,6 +142,8 @@ pub(crate) const GROUPS: &[Group] = &[
             "lab-tokens",
             "lab-clipboard",
             "lab-json",
+            "lab-depth",
+            "lab-banding",
         ],
     },
 ];

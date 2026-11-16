@@ -18,6 +18,7 @@ use lune_ui::motion::MotionTier;
 use lune_ui::near_black;
 use lune_ui::paint::Rect;
 use lune_ui::scene::BlurLimits;
+use lune_ui::surface::SurfaceDepth;
 use lune_ui::text::{Spec, Style, TextRendering};
 use lune_ui::theme::{AcrylicLevel, DARK, Theme, ThemeGlass};
 use lune_ui::ui::{Sense, Ui};
@@ -27,7 +28,8 @@ use lune_ui::widgets::scroll_area::{Extent, ScrollOptions};
 use lune_ui::widgets::slider::SliderOptions;
 
 use super::knobs::Knobs;
-use crate::page::{FrameTweaks, PageState};
+use super::labs::depth::{DEPTHS, live_line};
+use crate::page::{FrameTweaks, PageState, SurfaceLive};
 use crate::scenes::{BLUR_SATURATION, BLUR_SIGMA};
 
 /// Where a theme in [`THEMES`] comes from.
@@ -200,6 +202,10 @@ pub(crate) struct Settings {
     pub(crate) material: Material,
     /// What came of the last attempt to put `material` on the window.
     pub(crate) material_note: Option<String>,
+    /// The depth the window's surface is asked for.
+    pub(crate) depth: SurfaceDepth,
+    /// The surface as the window last reported it; `None` before the first report and in a dump.
+    pub(crate) live: Option<SurfaceLive>,
 }
 
 impl Default for Settings {
@@ -225,6 +231,8 @@ impl Default for Settings {
             // The material the window is created with.
             material: Material::Vibrancy,
             material_note: None,
+            depth: SurfaceDepth::Auto,
+            live: None,
         }
     }
 }
@@ -755,6 +763,26 @@ impl Settings {
         if let Some(note) = self.material_note.clone() {
             col.note(ui, &note);
         }
+
+        col.section(ui, "SURFACE DEPTH");
+        let options: Vec<RadioOption<'_>> = DEPTHS
+            .iter()
+            .enumerate()
+            .map(|(i, (label, _))| RadioOption {
+                key: i as u64,
+                label,
+                enabled: true,
+            })
+            .collect();
+        let mut chosen = DEPTHS
+            .iter()
+            .position(|(_, d)| *d == self.depth)
+            .unwrap_or(0) as u64;
+        if col.radio(ui, "depth", &options, &mut chosen, "Surface depth") {
+            self.depth = DEPTHS[chosen as usize % DEPTHS.len()].1;
+        }
+        col.note(ui, &live_line(self.live));
+        col.note(ui, "Auto is 8-bit on this glass window.");
 
         col.y += 8.0;
         if col.button(ui, "reset", "Reset all settings") {

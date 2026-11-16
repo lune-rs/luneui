@@ -29,6 +29,7 @@ use lune_ui::material::Material;
 use lune_ui::motion::MotionTier;
 use lune_ui::paint::Rect;
 use lune_ui::strings::StringTable;
+use lune_ui::surface::SurfaceDepth;
 use lune_ui::testing::ScriptedInput;
 use lune_ui::text::{Spec, Style};
 use lune_ui::theme::Theme;
@@ -39,8 +40,8 @@ use lune_ui::widgets::scroll_area::{Extent, ScrollOptions};
 use lune_ui::widgets::tree_view::{ChevronStyle, GuideStub, GuideStyle, TreeOptions, TreeRow};
 
 use crate::page::{
-    Ev, Expect, FrameTweaks, Page, PageKind, PageState, Scope, Stage, Step, UiPage, UiScene,
-    apply_event, page_images,
+    Ev, Expect, FrameTweaks, Page, PageKind, PageState, Scope, Stage, Step, SurfaceLive, UiPage,
+    UiScene, apply_event, page_images,
 };
 use crate::pages::{PAGES, card, card_shift};
 use nav::{HOST, Target};
@@ -284,6 +285,10 @@ struct Showcase {
     order: Vec<usize>,
     /// The global settings; they outlast a change of page.
     settings: Settings,
+    /// The surface depth the shell and the hosted page last agreed on, and the choice (the
+    /// `generation`) of the page it was agreed with: a depth page has a knob of its own for the
+    /// same choice as the settings pane's.
+    depth_agreed: Option<(u64, SurfaceDepth)>,
 }
 
 impl Showcase {
@@ -304,6 +309,7 @@ impl Showcase {
             canvas: Rect::new(0.0, 0.0, CANVAS.0, CANVAS.1),
             order,
             settings: Settings::default(),
+            depth_agreed: None,
         };
         me.select(page, None);
         me.epoch = 0;
@@ -433,6 +439,30 @@ impl Showcase {
         }
     }
 
+    /// Keeps the settings pane's "Surface depth" and a hosted depth page's knob one choice, and
+    /// tells the page what the window's surface is. A page just chosen takes the setting; after
+    /// that whichever of the two moved last is followed (the page's own knob first, if both did).
+    fn sync_depth(&mut self) {
+        if let Some(live) = self.settings.live {
+            self.child.surface_applied(live);
+        }
+        let Some(asked) = self.child.surface_depth() else {
+            self.depth_agreed = None;
+            return;
+        };
+        match self.depth_agreed {
+            Some((generation, agreed)) if generation == self.generation => {
+                if asked != agreed {
+                    self.settings.depth = asked;
+                } else if self.settings.depth != agreed {
+                    self.child.set_surface_depth(self.settings.depth);
+                }
+            }
+            _ => self.child.set_surface_depth(self.settings.depth),
+        }
+        self.depth_agreed = Some((self.generation, self.settings.depth));
+    }
+
     /// The title line and the scrolling canvas the hosted page draws on.
     fn content(&mut self, ui: &mut Ui<'_>, lay: &Layout) {
         let t = *ui.theme();
@@ -516,6 +546,8 @@ impl PageState for Showcase {
                     .text(&spec, lay.head.right() - w, lay.head.y + 6.0);
             }
         });
+        // After the knobs and the settings drew: a choice made in either is the other's now.
+        self.sync_depth();
     }
 
     fn strings(&self) -> StringTable {
@@ -558,6 +590,14 @@ impl PageState for Showcase {
 
     fn material_applied(&mut self, result: Result<(), String>) {
         self.settings.material_note = result.err().map(|e| format!("not applied: {e}"));
+    }
+
+    fn surface_depth(&self) -> Option<SurfaceDepth> {
+        Some(self.settings.depth)
+    }
+
+    fn surface_applied(&mut self, live: SurfaceLive) {
+        self.settings.live = Some(live);
     }
 
     fn time_scale(&self) -> f32 {
@@ -998,9 +1038,10 @@ mod tests {
         (n.bounds.x + n.bounds.w / 2.0, n.bounds.y + n.bounds.h / 2.0)
     }
 
-    /// A tall window, so the whole settings pane is on screen.
+    /// A tall window, so the whole settings pane is on screen (the pane's last button, Reset, lies
+    /// near 2,700 px since the surface depth section).
     fn tall() -> Rig {
-        let mut rig = Rig::sized(1600, 2600);
+        let mut rig = Rig::sized(1600, 2900);
         rig.frame();
         rig
     }

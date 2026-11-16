@@ -63,6 +63,15 @@ pub fn window_at(window: &Window, at: DesktopPoint) -> Option<bool> {
     os::window_at(window, at)
 }
 
+/// The bits per colour channel of the display that holds `window`, as the OS reports them: 8 on a
+/// standard display, 10 or more on a deep one. `None` when the OS cannot say, the platform has no
+/// read (Windows too, until a window needs the answer), or the window has no display yet.
+/// The macOS read must run on the main thread. This is live OS state, like [`pointer()`]: the app
+/// reads it when the window's display changes and passes it in (`SurfaceOptions::display_bits`).
+pub fn display_depth(window: &Window) -> Option<u8> {
+    os::display_depth(window)
+}
+
 /// How a platform gives a window its shape, as [`set_window_shape`] reports it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeMode {
@@ -257,6 +266,25 @@ pub(crate) fn flip_y(y: f64, primary_height: f64) -> i32 {
     round_units(primary_height - y)
 }
 
+/// The display depth macOS reports as bits per colour channel: `bits_per_sample` is the screen's
+/// own sample depth, which reads 8 even on an extended-range panel, so a screen whose potential
+/// extended-range component value is above 1.0 counts as at least 10. `None` for a depth outside
+/// 1 to 16 (0 is an unreadable screen); a NaN headroom counts as none.
+#[allow(
+    dead_code,
+    reason = "used only by the macOS half; unit-tested here on every host"
+)]
+pub(crate) fn mac_bits(bits_per_sample: isize, edr_potential: f64) -> Option<u8> {
+    let bits = u8::try_from(bits_per_sample)
+        .ok()
+        .filter(|b| (1..=16).contains(b))?;
+    Some(if edr_potential > 1.0 {
+        bits.max(10)
+    } else {
+        bits
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,5 +352,19 @@ mod tests {
         assert_eq!(round_units(2.4), 2);
         assert_eq!(round_units(f64::NAN), 0);
         assert_eq!(round_units(1.0e20), i32::MAX);
+    }
+
+    #[test]
+    fn a_mac_screen_is_deep_by_its_depth_or_its_headroom() {
+        assert_eq!(mac_bits(8, 16.0), Some(10));
+        assert_eq!(mac_bits(8, 1.0), Some(8));
+        assert_eq!(mac_bits(16, 1.0), Some(16));
+        assert_eq!(mac_bits(16, 16.0), Some(16));
+        assert_eq!(mac_bits(8, f64::NAN), Some(8));
+        assert_eq!(mac_bits(10, 1.0), Some(10));
+        assert_eq!(mac_bits(0, 16.0), None);
+        assert_eq!(mac_bits(-1, 1.0), None);
+        assert_eq!(mac_bits(17, 1.0), None);
+        assert_eq!(mac_bits(300, 1.0), None);
     }
 }
