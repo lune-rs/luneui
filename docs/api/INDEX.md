@@ -113,18 +113,18 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-wgpu` (`lune_ui_wgpu`)
 
-9 modules, 17 items. Left out and counted: 169 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 121 items of the omitted impls, 28 items of the trait impls shown as one line, 66 synthetic impls.
+9 modules, 19 items. Left out and counted: 187 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 136 items of the omitted impls, 33 items of the trait impls shown as one line, 72 synthetic impls.
 
 | Module | Items |
 | --- | --- |
 | [`lune_ui_wgpu`](lune-ui-wgpu/index.md) | 0 |
 | [`lune_ui_wgpu::blur`](lune-ui-wgpu/blur.md) | 1 |
 | [`lune_ui_wgpu::custom`](lune-ui-wgpu/custom.md) | 2 |
-| [`lune_ui_wgpu::dump`](lune-ui-wgpu/dump.md) | 3 |
+| [`lune_ui_wgpu::dump`](lune-ui-wgpu/dump.md) | 4 |
 | [`lune_ui_wgpu::frame`](lune-ui-wgpu/frame.md) | 1 |
 | [`lune_ui_wgpu::gpu`](lune-ui-wgpu/gpu.md) | 3 |
 | [`lune_ui_wgpu::raster`](lune-ui-wgpu/raster.md) | 1 |
-| [`lune_ui_wgpu::surface`](lune-ui-wgpu/surface.md) | 3 |
+| [`lune_ui_wgpu::surface`](lune-ui-wgpu/surface.md) | 4 |
 | [`lune_ui_wgpu::text_cache`](lune-ui-wgpu/text_cache.md) | 3 |
 
 ### `lune-ui-winit` (`lune_ui_winit`)
@@ -141,12 +141,12 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-6 modules, 25 items. Left out and counted: 148 blanket impls, 138 items of the omitted impls, 33 items of the trait impls shown as one line, 72 synthetic impls.
+6 modules, 26 items. Left out and counted: 148 blanket impls, 138 items of the omitted impls, 33 items of the trait impls shown as one line, 72 synthetic impls.
 
 | Module | Items |
 | --- | --- |
 | [`lune_ui_platform`](lune-ui-platform/index.md) | 0 |
-| [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 11 |
+| [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 12 |
 | [`lune_ui_platform::group`](lune-ui-platform/group.md) | 2 |
 | [`lune_ui_platform::material`](lune-ui-platform/material.md) | 3 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
@@ -154,13 +154,13 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui` (`lune_ui`)
 
-7 modules, 148 re-exports shown as links.
+7 modules, 149 re-exports shown as links.
 
 | Module | Re-exports |
 | --- | --- |
 | [`lune_ui`](lune-ui/index.md) | 37 |
 | [`lune_ui::access`](lune-ui/access.md) | 19 |
-| [`lune_ui::desktop`](lune-ui/desktop.md) | 19 |
+| [`lune_ui::desktop`](lune-ui/desktop.md) | 20 |
 | [`lune_ui::input`](lune-ui/input.md) | 27 |
 | [`lune_ui::text`](lune-ui/text.md) | 16 |
 | [`lune_ui::tray`](lune-ui/tray.md) | 18 |
@@ -436,6 +436,7 @@ Every top-level item of the four owning crates, by name.
 - [`disabled_violations`](lune-ui-core/testing.md#fn.disabled_violations) - function, `lune_ui_core::testing`
 - [`DISMISS_MARGIN`](lune-ui-core/widgets/toast.md#constant.DISMISS_MARGIN) - constant, `lune_ui_core::widgets::toast`
 - [`Dismissal`](lune-ui-core/ui.md#enum.Dismissal) - enum, `lune_ui_core::ui`
+- [`display_depth`](lune-ui-platform/desktop.md#fn.display_depth) - function, `lune_ui_platform::desktop`
 - [`DisplayFormat`](lune-ui-core/strings.md#struct.DisplayFormat) - struct, `lune_ui_core::strings`
 - [`DockDrag`](lune-ui-core/dock.md#struct.DockDrag) - struct, `lune_ui_core::dock`
 - [`docked_sets`](lune-ui-core/dock.md#fn.docked_sets) - function, `lune_ui_core::dock`
@@ -1011,6 +1012,7 @@ Every top-level item of the four owning crates, by name.
 - [`RASTER_MARGIN`](lune-ui-wgpu/text_cache.md#constant.RASTER_MARGIN) - constant, `lune_ui_wgpu::text_cache`
 - [`RawInput`](lune-ui-core/input.md#struct.RawInput) - struct, `lune_ui_core::input`
 - [`read_rgba`](lune-ui-wgpu/dump.md#fn.read_rgba) - function, `lune_ui_wgpu::dump`
+- [`read_rgba_f32`](lune-ui-wgpu/dump.md#fn.read_rgba_f32) - function, `lune_ui_wgpu::dump`
 - [`RecordedFrame`](lune-ui-core/testing.md#struct.RecordedFrame) - struct, `lune_ui_core::testing`
 - [`RecordingRenderer`](lune-ui-core/testing.md#struct.RecordingRenderer) - struct, `lune_ui_core::testing`
 - [`Rect`](lune-ui-core/paint.md#struct.Rect) - struct, `lune_ui_core::paint`
@@ -1192,6 +1194,7 @@ Every top-level item of the four owning crates, by name.
 - [`SUBTITLE_LINE`](lune-ui-core/widgets/page.md#constant.SUBTITLE_LINE) - constant, `lune_ui_core::widgets::page`
 - [`SUCCESS_TIMEOUT`](lune-ui-core/widgets/toast.md#constant.SUCCESS_TIMEOUT) - constant, `lune_ui_core::widgets::toast`
 - [`Surface`](lune-ui-core/widgets/popover.md#enum.Surface) - enum, `lune_ui_core::widgets::popover`
+- [`SurfaceDepth`](lune-ui-wgpu/surface.md#enum.SurfaceDepth) - enum, `lune_ui_wgpu::surface`
 - [`SurfaceOptions`](lune-ui-wgpu/surface.md#struct.SurfaceOptions) - struct, `lune_ui_wgpu::surface`
 - [`SWAP_DY`](lune-ui-core/widgets/page.md#constant.SWAP_DY) - constant, `lune_ui_core::widgets::page`
 - [`SWAP_OPACITY`](lune-ui-core/widgets/page.md#constant.SWAP_OPACITY) - constant, `lune_ui_core::widgets::page`

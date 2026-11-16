@@ -6,7 +6,8 @@
 
 Offscreen render targets and GPU readback to PNG: the frame-dump building blocks. Readback
 copies a texture back through a mapped buffer (no window or screen capture), so dumps work
-on a hidden window and are byte-comparable between runs.
+on a hidden window and are byte-comparable between runs. Deep formats read back quantised to
+8 bits by `read_rgba`, or at full precision by `read_rgba_f32`.
 
 Source: `crates/lune-ui-wgpu/src/dump.rs:1`
 
@@ -23,9 +24,27 @@ pub fn read_rgba(
 ) -> Result<Vec<u8>, String>
 ```
 
-Copies `texture` back to the CPU as tightly packed RGBA8.
+Copies `texture` back to the CPU as tightly packed RGBA8, keeping alpha. The deep formats
+(`Rgb10a2Unorm`, `Rgba16Unorm`, `Rgba16Float`) are quantised to 8 bits per channel, halves
+up; [`read_rgba_f32`](dump.md#fn.read_rgba_f32) keeps their full precision.
 
-Source: `crates/lune-ui-wgpu/src/dump.rs:31`
+Source: `crates/lune-ui-wgpu/src/dump.rs:34`
+
+<a id="fn.read_rgba_f32"></a>
+### Function `read_rgba_f32`
+
+```rust
+pub fn read_rgba_f32(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    texture: &wgpu::Texture,
+) -> Result<Vec<f32>, String>
+```
+
+Copies `texture` back to the CPU as tightly packed RGBA, four `f32` per pixel. A unorm
+channel is its integer divided by its maximum (0..=1); a float channel is the stored value.
+
+Source: `crates/lune-ui-wgpu/src/dump.rs:44`
 
 <a id="fn.target"></a>
 ### Function `target`
@@ -37,7 +56,7 @@ pub fn target(device: &wgpu::Device, format: wgpu::TextureFormat, size: (u32, u3
 An offscreen colour target of `format` and `size` physical pixels that can be drawn into
 and read back.
 
-Source: `crates/lune-ui-wgpu/src/dump.rs:9`
+Source: `crates/lune-ui-wgpu/src/dump.rs:10`
 
 <a id="fn.write_png"></a>
 ### Function `write_png`
@@ -49,5 +68,5 @@ pub fn write_png(path: &std::path::Path, size: (u32, u32), rgba: &[u8]) -> Resul
 Writes `rgba` (8 bits per channel, `size` wide and high) to `path` as a PNG. Errors as a message
 naming what failed.
 
-Source: `crates/lune-ui-wgpu/src/dump.rs:104`
+Source: `crates/lune-ui-wgpu/src/dump.rs:255`
 

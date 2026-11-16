@@ -201,11 +201,10 @@ fn resolve_format(
         Ten => &[Ten, Eight],
         Eight => &[Eight],
         Auto if deep && alpha_opaque => &[Ten, Eight],
-        // PROVISIONAL (the glass window's `Auto`, open until the user has seen 8, 10 and 16-bit
-        // glass live): a translucent window over a deep display stays 8-bit, because `Ten` has
-        // 4 alpha levels. The two other options are one line each: `&[Float16, Eight]` (16-bit
-        // float where the surface lists it with sRGB: Metal) or `&[Ten, Eight]` (accepts the
-        // 4 alpha levels; index 0 is exempt from the fallback skip below).
+        // A translucent window's `Auto` stays 8-bit over a deep display, whatever the OS: `Ten`
+        // has 4 alpha levels and a float surface costs twice the memory. The user chose this
+        // after seeing 8, 10 and 16-bit glass live (DECISIONS D330); an app that wants more asks
+        // for `Ten` or `Float16`, or passes `opaque: true`.
         Auto if deep => &[Eight],
         Auto => &[Eight],
     };

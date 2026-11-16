@@ -29,7 +29,7 @@ pub struct FrameRenderer {
 
 Draws scenes into targets of one colour format. Use it only with the [`Gpu`](gpu.md#struct.Gpu) that made it.
 
-Source: `crates/lune-ui-wgpu/src/frame.rs:23`
+Source: `crates/lune-ui-wgpu/src/frame.rs:24`
 
 **Methods and associated items**
 
@@ -76,14 +76,57 @@ Source: `crates/lune-ui-wgpu/src/frame.rs:23`
   `customs[slot]` draws the items recorded with that slot. Every element of `customs` gets
   one `prepare` call before the first render pass. One queue submit per call.
 
+- <a id="method.FrameRenderer.follow"></a>`pub fn follow(&mut self, gpu: &mut Gpu, surface: &WindowSurface) -> bool`
+
+  Re-targets the renderer to `surface` after the surface's format or display depth changed
+  (a [`WindowSurface::set_options`](surface.md#method.WindowSurface.set_options) with another depth, or the window moving to another
+  display); see [`follow_target`](frame.md#method.FrameRenderer.follow_target). Returns `true` when the format
+  changed: rebuild the app's [`CustomDraw`](custom.md#trait.CustomDraw) pipelines from `surface.format()`. Call it
+  between frames, with no texture from [`WindowSurface::acquire`](surface.md#method.WindowSurface.acquire) alive.
+
+- <a id="method.FrameRenderer.follow_target"></a>
+
+  ```rust
+  pub fn follow_target(
+      &mut self,
+      gpu: &mut Gpu,
+      format: wgpu::TextureFormat,
+      display_bits: Option<u8>,
+  ) -> bool
+  ```
+
+  Re-targets the renderer to `format` shown on a display of `display_bits`, as
+  [`with_display`](frame.md#method.FrameRenderer.with_display) would make it, keeping its globals and viewport.
+  Nothing is done (and `false` returned) when its shared state already is the one for that
+  format and dither amplitude. Otherwise its text renderers move to the new state's glyph
+  atlas, and when the format differs its blur stage is made again (its textures are made
+  again on the next draw); returns `true` when the format differs. The state a switch leaves
+  behind stays in the [`Gpu`](gpu.md#struct.Gpu) (no eviction), so switching back builds nothing.
+
+- <a id="method.FrameRenderer.for_surface"></a>`pub fn for_surface(gpu: &mut Gpu, surface: &WindowSurface) -> Self`
+
+  A renderer for `surface`: its format, and the display depth it was configured with
+  ([`SurfaceOptions::display_bits`](surface.md#structfield.SurfaceOptions.display_bits)).
+
 - <a id="method.FrameRenderer.format"></a>`pub fn format(&self) -> wgpu::TextureFormat`
 
   The colour format of the targets this renderer draws into.
 
 - <a id="method.FrameRenderer.new"></a>`pub fn new(gpu: &mut Gpu, format: wgpu::TextureFormat) -> Self`
 
-  A renderer for targets of `format`; creates the format's shared pipelines and glyph atlas
-  in `gpu` on first use.
+  A renderer for targets of `format` shown on a display of unknown depth; creates the
+  format's shared pipelines and glyph atlas in `gpu` on first use. Same as
+  [`with_display`](frame.md#method.FrameRenderer.with_display) with `None`.
+
+- <a id="method.FrameRenderer.with_display"></a>`pub fn with_display(gpu: &mut Gpu, format: wgpu::TextureFormat, display_bits: Option<u8>) -> Self`
+
+  A renderer for targets of `format` shown on a display of `display_bits` bits per channel
+  (`None`: unknown), which sizes the gradient dither: the larger of the format's step and the
+  display's, so a 16-bit float window on a 10-bit display is dithered at 1/1023. Creates the
+  shared pipelines and glyph atlas for that format and dither amplitude in `gpu` on first use;
+  a window on a display of another amplitude adds one more set (and one more glyph atlas),
+  which stays for the life of the `Gpu`. A display step finer than the format's changes
+  nothing, so such a renderer shares the `new` one's set.
 
 **Trait implementations**
 

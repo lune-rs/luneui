@@ -8,8 +8,25 @@ A window's swapchain: the surface, its configuration, and acquire / present. Win
 the app creates the `wgpu::Surface` from any window handle (`Instance::create_surface`), asks
 for a redraw when [`acquire`](surface.md#method.WindowSurface.acquire) says so, and tells its window a frame is
 about to be presented before [`present`](surface.md#method.WindowSurface.present). [`SurfaceOptions`](surface.md#struct.SurfaceOptions) sets the
-present mode and the frame latency ([`WindowSurface::with_options`](surface.md#method.WindowSurface.with_options),
-[`WindowSurface::set_options`](surface.md#method.WindowSurface.set_options)); the defaults are 0.4.0's.
+present mode, the frame latency and the colour depth ([`SurfaceDepth`](surface.md#enum.SurfaceDepth):
+[`WindowSurface::with_options`](surface.md#method.WindowSurface.with_options), [`WindowSurface::set_options`](surface.md#method.WindowSurface.set_options)); the defaults present as
+0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 until the app tells the display's
+depth.
+
+### Changing the depth of a live window
+
+Set the options between frames, never while a texture from [`WindowSurface::acquire`](surface.md#method.WindowSurface.acquire) is
+alive; then re-target the window's renderer, and rebuild what the app made for the old format:
+
+```ignore
+surface.set_options(&gpu, SurfaceOptions { depth: SurfaceDepth::Float16, ..surface.options() });
+if renderer.follow(&mut gpu, &surface) {
+    // The format changed: build the `CustomDraw` pipelines again from `surface.format()`.
+}
+```
+
+`..surface.options()` keeps the present mode, latency, display depth and `opaque` as they are;
+`..SurfaceOptions::default()` would reset them.
 
 Source: `crates/lune-ui-wgpu/src/surface.rs:1`
 
@@ -22,10 +39,14 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:1`
 pub struct SurfaceOptions {
     pub present_mode: wgpu::PresentMode,
     pub frame_latency: u32,
+    pub depth: SurfaceDepth,
+    pub display_bits: Option<u8>,
+    pub opaque: bool,
 }
 ```
 
-How a [`WindowSurface`](surface.md#struct.WindowSurface) presents (D299). The default is `Fifo` with a latency of 2.
+How a [`WindowSurface`](surface.md#struct.WindowSurface) presents and what depth it has (D299). The default is `Fifo` with a
+latency of 2 and an `Auto` depth over an unknown display, which is 8-bit.
 
 `Fifo` waits for the display, and [`WindowSurface::acquire`](surface.md#method.WindowSurface.acquire) blocks while every drawable is
 queued, so a run of frames asked for at once waits there for up to a refresh interval each.
@@ -33,7 +54,11 @@ An app that draws only when a frame is due can pick a mode that does not wait.
 `AutoNoVsync` becomes the first of `Immediate`, `Mailbox` and `Fifo` that the surface lists
 (wgpu's order), and a mode that does not wait for the display can tear.
 
-Source: `crates/lune-ui-wgpu/src/surface.rs:30`
+To change one field of a live surface, start from [`WindowSurface::options`](surface.md#method.WindowSurface.options)
+(`SurfaceOptions { present_mode, ..surface.options() }`): `..SurfaceOptions::default()` would
+also reset the depth request and the display's depth.
+
+Source: `crates/lune-ui-wgpu/src/surface.rs:87`
 
 **Fields**
 
@@ -46,6 +71,22 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:30`
 
   wgpu's `desired_maximum_frame_latency`: how many frames may be queued ahead of the
   display. wgpu clamps it to the backend's range (Metal: 1 to 2).
+
+- <a id="structfield.SurfaceOptions.depth"></a>`pub depth: SurfaceDepth`
+
+  The colour depth asked for; see [`SurfaceDepth`](surface.md#enum.SurfaceDepth).
+
+- <a id="structfield.SurfaceOptions.display_bits"></a>`pub display_bits: Option<u8>`
+
+  The bits per channel of the display that holds the window, for `Auto`; `None` is unknown
+  (`Auto` then gives 8-bit). A value of 0 or above 16 counts as unknown. The platform
+  adapter reads it (`lune_ui_platform::desktop::display_depth`).
+
+- <a id="structfield.SurfaceOptions.opaque"></a>`pub opaque: bool`
+
+  The window is opaque: prefer the `Opaque` alpha mode, so `Auto` may pick a format with a
+  2-bit alpha. The default `false` keeps the alpha mode of 0.6 (premultiplied, else
+  post-multiplied), the glass window's.
 
 **Trait implementations**
 
@@ -68,7 +109,7 @@ pub struct WindowSurface {
 
 One window's surface, configured for a [`Gpu`](gpu.md#struct.Gpu).
 
-Source: `crates/lune-ui-wgpu/src/surface.rs:63`
+Source: `crates/lune-ui-wgpu/src/surface.rs:263`
 
 **Methods and associated items**
 
@@ -87,21 +128,28 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:63`
 
   The chosen composite alpha mode.
 
+- <a id="method.WindowSurface.depth"></a>`pub fn depth(&self) -> SurfaceDepth`
+
+  The depth of the configured format, never [`SurfaceDepth::Auto`](surface.md#variant.SurfaceDepth.Auto): what `Auto` or a
+  fallback resolved to.
+
 - <a id="method.WindowSurface.format"></a>`pub fn format(&self) -> wgpu::TextureFormat`
 
   The surface's colour format: make the window's
-  [`FrameRenderer`](frame.md#struct.FrameRenderer) with it.
+  [`FrameRenderer`](frame.md#struct.FrameRenderer) with it, and again when it changes.
 
 - <a id="method.WindowSurface.new"></a>`pub fn new(gpu: &Gpu, surface: wgpu::Surface<'static>, size: (u32, u32)) -> Result<Self, String>`
 
-  Configures `surface` at `size` physical pixels with [`SurfaceOptions::default`]. The
-  format prefers `Bgra8Unorm`, then `Rgba8Unorm`; the alpha mode prefers premultiplied, then
-  post-multiplied.
+  Configures `surface` at `size` physical pixels with [`SurfaceOptions::default`]: the
+  `Bgra8Unorm` format (else `Rgba8Unorm`) when the display's depth is unknown, in the sRGB
+  colour space; the alpha mode prefers premultiplied, then post-multiplied.
 
 - <a id="method.WindowSurface.options"></a>`pub fn options(&self) -> SurfaceOptions`
 
-  What the surface is configured with: the present mode actually in use (after the fallback
-  to `Fifo`) and the frame latency requested.
+  The options in force: the present mode actually in use (after the fallback to `Fifo`), the
+  frame latency, and the depth request, display depth and `opaque` as last asked. Passing it
+  back to [`Self::set_options`](surface.md#method.WindowSurface.set_options) changes nothing; for the resolved depth read
+  [`Self::depth`](surface.md#method.WindowSurface.depth).
 
 - <a id="method.WindowSurface.present"></a>`pub fn present(&self, gpu: &Gpu, frame: wgpu::SurfaceTexture)`
 
@@ -118,10 +166,16 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:63`
 
 - <a id="method.WindowSurface.set_options"></a>`pub fn set_options(&mut self, gpu: &Gpu, options: SurfaceOptions)`
 
-  Reconfigures the surface with `options` at the current size and format. Call it between
-  frames, never while a texture from [`Self::acquire`](surface.md#method.WindowSurface.acquire) is alive (present or drop it first):
-  wgpu refuses to configure a surface with an outstanding texture and its default error
-  handler panics.
+  Reconfigures the surface with `options` at the current size. The present mode and the
+  frame latency always apply. The format and the alpha mode are chosen again only when
+  `depth`, `display_bits` or `opaque` differ from the options in force ([`Self::options`](surface.md#method.WindowSurface.options)),
+  so a call that changes the present mode alone keeps the format; a call built with
+  `..SurfaceOptions::default()` resets the depth request and the display's depth, so start
+  from `..surface.options()`. When [`Self::format`](surface.md#method.WindowSurface.format) changed, make the window's
+  [`FrameRenderer`](frame.md#struct.FrameRenderer) again (`FrameRenderer::follow`) and any
+  `CustomDraw` pipelines built for the old format. Call it between frames, never while a
+  texture from [`Self::acquire`](surface.md#method.WindowSurface.acquire) is alive (present or drop it first): wgpu refuses to
+  configure a surface with an outstanding texture and its default error handler panics.
 
 - <a id="method.WindowSurface.size"></a>`pub fn size(&self) -> (u32, u32)`
 
@@ -138,8 +192,10 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:63`
   ) -> Result<Self, String>
   ```
 
-  [`Self::new`](surface.md#method.WindowSurface.new) with the present mode and frame latency of `options`; a mode the surface
-  does not list becomes `Fifo` ([`Self::options`](surface.md#method.WindowSurface.options) reports what was configured).
+  [`Self::new`](surface.md#method.WindowSurface.new) with the present mode, frame latency, depth and display of `options`; a mode
+  the surface does not list becomes `Fifo`, and a depth it cannot present falls back (see
+  [`SurfaceDepth`](surface.md#enum.SurfaceDepth)). [`Self::options`](surface.md#method.WindowSurface.options) reports the options asked, [`Self::depth`](surface.md#method.WindowSurface.depth) and
+  [`Self::format`](surface.md#method.WindowSurface.format) what was configured.
 
 **Trait implementations**
 
@@ -160,7 +216,7 @@ pub enum Acquired {
 
 What [`WindowSurface::acquire`](surface.md#method.WindowSurface.acquire) got.
 
-Source: `crates/lune-ui-wgpu/src/surface.rs:12`
+Source: `crates/lune-ui-wgpu/src/surface.rs:29`
 
 **Variants**
 
@@ -180,4 +236,73 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:12`
 **Trait implementations**
 
 - `impl Debug for Acquired`
+
+<a id="enum.SurfaceDepth"></a>
+### Enum `SurfaceDepth`
+
+```rust
+#[non_exhaustive]
+pub enum SurfaceDepth {
+    Eight,
+    Ten,
+    Float16,
+    Unorm16,
+    Auto,
+}
+```
+
+The colour depth of a window's surface: how many bits per channel its format holds.
+
+Every intermediate of a frame (blur targets, the scene target) is made in the surface's
+format, so the window's depth is the precision of the whole frame. A depth the surface cannot
+present falls back down `Unorm16`, `Float16`, `Ten`, `Eight` ([`WindowSurface::depth`](surface.md#method.WindowSurface.depth) reports
+what was configured).
+
+| variant | format | note |
+| --- | --- | --- |
+| `Eight` | `Bgra8Unorm` (else `Rgba8Unorm`) | the format of 0.6 |
+| `Ten` | `Rgb10a2Unorm` | alpha has 2 bits, 4 levels |
+| `Float16` | `Rgba16Float` | half-precision float; twice the memory of `Eight` |
+| `Unorm16` | `Rgba16Unorm` | where the device and surface offer it; Vulkan only in practice |
+
+`Ten`'s alpha has 4 levels, so a translucent (glass) window shows its edges, shadows and
+background in 4 steps of opacity: a fallback and `Auto` never land on `Ten` while the
+configured alpha mode is not `Opaque`, but an explicit `Ten` is honoured. How the OS composites
+a deep format over the desktop is not verified on every platform.
+
+Source: `crates/lune-ui-wgpu/src/surface.rs:59`
+
+**Variants**
+
+- <a id="variant.SurfaceDepth.Eight"></a>`Eight`
+
+  8 bits per channel: `Bgra8Unorm`, else `Rgba8Unorm`.
+
+- <a id="variant.SurfaceDepth.Ten"></a>`Ten`
+
+  10 bits per channel and 2 bits of alpha: `Rgb10a2Unorm`.
+
+- <a id="variant.SurfaceDepth.Float16"></a>`Float16`
+
+  16-bit float per channel: `Rgba16Float`, configured in the sRGB colour space.
+
+- <a id="variant.SurfaceDepth.Unorm16"></a>`Unorm16`
+
+  16-bit normalised per channel: `Rgba16Unorm`, where the device offers it.
+
+- <a id="variant.SurfaceDepth.Auto"></a>`Auto`
+
+  The depth the display can show, chosen by the surface from [`SurfaceOptions::display_bits`](surface.md#structfield.SurfaceOptions.display_bits)
+  and the alpha mode; 8-bit when the display's depth is unknown.
+
+**Trait implementations**
+
+- `impl Clone for SurfaceDepth`
+- `impl Copy for SurfaceDepth`
+- `impl Debug for SurfaceDepth`
+- `impl Default for SurfaceDepth`
+- `impl Eq for SurfaceDepth`
+- `impl Hash for SurfaceDepth`
+- `impl PartialEq for SurfaceDepth`
+- `impl StructuralPartialEq for SurfaceDepth`
 

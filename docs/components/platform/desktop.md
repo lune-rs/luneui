@@ -20,7 +20,7 @@ The desktop as the OS reports it, in desktop units: the OS's own global space (p
 
 ## Existing code
 
-The core types are `DesktopPoint`, `DesktopRect`, `Monitor { bounds, work, units_per_logical, primary }`, `to_units` and `monitor_at` in `crates/lune-ui-core/src/desktop.rs` [D309]. The adapter is `crates/lune-ui-platform/src/desktop.rs` with its OS halves in `src/platform/desktop.rs` (and `desktop/`): `monitors`, `pointer`, `window_frame`, `set_window_origin`, `move_windows`, `window_at`, `units_per_logical` [D313, D314]. `lune_ui::desktop` holds both halves. The gallery side is `apps/gallery/src/panels.rs`.
+The core types are `DesktopPoint`, `DesktopRect`, `Monitor { bounds, work, units_per_logical, primary }`, `to_units` and `monitor_at` in `crates/lune-ui-core/src/desktop.rs` [D309]. The adapter is `crates/lune-ui-platform/src/desktop.rs` with its OS halves in `src/platform/desktop.rs` (and `desktop/`): `monitors`, `pointer`, `window_frame`, `set_window_origin`, `move_windows`, `window_at`, `units_per_logical` [D313, D314], and since 0.7.0 `display_depth(window) -> Option<u8>` (D331). `lune_ui::desktop` holds both halves. The gallery side is `apps/gallery/src/panels.rs`.
 
 ## Spec
 
@@ -33,6 +33,7 @@ Planned and probed on a Windows 11 host in the docked-windows task (D309 to D318
 - Units: `DesktopPoint`/`DesktopRect` are `i32`; `Monitor.units_per_logical` is the scale between a window's logical px and units (the window's scale factor on Windows, 1.0 on macOS).
 - `to_units(logical, upl)` rounds halves away from zero, as winit rounds a logical size; `monitor_at` is the monitor holding a point, else the nearest, ties to the lower index.
 - `desktop::pointer()` and `desktop::window_at()` read live OS state inside library `src`: an adapter exception, like `frontmost_app` (D313). macOS functions run on the main thread.
+- `display_depth(window)` is the bits per channel of the display that holds the window, for `SurfaceOptions::display_bits` (D331). macOS: `NSBitsPerSampleFromDepth(screen.depth())` of the window's screen (else the main screen), raised to 10 when the screen has extended-range headroom (`NSScreen.depth` says 8 even on an XDR panel); main thread only (`None` off it). Windows and Linux return `None`. Any failure, 0 or above 16 is `None`.
 - macOS flips the bottom-left origin of AppKit to the top-left of the primary display (`a_rect_flips_from_the_bottom_left_to_the_top_left`).
 
 ### States
@@ -70,13 +71,14 @@ n/a — nothing here draws; the page's panels use `Painter::image_with` (`core.i
 ### Acceptance
 
 - Pure maths in `crates/lune-ui-core/tests/desktop.rs`: rounding, monitor choice, containment and saturation. The OS reads and the flip are tested where they are pure (`crates/lune-ui-platform/src/desktop.rs`); the rest is the live check.
+- `display_depth`: the pure macOS rule `mac_bits` (`crates/lune-ui-platform/src/desktop.rs::a_mac_screen_is_deep_by_its_depth_or_its_headroom`); the read itself on this Mac (Liquid Retina XDR): `gallery --smoke-platform` prints `display depth: 10 bits`.
 - The stack the page opens has equal left edges and each window touching the one above (`the_stack_has_equal_left_edges_and_each_touches_the_one_above`).
 
 ### Build
 
-- Milestone: docked windows (0.6.0)
+- Milestone: docked windows (0.6.0), `display_depth` (0.7.0)
 - Depends on: core.painter, platform.window
-- Done (D47, M11): tests `crates/lune-ui-core/tests/desktop.rs::to_units_rounds_and_refuses_non_finite, crates/lune-ui-core/tests/desktop.rs::monitor_at_picks_the_containing_or_nearest, crates/lune-ui-platform/src/desktop.rs::a_rect_flips_from_the_bottom_left_to_the_top_left, crates/lune-ui-platform/src/desktop.rs::halves_round_away_from_zero, apps/gallery/src/panels.rs::the_stack_has_equal_left_edges_and_each_touches_the_one_above`; page `docked-panels`; unverified here: macOS is compile-only here (clippy for `aarch64-apple-darwin`, D308): nothing in this entry has run on a Mac; mixed-scale monitors (a window dragged from a 100 % to a 150 % display) are unchecked; and the feel of a real drag (lag between the pointer and the windows, snapping under a hand) is judged by nobody until a person tries it.
+- Done (D47, M11): tests `crates/lune-ui-core/tests/desktop.rs::to_units_rounds_and_refuses_non_finite, crates/lune-ui-core/tests/desktop.rs::monitor_at_picks_the_containing_or_nearest, crates/lune-ui-platform/src/desktop.rs::a_rect_flips_from_the_bottom_left_to_the_top_left, crates/lune-ui-platform/src/desktop.rs::halves_round_away_from_zero, crates/lune-ui-platform/src/desktop.rs::a_mac_screen_is_deep_by_its_depth_or_its_headroom, apps/gallery/src/panels.rs::the_stack_has_equal_left_edges_and_each_touches_the_one_above`; page `docked-panels`; unverified here: macOS is compile-only here (clippy for `aarch64-apple-darwin`, D308): nothing in this entry has run on a Mac; mixed-scale monitors (a window dragged from a 100 % to a 150 % display) are unchecked; and the feel of a real drag (lag between the pointer and the windows, snapping under a hand) is judged by nobody until a person tries it.
 
 ### API
 

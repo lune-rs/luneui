@@ -62,7 +62,7 @@ colour target format the pipelines and one glyph atlas. Holds no window and no s
 target is a [`FrameRenderer`](frame.md#struct.FrameRenderer) (plus a
 [`WindowSurface`](surface.md#struct.WindowSurface) for a window).
 
-Source: `crates/lune-ui-wgpu/src/gpu.rs:110`
+Source: `crates/lune-ui-wgpu/src/gpu.rs:113`
 
 **Fields**
 
@@ -120,7 +120,10 @@ Source: `crates/lune-ui-wgpu/src/gpu.rs:110`
   ```
 
   Opens the device. `compatible` is a surface the adapter must be able to present to;
-  `None` opens a headless device (offscreen targets only).
+  `None` opens a headless device (offscreen targets only). It asks for the 16-bit normalised
+  texture formats (`TEXTURE_FORMAT_16BIT_NORM` with `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`)
+  where the adapter has them, so a window of [`SurfaceDepth::Unorm16`](surface.md#enum.SurfaceDepth)
+  can resolve; no other feature.
 
 - <a id="method.Gpu.new_with_features"></a>
 
@@ -157,5 +160,5 @@ The wgpu instance. `display` is the windowing system's display handle (an event 
 display handle, say); `None` for a headless instance. On Windows this is DX12 presented
 through a DirectComposition visual, the wgpu path that supports a transparent window.
 
-Source: `crates/lune-ui-wgpu/src/gpu.rs:213`
+Source: `crates/lune-ui-wgpu/src/gpu.rs:217`
 

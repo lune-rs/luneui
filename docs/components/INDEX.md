@@ -46,8 +46,8 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [render.dump](render/dump.md) | Offscreen frame dump | done | luneterm | Offscreen target, GPU readback and PNG writer for frame goldens |
 | [render.frame](render/frame.md) | Frame pass sequence | done | luneterm | FrameRenderer: one target's scene, blur, target pass sequence over the core Scene |
 | [render.gpu](render/gpu.md) | Shared GPU | done | luneterm | One shared Gpu (device, queue, noise texture, per-format pipelines and glyph atlas) for any number of targets |
-| [render.gradient-dither](render/gradient-dither.md) | Gradient dither | done | any | Format-aware ordered dither for the per-pixel gradient and shadow kinds (8x8 Bayer, lifted base, ±0.5 LSB of an 8-bit or 10-bit target; off for sRGB and float targets) (D326) |
-| [render.surface](render/surface.md) | Window surface | in-progress | any | One window's swapchain on the shared Gpu: acquire, present, resize; no winit dependency |
+| [render.gradient-dither](render/gradient-dither.md) | Gradient dither | done | any | Format- and display-aware ordered dither for the per-pixel gradient and shadow kinds (8x8 Bayer, lifted base, ±0.5 LSB of the coarser of the target's format and the display; off for sRGB targets and for float targets on a display of unknown depth) (D326, D333) |
+| [render.surface](render/surface.md) | Window surface | in-progress | any | One window's swapchain on the shared Gpu: acquire, present, resize, and a depth of 8, 10 or 16 bits chosen live; no winit dependency |
 
 ## platform
 

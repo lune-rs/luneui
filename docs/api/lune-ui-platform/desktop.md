@@ -35,7 +35,7 @@ over the window's frame but outside its shape the window lets clicks through to 
 below, and everywhere else it takes them. Where the mode is not `Pointer` it does nothing and
 always answers [`Follow::Idle`](desktop.md#variant.Follow.Idle). One follower per window.
 
-Source: `crates/lune-ui-platform/src/desktop.rs:119`
+Source: `crates/lune-ui-platform/src/desktop.rs:128`
 
 **Methods and associated items**
 
@@ -77,7 +77,7 @@ pub enum Follow {
 
 What [`ShapeFollower::update`](desktop.md#method.ShapeFollower.update) asks of the app.
 
-Source: `crates/lune-ui-platform/src/desktop.rs:105`
+Source: `crates/lune-ui-platform/src/desktop.rs:114`
 
 **Variants**
 
@@ -113,7 +113,7 @@ pub enum ShapeMode {
 
 How a platform gives a window its shape, as [`set_window_shape`](desktop.md#fn.set_window_shape) reports it.
 
-Source: `crates/lune-ui-platform/src/desktop.rs:68`
+Source: `crates/lune-ui-platform/src/desktop.rs:77`
 
 **Variants**
 
@@ -142,6 +142,21 @@ Source: `crates/lune-ui-platform/src/desktop.rs:68`
 - `impl StructuralPartialEq for ShapeMode`
 
 ## Functions
+
+<a id="fn.display_depth"></a>
+### Function `display_depth`
+
+```rust
+pub fn display_depth(window: &winit::window::Window) -> Option<u8>
+```
+
+The bits per colour channel of the display that holds `window`, as the OS reports them: 8 on a
+standard display, 10 or more on a deep one. `None` when the OS cannot say, the platform has no
+read (Windows too, until a window needs the answer), or the window has no display yet.
+The macOS read must run on the main thread. This is live OS state, like [`pointer()`](desktop.md#fn.pointer): the app
+reads it when the window's display changes and passes it in (`SurfaceOptions::display_bits`).
+
+Source: `crates/lune-ui-platform/src/desktop.rs:71`
 
 <a id="fn.monitors"></a>
 ### Function `monitors`
@@ -218,7 +233,7 @@ scale factor changes. On Windows the shape becomes the window region ([`ShapeMod
 on macOS it is followed with the pointer ([`ShapeMode::Pointer`](desktop.md#variant.ShapeMode.Pointer); `None` makes the whole
 window take clicks again); elsewhere nothing happens ([`ShapeMode::Unsupported`](desktop.md#variant.ShapeMode.Unsupported)).
 
-Source: `crates/lune-ui-platform/src/desktop.rs:90`
+Source: `crates/lune-ui-platform/src/desktop.rs:99`
 
 <a id="fn.units_per_logical"></a>
 ### Function `units_per_logical`
