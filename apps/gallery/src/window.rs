@@ -219,7 +219,10 @@ pub(crate) fn setup(
     let size = window.inner_size();
     // The display the window opens on is read once here; `App::follow_display` reads it again
     // when the window moves to another monitor.
-    let options = lune_ui::surface::for_window(&window, SurfaceOptions::default());
+    let options = SurfaceOptions {
+        display_bits: lune_ui::desktop::display_depth(&window),
+        ..SurfaceOptions::default()
+    };
     let surface = WindowSurface::with_options(&gpu, surface, (size.width, size.height), options)?;
     let text = text_cache();
     let frame = lune_ui::frame::FrameRenderer::for_surface(&mut gpu, &surface);

@@ -12,7 +12,6 @@ lune-ui-core = { path = "../lune-ui-core" }
 lune-ui-wgpu = { path = "../lune-ui-wgpu" }
 lune-ui-winit = { path = "../lune-ui-winit" }
 lune-ui-platform = { path = "../lune-ui-platform" }
-winit = "0.30"
 
 [features]
 accesskit = ["lune-ui-winit/accesskit"]
