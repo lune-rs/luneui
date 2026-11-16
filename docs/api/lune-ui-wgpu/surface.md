@@ -10,8 +10,8 @@ for a redraw when [`acquire`](surface.md#method.WindowSurface.acquire) says so, 
 about to be presented before [`present`](surface.md#method.WindowSurface.present). [`SurfaceOptions`](surface.md#struct.SurfaceOptions) sets the
 present mode, the frame latency and the colour depth ([`SurfaceDepth`](surface.md#enum.SurfaceDepth):
 [`WindowSurface::with_options`](surface.md#method.WindowSurface.with_options), [`WindowSurface::set_options`](surface.md#method.WindowSurface.set_options)); the defaults present as
-0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 until the app tells the display's
-depth.
+0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 on a glass window whatever the
+display; an opaque window (`opaque: true`) over a display of 10 bits or more gets `Ten`.
 
 ### Changing the depth of a live window
 
@@ -58,7 +58,7 @@ To change one field of a live surface, start from [`WindowSurface::options`](sur
 (`SurfaceOptions { present_mode, ..surface.options() }`): `..SurfaceOptions::default()` would
 also reset the depth request and the display's depth.
 
-Source: `crates/lune-ui-wgpu/src/surface.rs:87`
+Source: `crates/lune-ui-wgpu/src/surface.rs:88`
 
 **Fields**
 
@@ -109,7 +109,7 @@ pub struct WindowSurface {
 
 One window's surface, configured for a [`Gpu`](gpu.md#struct.Gpu).
 
-Source: `crates/lune-ui-wgpu/src/surface.rs:263`
+Source: `crates/lune-ui-wgpu/src/surface.rs:264`
 
 **Methods and associated items**
 
@@ -292,8 +292,9 @@ Source: `crates/lune-ui-wgpu/src/surface.rs:59`
 
 - <a id="variant.SurfaceDepth.Auto"></a>`Auto`
 
-  The depth the display can show, chosen by the surface from [`SurfaceOptions::display_bits`](surface.md#structfield.SurfaceOptions.display_bits)
-  and the alpha mode; 8-bit when the display's depth is unknown.
+  Chosen by the surface from [`SurfaceOptions::display_bits`](surface.md#structfield.SurfaceOptions.display_bits) and the alpha mode: 8-bit on a
+  translucent window or an unknown display, `Ten` on an opaque one over a display of 10 bits
+  or more.
 
 **Trait implementations**
 

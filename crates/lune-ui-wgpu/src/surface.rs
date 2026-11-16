@@ -4,8 +4,8 @@
 //! about to be presented before [`present`](WindowSurface::present). [`SurfaceOptions`] sets the
 //! present mode, the frame latency and the colour depth ([`SurfaceDepth`]:
 //! [`WindowSurface::with_options`], [`WindowSurface::set_options`]); the defaults present as
-//! 0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 until the app tells the display's
-//! depth.
+//! 0.4.0 did, and `Auto` depth gives the 8-bit format of 0.6 on a glass window whatever the
+//! display; an opaque window (`opaque: true`) over a display of 10 bits or more gets `Ten`.
 //!
 //! # Changing the depth of a live window
 //!
@@ -65,8 +65,9 @@ pub enum SurfaceDepth {
     Float16,
     /// 16-bit normalised per channel: `Rgba16Unorm`, where the device offers it.
     Unorm16,
-    /// The depth the display can show, chosen by the surface from [`SurfaceOptions::display_bits`]
-    /// and the alpha mode; 8-bit when the display's depth is unknown.
+    /// Chosen by the surface from [`SurfaceOptions::display_bits`] and the alpha mode: 8-bit on a
+    /// translucent window or an unknown display, `Ten` on an opaque one over a display of 10 bits
+    /// or more.
     #[default]
     Auto,
 }

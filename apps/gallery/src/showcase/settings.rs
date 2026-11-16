@@ -782,7 +782,7 @@ impl Settings {
             self.depth = DEPTHS[chosen as usize % DEPTHS.len()].1;
         }
         col.note(ui, &live_line(self.live));
-        col.note(ui, "Auto is 8-bit until the display's depth is known.");
+        col.note(ui, "Auto is 8-bit on this glass window.");
 
         col.y += 8.0;
         if col.button(ui, "reset", "Reset all settings") {
