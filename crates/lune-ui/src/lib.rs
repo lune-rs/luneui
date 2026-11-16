@@ -19,9 +19,26 @@ pub use lune_ui_core::{
 pub use theme::lunegit_dark;
 pub use theme::near_black;
 
-pub use lune_ui_wgpu::{blur, custom, dump, frame, gpu, surface};
+pub use lune_ui_wgpu::{blur, custom, dump, frame, gpu};
 
 pub use lune_ui_platform::{group, material, popover};
+
+/// The window surface: everything of `lune_ui_wgpu::surface`, and [`for_window`](surface::for_window),
+/// which hands the display's depth to the surface options in one call.
+pub mod surface {
+    pub use lune_ui_wgpu::surface::*;
+
+    /// `options` with `display_bits` set from the display that holds `window`
+    /// (`lune_ui_platform::desktop::display_depth`), so `SurfaceDepth::Auto` can use the display.
+    /// Call it again when the window changes monitor. The read must run on the main thread on
+    /// macOS; where the OS cannot say, `display_bits` becomes `None` (`Auto` then gives 8-bit).
+    pub fn for_window(window: &winit::window::Window, options: SurfaceOptions) -> SurfaceOptions {
+        SurfaceOptions {
+            display_bits: lune_ui_platform::desktop::display_depth(window),
+            ..options
+        }
+    }
+}
 
 /// The desktop: the core's units, monitors, popup placement and window shapes, and the OS
 /// functions that read the monitors and the pointer and move windows (`lune-ui-platform`).

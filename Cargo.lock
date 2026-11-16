@@ -1386,6 +1386,7 @@ dependencies = [
  "lune-ui-platform",
  "lune-ui-wgpu",
  "lune-ui-winit",
+ "winit",
 ]
 
 [[package]]

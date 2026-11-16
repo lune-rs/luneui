@@ -353,6 +353,11 @@ impl ApplicationHandler<AppEvent> for Smoke {
         match setup(event_loop, self.proxy.clone(), false) {
             Ok(shown) => {
                 println!("smoke: accessibility bridge built on a hidden window");
+                // A reading only, never a failure: the display the hidden window would open on.
+                match lune_ui::desktop::display_depth(&shown.window) {
+                    Some(bits) => println!("smoke: display depth: {bits} bits"),
+                    None => println!("smoke: display depth: unknown"),
+                }
                 self.shown = Some(shown);
             }
             Err(e) => {

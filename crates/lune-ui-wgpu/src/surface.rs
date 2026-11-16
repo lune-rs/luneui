@@ -577,8 +577,8 @@ mod tests {
         let m = metal();
         assert_eq!(pick(Auto, None, &m, false, false), B8);
         assert_eq!(pick(Auto, Some(8), &m, false, false), B8);
-        // The glass window's `Auto` over a deep display: provisional option A, 8-bit. Option B
-        // would assert `H16` here, option C `T10`.
+        // The glass window's `Auto` over a deep display stays 8-bit: the user chose it after
+        // seeing 8, 10 and 16-bit glass live (`Ten`'s 2-bit alpha, float's doubled memory).
         assert_eq!(pick(Auto, Some(10), &m, false, false), B8);
         assert_eq!(pick(Ten, Some(10), &m, false, false), T10);
         assert_eq!(pick(Float16, None, &m, false, false), H16);
