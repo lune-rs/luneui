@@ -7,11 +7,11 @@
 
 use lune_ui_core::desktop::{DesktopPoint, DesktopRect, Monitor, WindowShape};
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSEvent, NSScreen, NSWindow};
+use objc2_app_kit::{NSBitsPerSampleFromDepth, NSEvent, NSScreen, NSWindow};
 use winit::dpi::LogicalPosition;
 use winit::window::Window;
 
-use crate::desktop::{ShapeMode, flip_rect, flip_y, round_units};
+use crate::desktop::{ShapeMode, flip_rect, flip_y, mac_bits, round_units};
 use crate::platform::macos::ns_window;
 
 /// The height of the primary display in points: the line the y axis is flipped about.
@@ -75,6 +75,21 @@ pub(crate) fn move_windows(moves: &[(&Window, DesktopPoint)]) -> Result<(), Stri
 
 pub(crate) fn units_per_logical(_window: &Window) -> f32 {
     1.0
+}
+
+/// The bits per channel of the screen that holds `window` (the main screen when the window has
+/// none yet), raised to 10 when the screen has extended-range headroom: `NSScreen.depth` says 8
+/// even on an XDR panel.
+pub(crate) fn display_depth(window: &Window) -> Option<u8> {
+    let mtm = MainThreadMarker::new()?;
+    let screen = ns_window(window)
+        .and_then(|w| w.screen())
+        .or_else(|| NSScreen::mainScreen(mtm))?;
+    let bits = NSBitsPerSampleFromDepth(screen.depth());
+    mac_bits(
+        bits,
+        screen.maximumPotentialExtendedDynamicRangeColorComponentValue(),
+    )
 }
 
 pub(crate) fn window_at(window: &Window, at: DesktopPoint) -> Option<bool> {

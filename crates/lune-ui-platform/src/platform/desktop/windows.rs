@@ -136,6 +136,12 @@ pub(crate) fn units_per_logical(window: &Window) -> f32 {
     window.scale_factor() as f32
 }
 
+/// No read: `Auto` keeps a glass window at 8 bits on Windows whatever the display, so nothing asks
+/// for it yet; that also keeps the DisplayConfig FFI and its `windows-sys` feature out.
+pub(crate) fn display_depth(_window: &Window) -> Option<u8> {
+    None
+}
+
 pub(crate) fn window_at(window: &Window, at: DesktopPoint) -> Option<bool> {
     let own = hwnd(window)?;
     // SAFETY: both calls take plain values; a null result (nothing at the point) is compared as is.
