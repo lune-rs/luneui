@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:58`
+Source: `crates/lune-ui-core/src/ui.rs:60`
 
 **Fields**
 
@@ -381,7 +381,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:121`
+Source: `crates/lune-ui-core/src/ui.rs:123`
 
 **Methods and associated items**
 
@@ -1594,6 +1594,11 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   nested under it. The scope stays live across frames, drawn or not, until
   [`Self::end_keep_alive`](ui.md#method.Ui.end_keep_alive); persistent state used inside survives while it is live (D6).
 
+- <a id="method.Ui.keyboard_inset"></a>`pub fn keyboard_inset(&self) -> Insets`
+
+  The part of the window an on-screen keyboard covers, in logical pixels: the last
+  [`Event::KeyboardInset`](input.md#variant.Event.KeyboardInset), [`Insets::ZERO`](layout.md#associatedconstant.Insets.ZERO) until one arrives or while it is hidden.
+
 - <a id="method.Ui.keymap"></a>`pub fn keymap(&self) -> Keymap`
 
   The platform's keyboard conventions for this frame.
@@ -1619,6 +1624,12 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   order [`Self::finish`](ui.md#method.Ui.finish) picks a press target by, so `Outside` is above every modal). Ignores `enabled` and `Sense`, so
   it reads true over a disabled anchor, and reads the previous frame's regions.
 
+- <a id="method.Ui.pointer_kind"></a>`pub fn pointer_kind(&self) -> PointerKind`
+
+  The kind of the current or last press: [`PointerKind::Touch`](input.md#variant.PointerKind.Touch) from the primary touch's
+  start until a mouse button press that is not a platform's copy of a touch, and
+  [`PointerKind::Mouse`](input.md#variant.PointerKind.Mouse) before any touch.
+
 - <a id="method.Ui.pointer_pos"></a>`pub fn pointer_pos(&self) -> Option<(f32, f32)>`
 
   The pointer's position in logical pixels, or `None` when it is outside the window.
@@ -1635,6 +1646,11 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
 
   Asks for a frame at app time `t`; the earliest request later than now wins. A request at
   or before the frame's time is due already and is ignored (it never hides a later one).
+
+- <a id="method.Ui.safe_area"></a>`pub fn safe_area(&self) -> Insets`
+
+  The window edges a system bar, notch or rounded corner covers, in logical pixels: the last
+  [`Event::SafeArea`](input.md#variant.Event.SafeArea), [`Insets::ZERO`](layout.md#associatedconstant.Insets.ZERO) until one arrives.
 
 - <a id="method.Ui.scope"></a>`pub fn scope<R>(&mut self, key: impl std::hash::Hash, f: impl FnOnce(&mut Self) -> R) -> R`
 

@@ -21,6 +21,7 @@ mod overlay;
 mod pointer;
 mod response;
 mod store;
+mod touch;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
@@ -35,8 +36,9 @@ pub use store::UiStore;
 use crate::access::{AccessValue, SemanticTree};
 use crate::input::{
     ClipboardRequest, CursorIcon, Event, FocusEvent, FrameOutput, Key, Keymap, Modifiers, NamedKey,
-    RawInput, Repaint, ScrollDelta,
+    PointerKind, RawInput, Repaint, ScrollDelta,
 };
+use crate::layout::Insets;
 use crate::motion::{Cadence, MotionTier, Time};
 use crate::paint::{Painter, Rect, SUPPRESSED};
 use crate::scene::{LayerId, Scene};
@@ -304,7 +306,16 @@ impl<'a> Ui<'a> {
                 eligible: &eligible,
                 time: input.time,
             };
-            for ev in &input.events {
+            let steps = store.touch.reduce(&input.events, input.time);
+            for step in &steps {
+                let ev = match step {
+                    touch::Step::Pass(ev) => *ev,
+                    touch::Step::Synth(ev) => ev,
+                    touch::Step::Cancel => {
+                        store.pointer.cancel();
+                        continue;
+                    }
+                };
                 let after_key = last_key.take();
                 let after_fired = std::mem::take(&mut fired_press);
                 match ev {
@@ -473,6 +484,8 @@ impl<'a> Ui<'a> {
                     Event::Focus(false) => {
                         focus_loss(&active, &hits, None, &mut dismissed);
                     }
+                    Event::SafeArea(insets) => store.safe_area = *insets,
+                    Event::KeyboardInset(insets) => store.keyboard_inset = *insets,
                     Event::ClipboardText(t) => {
                         acted = true;
                         keys.push(KeyPress::real(FocusEvent::ClipboardText(t.clone())));
@@ -840,6 +853,25 @@ impl<'a> Ui<'a> {
     /// The pointer's position in logical pixels, or `None` when it is outside the window.
     pub fn pointer_pos(&self) -> Option<(f32, f32)> {
         self.store.pointer.pos()
+    }
+
+    /// The kind of the current or last press: [`PointerKind::Touch`] from the primary touch's
+    /// start until a mouse button press that is not a platform's copy of a touch, and
+    /// [`PointerKind::Mouse`] before any touch.
+    pub fn pointer_kind(&self) -> PointerKind {
+        self.store.touch.kind
+    }
+
+    /// The window edges a system bar, notch or rounded corner covers, in logical pixels: the last
+    /// [`Event::SafeArea`], [`Insets::ZERO`] until one arrives.
+    pub fn safe_area(&self) -> Insets {
+        self.store.safe_area
+    }
+
+    /// The part of the window an on-screen keyboard covers, in logical pixels: the last
+    /// [`Event::KeyboardInset`], [`Insets::ZERO`] until one arrives or while it is hidden.
+    pub fn keyboard_inset(&self) -> Insets {
+        self.store.keyboard_inset
     }
 
     /// Whether the pointer is inside `rect`, given in the current drawing space (it goes through

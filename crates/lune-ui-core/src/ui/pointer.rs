@@ -315,6 +315,13 @@ impl PointerState {
         });
     }
 
+    /// Drops every press in flight with no click, no drag stop and no secondary click (a touch
+    /// that was cancelled, or a touch that takes over from a mouse press).
+    pub(crate) fn cancel(&mut self) {
+        self.press = None;
+        self.secondary = None;
+    }
+
     /// Whether a press holds a widget's capture now, at this point in the frame's event batch.
     pub(crate) fn captured(&self) -> bool {
         self.held().is_some()

@@ -52,6 +52,11 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-core-9 [new] Image drawing: a painter primitive that draws an app-supplied bitmap (`core.image`).
 - R-core-10 [new] Painter primitives beyond today's fill, ring, stroke, acrylic, text, clip and
   transform: the set each catalogue spec lists, aggregated in `core.painter`.
+- R-core-11 [new] Touch reaches widgets through the pointer path they already read: the primary
+  touch is a primary press, move and release (a tap clicks, a cancel drops the press with no
+  click), other touches never reach the pointer, the mouse copy a platform makes of a touch is
+  dropped for 500 ms of app time, and `Ui::pointer_kind`, `Ui::safe_area` and `Ui::keyboard_inset`
+  read the kind of the last press and the window's latched insets (D344, D345).
 
 ### Text
 
