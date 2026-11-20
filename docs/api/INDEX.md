@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1119 items. Left out and counted: 3442 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4960 items of the omitted impls, 1333 items of the trait impls shown as one line, 2304 synthetic impls.
+94 modules, 1121 items. Left out and counted: 3460 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 4986 items of the omitted impls, 1341 items of the trait impls shown as one line, 2316 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -80,7 +80,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::progress`](lune-ui-core/widgets/progress.md) | 19 |
 | [`lune_ui_core::widgets::radio_group`](lune-ui-core/widgets/radio_group.md) | 14 |
 | [`lune_ui_core::widgets::row`](lune-ui-core/widgets/row.md) | 15 |
-| [`lune_ui_core::widgets::scroll_area`](lune-ui-core/widgets/scroll_area.md) | 17 |
+| [`lune_ui_core::widgets::scroll_area`](lune-ui-core/widgets/scroll_area.md) | 19 |
 | [`lune_ui_core::widgets::scrollbar`](lune-ui-core/widgets/scrollbar.md) | 9 |
 | [`lune_ui_core::widgets::search_picker`](lune-ui-core/widgets/search_picker.md) | 17 |
 | [`lune_ui_core::widgets::selectable`](lune-ui-core/widgets/selectable.md) | 0 |
@@ -891,6 +891,7 @@ Every top-level item of the four owning crates, by name.
 - [`OverlayLayer`](lune-ui-core/scene.md#struct.OverlayLayer) - struct, `lune_ui_core::scene`
 - [`OverlayOptions`](lune-ui-core/ui.md#struct.OverlayOptions) - struct, `lune_ui_core::ui`
 - [`OverlayPhase`](lune-ui-core/ui.md#enum.OverlayPhase) - enum, `lune_ui_core::ui`
+- [`Overscroll`](lune-ui-core/widgets/scroll_area.md#enum.Overscroll) - enum, `lune_ui_core::widgets::scroll_area`
 - [`owned_by`](lune-ui-platform/group.md#fn.owned_by) - function, `lune_ui_platform::group`
 - [`PAD`](lune-ui-core/widgets/badge.md#constant.PAD) - constant, `lune_ui_core::widgets::badge`
 - [`PAD`](lune-ui-core/widgets/nav_item.md#constant.PAD) - constant, `lune_ui_core::widgets::nav_item`
@@ -1081,6 +1082,7 @@ Every top-level item of the four owning crates, by name.
 - [`ScriptedInput`](lune-ui-core/testing.md#struct.ScriptedInput) - struct, `lune_ui_core::testing`
 - [`ScrollDelta`](lune-ui-core/input.md#enum.ScrollDelta) - enum, `lune_ui_core::input`
 - [`ScrollOptions`](lune-ui-core/widgets/scroll_area.md#struct.ScrollOptions) - struct, `lune_ui_core::widgets::scroll_area`
+- [`ScrollPhysics`](lune-ui-core/widgets/scroll_area.md#struct.ScrollPhysics) - struct, `lune_ui_core::widgets::scroll_area`
 - [`ScrollResponse`](lune-ui-core/widgets/scroll_area.md#struct.ScrollResponse) - struct, `lune_ui_core::widgets::scroll_area`
 - [`ScrollView`](lune-ui-core/widgets/scroll_area.md#struct.ScrollView) - struct, `lune_ui_core::widgets::scroll_area`
 - [`SEAM_RADIUS`](lune-ui-core/chrome.md#constant.SEAM_RADIUS) - constant, `lune_ui_core::chrome`

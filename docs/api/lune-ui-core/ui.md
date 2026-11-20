@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:63`
+Source: `crates/lune-ui-core/src/ui.rs:64`
 
 **Fields**
 
@@ -434,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:130`
+Source: `crates/lune-ui-core/src/ui.rs:131`
 
 **Methods and associated items**
 
@@ -1792,6 +1792,21 @@ Source: `crates/lune-ui-core/src/ui.rs:130`
 
   Runs `f` enabled or not. Disabled, every `interact` inside still registers (and blocks) but
   reports nothing, and the painter draws at opacity 0.4.
+
+- <a id="method.Ui.with_scroll_physics"></a>
+
+  ```rust
+  pub fn with_scroll_physics<R>(
+      &mut self,
+      physics: ScrollPhysics,
+      f: impl FnOnce(&mut Self) -> R,
+  ) -> R
+  ```
+
+  Runs `f` with `physics` for every scroll area called inside it: the fling's decay, the
+  overscroll at the ends and the spring that brings it back (D350). The default, outside any
+  scope, is [`ScrollPhysics::default`]. A fling keeps the physics it started with. The outer
+  value is back when `f` returns.
 
 `impl<'a> Ui<'a>`
 

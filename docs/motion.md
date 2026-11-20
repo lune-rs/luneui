@@ -241,6 +241,24 @@ frame is reproducible and 60 Hz and 120 Hz agree at every instant they share [D4
 | `rubber_band` | `sign(x) (1 - 1 / (|x| c / d + 1)) d`, the pull `x` past an end shown as less than the viewport `d` | `c` = 0.55 (`RUBBER_BAND`) |
 | `DampedSpring` | the second-order system of period `response` and damping ratio `damping`, under, critically and over damped; rest within 0.5 px and 5 px/s | 0.4 s, damping 1.0 (`BOUNCE`) |
 
+The scroll area is where they meet (D350). A pan on it follows the finger 1:1; a lift flings on `Decay`
+(`ScrollPhysics::decay`), an end rubber-bands under `Overscroll::RubberBand` (the default) and a
+fling that reaches it bounces off it, then `DampedSpring` (`ScrollPhysics::spring`) takes the
+overscroll back to 0, and `Overscroll::Clamp` stops at the end instead. `Ui::with_scroll_physics`
+sets the three for the areas inside its scope; a fling keeps what it started with. The overscroll
+is drawn as one translate around the content, so `ScrollView.offset` stays clamped and no widget on
+the area changes. Each row of the table is one kind of motion, and none is a `Kind`:
+
+| state of an area axis | what moves it | ends |
+|---|---|---|
+| pan | the finger, 1:1; past an end the pull's rubber band | the lift or a cancel |
+| fling | `from + Decay::offset(v, t)` | `Decay::duration`, or the end (a stop under `Clamp`, a bounce under `RubberBand`) |
+| bounce | `DampedSpring::sample(over0, 0, v, t)` | `DampedSpring::duration`, exactly at the end |
+
+A wheel step, a key, a thumb drag, a reveal, a scroll link pull and a new identity each stop a fling
+or a bounce where it shows before they apply, and a touch on a moving area catches it where the
+last frame drew it.
+
 Every constant is the toolkit's own starting value, not a native measurement; "feels native" is
 unverified until a finger drives it (`docs/STATE.md`). The conformance harness runs at any rate
 (`conformance_at`, `conformance_of_at`): every kind and tier is swept at 120 Hz as at 60, and the

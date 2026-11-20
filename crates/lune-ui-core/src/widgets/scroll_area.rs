@@ -12,6 +12,12 @@
 //! [`centre_target`], [`reveal_offset`]) port the reference app's offset preserver and its centring
 //! formula; the frame logic lives in [`Ui::scroll_area`].
 //!
+//! A finger scrolls it too (D350): a touch pan on the area follows the finger 1:1, lets go as a
+//! fling that decays at a rate and rubber-bands at the ends, then springs back. The overscroll is
+//! drawn as one extra translate around the content; [`ScrollView::offset`] and
+//! [`ScrollResponse::offset`] stay clamped. [`ScrollPhysics`] and [`Ui::with_scroll_physics`] set
+//! the decay, the ends and the spring.
+//!
 //! Frame order: the wheel and key input of the frame moves the offset, the content draws at it,
 //! then everything that needs the content's size runs (the measured clamp, follow-tail, reveals,
 //! page keys, the thumb). When one of those moves the offset after the content drew, the frame asks
@@ -22,7 +28,10 @@ use std::hash::Hash;
 use crate::access::{Action, Node, Role, State, Value};
 use crate::input::{FocusEvent, Key, NamedKey};
 use crate::layout::Axis;
-use crate::motion::{Easing, Kind, Motion, Resolved, Time, Transition};
+use crate::motion::{
+    DampedSpring, Decay, Easing, Kind, Motion, Resolved, Time, Transition, rubber_band,
+    rubber_band_inverse,
+};
 use crate::paint::Rect;
 use crate::ui::{Response, Sense, Ui, WidgetId};
 
@@ -247,6 +256,100 @@ pub fn reveal_offset(start: f64, len: f64, viewport: f64, current: f64, how: Rev
     }
 }
 
+/// What happens past an end of the content under a finger (D350).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Overscroll {
+    /// A pull past the end shows a rubber-banded distance of it ([`rubber_band`]); a fling that
+    /// reaches the end bounces off it, and both spring back.
+    #[default]
+    RubberBand,
+    /// The offset stops at the end: nothing shows past it and a fling that reaches it stops dead.
+    Clamp,
+}
+
+/// How a scroll area moves under a finger: how a fling decays, what the ends do, and the spring
+/// that brings an overscroll back. A fling and a bounce ignore the motion tier (D350): they are
+/// the finger's own motion. Set for the areas inside a scope by [`Ui::with_scroll_physics`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct ScrollPhysics {
+    /// How a fling slows down.
+    pub decay: Decay,
+    /// What an end does.
+    pub overscroll: Overscroll,
+    /// The spring that takes an overscroll back to the end.
+    pub spring: DampedSpring,
+}
+
+impl Default for ScrollPhysics {
+    /// Rubber-banding ends, [`Decay::NORMAL`], [`DampedSpring::BOUNCE`].
+    fn default() -> Self {
+        Self {
+            decay: Decay::NORMAL,
+            overscroll: Overscroll::RubberBand,
+            spring: DampedSpring::BOUNCE,
+        }
+    }
+}
+
+impl ScrollPhysics {
+    /// These physics with `decay`.
+    pub const fn with_decay(self, decay: Decay) -> Self {
+        Self { decay, ..self }
+    }
+
+    /// These physics with `overscroll` at the ends.
+    pub const fn with_overscroll(self, overscroll: Overscroll) -> Self {
+        Self { overscroll, ..self }
+    }
+
+    /// These physics with `spring` for the way back.
+    pub const fn with_spring(self, spring: DampedSpring) -> Self {
+        Self { spring, ..self }
+    }
+}
+
+/// The slowest release, in px/s, that still flings.
+const FLING_MIN: f32 = 50.0;
+
+/// What moves an axis other than the wheel's transition: the finger, a fling or a bounce.
+#[derive(Debug, Clone, Copy, Default)]
+enum Touch {
+    /// Nothing: the offset is `base + rel`.
+    #[default]
+    None,
+    /// The finger holds it. `u` is the unbounded coordinate the finger has reached (past an end it
+    /// is the pull; what shows past the end is its rubber band).
+    Pan { u: f64 },
+    /// A fling from `from` at `v` px/s (offset direction), `t0` its start.
+    Fling {
+        t0: Time,
+        from: f64,
+        v: f32,
+        physics: ScrollPhysics,
+    },
+    /// The spring back from `over0` px past the high or the low end, at `v` px/s, `t0` its start.
+    Bounce {
+        t0: Time,
+        high: bool,
+        over0: f32,
+        v: f32,
+        spring: DampedSpring,
+    },
+}
+
+/// What an axis shows at one instant.
+#[derive(Debug, Clone, Copy)]
+struct Sample {
+    /// The offset, clamped to the range.
+    offset: f64,
+    /// The overscroll: how far the content is drawn past the offset, in the offset's direction.
+    over: f32,
+    /// A fling or a bounce, a wheel step or a reveal is in flight.
+    moving: bool,
+}
+
 /// One axis' offset: where the user or app wants it (`wanted`, never lowered by a short frame of
 /// a preserved document), and the animation towards it.
 #[derive(Debug, Clone, Copy)]
@@ -256,6 +359,8 @@ struct AxisState {
     base: f64,
     /// The animated part: the shown offset is `base + rel`.
     rel: Transition<f32>,
+    /// The finger, a fling or a bounce; `base` and `rel` are idle while it holds the axis.
+    touch: Touch,
 }
 
 impl Default for AxisState {
@@ -264,6 +369,7 @@ impl Default for AxisState {
             wanted: 0.0,
             base: 0.0,
             rel: Transition::settled(0.0),
+            touch: Touch::None,
         }
     }
 }
@@ -282,28 +388,232 @@ impl AxisState {
         (self.base + f64::from(rel), moving)
     }
 
-    /// Moves the whole offset by `by`, keeping any animation's course relative to it.
+    /// Moves the whole offset by `by`, keeping any animation's course relative to it (and a
+    /// finger's, a fling's).
     fn shift(&mut self, by: f64) {
         self.wanted += by;
         self.base += by;
+        match &mut self.touch {
+            Touch::Pan { u } => *u += by,
+            Touch::Fling { from, .. } => *from += by,
+            Touch::Bounce { .. } | Touch::None => {}
+        }
     }
 
-    /// Sets the offset at once, cancelling any animation.
+    /// Sets the offset at once, cancelling any animation and any touch motion.
     fn jump(&mut self, to: f64) {
         self.wanted = to;
         self.base = to;
         self.rel = Transition::settled(0.0);
+        self.touch = Touch::None;
     }
 
-    /// Moves to `to` per `motion` (retargeting keeps the velocity), or at once without one.
+    /// Moves to `to` per `motion` (retargeting keeps the velocity), or at once without one. A touch
+    /// motion on the axis was stopped by [`Self::halt`] first.
     fn step(&mut self, now: Time, to: f64, motion: Option<Resolved>) {
         match motion {
             Some(r) => {
+                self.touch = Touch::None;
                 self.wanted = to;
                 self.rel
                     .retarget(now, (to - self.base) as f32, r.duration, r.easing);
             }
             None => self.jump(to),
+        }
+    }
+
+    /// Clamps the target to `to`, the range the measured extent allows. A touch motion keeps its
+    /// course: what shows is clamped on every read, and a fling's `wanted` is its landing.
+    fn clamp_to(&mut self, to: f64) {
+        if matches!(self.touch, Touch::None) {
+            self.jump(to);
+        } else {
+            self.wanted = to;
+        }
+    }
+
+    /// What the axis shows at `now`, for content `ext` long in a viewport `vp` long.
+    fn sample(&self, now: Time, ext: f64, vp: f64, physics: &ScrollPhysics) -> Sample {
+        let bound = |high: bool| if high { max_offset(ext, vp) } else { 0.0 };
+        match self.touch {
+            Touch::None => {
+                let (v, moving) = self.value(now);
+                Sample {
+                    offset: clamp_offset(v, ext, vp),
+                    over: 0.0,
+                    moving,
+                }
+            }
+            Touch::Pan { u } => {
+                let c = clamp_offset(u, ext, vp);
+                let over = match physics.overscroll {
+                    Overscroll::RubberBand => rubber_band((u - c) as f32, vp as f32),
+                    Overscroll::Clamp => 0.0,
+                };
+                Sample {
+                    offset: c,
+                    over,
+                    moving: false,
+                }
+            }
+            Touch::Fling {
+                t0,
+                from,
+                v,
+                physics,
+            } => {
+                let at = from + f64::from(physics.decay.offset(v, now.saturating_sub(t0)));
+                Sample {
+                    offset: clamp_offset(at, ext, vp),
+                    over: 0.0,
+                    moving: true,
+                }
+            }
+            Touch::Bounce {
+                t0,
+                high,
+                over0,
+                v,
+                spring,
+            } => Sample {
+                offset: bound(high),
+                over: spring.sample(over0, 0.0, v, now.saturating_sub(t0)).0,
+                moving: true,
+            },
+        }
+    }
+
+    /// Stops a fling, a bounce or a pan where it shows at `now` (the overscroll dropped), so the
+    /// code that sets the offset by input runs from there. Nothing changes without a touch motion.
+    fn halt(&mut self, now: Time, ext: f64, vp: f64, physics: &ScrollPhysics) {
+        if !matches!(self.touch, Touch::None) {
+            let at = self.sample(now, ext, vp, physics).offset;
+            self.jump(at);
+        }
+    }
+
+    /// Ends a fling that has run out or reached its end, and turns one that reached an end into a
+    /// bounce (or stops it at the end under [`Overscroll::Clamp`]); ends a bounce that has settled.
+    /// Everything is read off the times since the start, so no frame rate changes where it lands.
+    fn advance(&mut self, now: Time, ext: f64, vp: f64) {
+        if let Touch::Fling {
+            t0,
+            from,
+            v,
+            physics,
+        } = self.touch
+        {
+            let t = now.saturating_sub(t0);
+            let up = v > 0.0;
+            let bound = if up { max_offset(ext, vp) } else { 0.0 };
+            let dist = bound - from;
+            let reach = if dist == 0.0 || (dist > 0.0) != up {
+                Some(Time::ZERO)
+            } else if dist.abs() > 1e5 {
+                None
+            } else {
+                physics.decay.time_to(v, dist as f32)
+            };
+            let duration = physics.decay.duration(v);
+            match reach {
+                Some(th) if t >= th => match physics.overscroll {
+                    Overscroll::Clamp => self.jump(bound),
+                    Overscroll::RubberBand => {
+                        self.touch = Touch::Bounce {
+                            t0: t0 + th,
+                            high: up,
+                            over0: 0.0,
+                            v: physics.decay.velocity(v, th),
+                            spring: physics.spring,
+                        };
+                    }
+                },
+                None if t >= duration => {
+                    let end = from + f64::from(physics.decay.offset(v, duration));
+                    self.jump(clamp_offset(end, ext, vp));
+                }
+                _ => {}
+            }
+        }
+        if let Touch::Bounce {
+            t0,
+            high,
+            over0,
+            v,
+            spring,
+        } = self.touch
+            && now.saturating_sub(t0) >= spring.duration(over0, 0.0, v)
+        {
+            self.jump(if high { max_offset(ext, vp) } else { 0.0 });
+        }
+    }
+
+    /// The finger moved `d` px along the axis (its direction): the content follows it, past an end
+    /// as far as the unbounded coordinate goes. A pan starts from what shows, overscroll included.
+    fn pan(&mut self, now: Time, ext: f64, vp: f64, d: f32, physics: &ScrollPhysics) {
+        let u = match self.touch {
+            Touch::Pan { u } => u,
+            _ => {
+                let s = self.sample(now, ext, vp, physics);
+                s.offset + f64::from(rubber_band_inverse(s.over, vp as f32))
+            }
+        };
+        let u = u - f64::from(d);
+        let c = clamp_offset(u, ext, vp);
+        self.wanted = c;
+        self.base = c;
+        self.rel = Transition::settled(0.0);
+        self.touch = Touch::Pan { u };
+    }
+
+    /// The finger lifted at `v` px/s (the offset's direction), or the pan was cut (`v` 0): a pull
+    /// past an end springs back, a fast enough release flings, anything else rests.
+    fn lift(&mut self, now: Time, ext: f64, vp: f64, v: f32, physics: &ScrollPhysics) {
+        let Touch::Pan { u } = self.touch else { return };
+        let c = clamp_offset(u, ext, vp);
+        let over = self.sample(now, ext, vp, physics).over;
+        self.base = c;
+        self.rel = Transition::settled(0.0);
+        if over != 0.0 {
+            self.wanted = c;
+            self.touch = Touch::Bounce {
+                t0: now,
+                high: u > c,
+                over0: over,
+                v,
+                spring: physics.spring,
+            };
+        } else if v.is_finite() && v.abs() >= FLING_MIN {
+            let landing = c + f64::from(physics.decay.offset(v, physics.decay.duration(v)));
+            self.wanted = clamp_offset(landing, ext, vp);
+            self.touch = Touch::Fling {
+                t0: now,
+                from: c,
+                v,
+                physics: *physics,
+            };
+        } else {
+            self.jump(c);
+        }
+    }
+
+    /// A touch landed on the area: a motion in flight stops where the last frame drew it
+    /// (`drawn`), and an overscroll that was showing (`over`) keeps its place and springs back
+    /// from there, since nothing holds it.
+    fn catch(&mut self, now: Time, drawn: f64, over: f32, ext: f64, vp: f64) {
+        match self.touch {
+            Touch::Bounce { high, spring, .. } if over != 0.0 => {
+                self.touch = Touch::Bounce {
+                    t0: now,
+                    high,
+                    over0: over,
+                    v: 0.0,
+                    spring,
+                };
+            }
+            Touch::Pan { .. } => {}
+            Touch::None if !self.rel.in_flight(now) => {}
+            _ => self.jump(clamp_offset(drawn, ext, vp)),
         }
     }
 }
@@ -329,6 +639,10 @@ struct ScrollState {
     rendered: bool,
     /// The focused child the last frame saw inside the area.
     last_focus: Option<WidgetId>,
+    /// What the last frame ended showing: the offset and the overscroll, which a touch that lands
+    /// on a motion in flight stops at.
+    drawn: [f64; 2],
+    over: [f32; 2],
 }
 
 /// `Ui::scroll_to` and `Ui::scroll_shift` requests, taken by the area on its next call.
@@ -522,7 +836,12 @@ impl Ui<'_> {
         }
         link.taken.insert(pane, value);
         if value.is_finite() {
-            value - own_offset
+            let by = value - own_offset;
+            if by != 0.0 {
+                // The pane's area stops any fling or bounce before the pull applies (D350).
+                self.mark_link_pulled(pane);
+            }
+            by
         } else {
             0.0
         }
@@ -570,7 +889,11 @@ impl Ui<'_> {
     ) -> ScrollResponse<R> {
         let id = self.id(key);
         let now = self.time();
+        let physics = self.scroll_physics();
         let live = [opts.bars.0 != Bars::Disabled, opts.bars.1 != Bars::Disabled];
+        let vp = [f64::from(rect.w), f64::from(rect.h)];
+        let own = self.registration_mark();
+        let pulled = self.take_link_pulled(self.scope_id());
         let resp = self.interact(
             id,
             rect,
@@ -587,8 +910,13 @@ impl Ui<'_> {
         } else {
             (live[0], live[1])
         });
-        let vp = [f64::from(rect.w), f64::from(rect.h)];
         let mut st = std::mem::take(self.persistent::<ScrollState>(id));
+        // A finger pans the axes that have content past the viewport, as the last frame measured
+        // (D349); a sideways-wheel strip's wheel axes are not widened into pan axes.
+        self.set_pan_axes((
+            live[0] && st.extent[0] > vp[0],
+            live[1] && st.extent[1] > vp[1],
+        ));
         let Requests {
             mut reveals,
             shift_x,
@@ -603,11 +931,15 @@ impl Ui<'_> {
         let preserve = should_restore(st.rendered, st.key, opts.identity);
         st.key = opts.identity;
         st.rendered = true;
-        st.a[0].shift(shift_x);
-        st.a[1].shift(shift_y);
-
         let known = opts.extent.map(|(w, h)| [clean(w), clean(h)]);
         let ext_pre = known.unwrap_or(st.extent);
+        if pulled {
+            for ax in 0..2 {
+                st.a[ax].halt(now, ext_pre[ax], vp[ax], &physics);
+            }
+        }
+        st.a[0].shift(shift_x);
+        st.a[1].shift(shift_y);
         let wheel = self.theme().motion.resolve(&WHEEL, self.tier());
         let into_view = self.theme().motion.resolve(&INTO_VIEW, self.tier());
 
@@ -624,6 +956,9 @@ impl Ui<'_> {
                 let lines = [scroll_lines.0, scroll_lines.1][ax];
                 let pixels = [scroll_pixels.0, scroll_pixels.1][ax];
                 let a = &mut st.a[ax];
+                if (lines.is_finite() && lines != 0.0) || (pixels.is_finite() && pixels != 0.0) {
+                    a.halt(now, ext_pre[ax], vp[ax], &physics);
+                }
                 let mut cur = clamp_offset(a.wanted, ext_pre[ax], vp[ax]);
                 if lines.is_finite() && lines != 0.0 {
                     cur = clamp_offset(cur - f64::from(lines) * LINE, ext_pre[ax], vp[ax]);
@@ -638,11 +973,39 @@ impl Ui<'_> {
             for (nk, dir) in [(NamedKey::ArrowUp, 1.0), (NamedKey::ArrowDown, -1.0)] {
                 if live[pax] && self.consume_synthetic_key(id, nk) {
                     let a = &mut st.a[pax];
+                    a.halt(now, ext_pre[pax], vp[pax], &physics);
                     let cur = clamp_offset(a.wanted, ext_pre[pax], vp[pax]);
                     let to = clamp_offset(cur + dir * LINE, ext_pre[pax], vp[pax]);
                     a.step(now, to, wheel);
                 }
             }
+        }
+        // A finger: a touch that landed on a motion in flight stops it where it was drawn, a pan
+        // moves the axes it locked, and a lift hands them on to a fling or a bounce (D350).
+        let pan = self.pan(id);
+        if pan.caught {
+            for ax in 0..2 {
+                let (drawn, over) = (st.drawn[ax], st.over[ax]);
+                st.a[ax].catch(now, drawn, over, ext_pre[ax], vp[ax]);
+            }
+        }
+        let finger = self.release_velocity(id);
+        for ax in 0..2 {
+            let a = &mut st.a[ax];
+            let d = [pan.delta.0, pan.delta.1][ax];
+            if live[ax] && d.is_finite() && d != 0.0 {
+                a.pan(now, ext_pre[ax], vp[ax], d, &physics);
+            }
+            if matches!(a.touch, Touch::Pan { .. }) && !pan.active {
+                // The finger offset's direction is the opposite of the content's.
+                let v = if pan.ended {
+                    -[finger.0, finger.1][ax]
+                } else {
+                    0.0
+                };
+                a.lift(now, ext_pre[ax], vp[ax], v, &physics);
+            }
+            a.advance(now, ext_pre[ax], vp[ax]);
         }
         for a in &mut st.a {
             a.settle(now);
@@ -655,14 +1018,17 @@ impl Ui<'_> {
             for ax in 0..2 {
                 let c = clamp_offset(st.a[ax].wanted, k[ax], vp[ax]);
                 if !keep[ax] && c != st.a[ax].wanted {
-                    st.a[ax].jump(c);
+                    st.a[ax].clamp_to(c);
                 }
             }
         }
-        let shown = |st: &ScrollState, ext: &[f64; 2]| -> [f64; 2] {
-            [0, 1].map(|ax| clamp_offset(st.a[ax].value(now).0, ext[ax], vp[ax]))
+        let look = |st: &ScrollState, ext: &[f64; 2]| -> [Sample; 2] {
+            [0, 1].map(|ax| st.a[ax].sample(now, ext[ax], vp[ax], &physics))
         };
+        let shown =
+            |st: &ScrollState, ext: &[f64; 2]| -> [f64; 2] { look(st, ext).map(|s| s.offset) };
         let pre = shown(&st, &ext_pre);
+        let over_pre = look(&st, &ext_pre).map(|s| s.over);
 
         // The content, in the clip, translated by the negative offset.
         let view = ScrollView {
@@ -677,12 +1043,20 @@ impl Ui<'_> {
         }
         let (value, measured) = self.node_container(node, |ui| {
             ui.painter().push_clip(rect);
+            // The overscroll: the content, hit regions included, drawn past its end (D350).
+            let stretched = over_pre != [0.0, 0.0];
+            if stretched {
+                ui.painter().push_translate(-over_pre[0], -over_pre[1]);
+            }
             if translate {
                 ui.painter()
                     .push_translate(-(pre[0] as f32), -(pre[1] as f32));
             }
             let out = content(ui, &view);
             if translate {
+                ui.painter().pop_translate();
+            }
+            if stretched {
                 ui.painter().pop_translate();
             }
             ui.painter().pop_clip();
@@ -703,7 +1077,7 @@ impl Ui<'_> {
             for ax in 0..2 {
                 let c = clamp_offset(st.a[ax].wanted, ext[ax], vp[ax]);
                 if c != st.a[ax].wanted {
-                    st.a[ax].jump(c);
+                    st.a[ax].clamp_to(c);
                 }
             }
         }
@@ -749,6 +1123,7 @@ impl Ui<'_> {
                 else {
                     continue;
                 };
+                a.halt(now, ext[ax], vp[ax], &physics);
                 if (to - cur).abs() > SNAP_DISTANCE * vp[ax] {
                     a.jump(to);
                 } else {
@@ -783,6 +1158,14 @@ impl Ui<'_> {
                         continue;
                     }
                     let a = &mut st.a[pax];
+                    if acts
+                        && matches!(
+                            k,
+                            NamedKey::PageUp | NamedKey::PageDown | NamedKey::Home | NamedKey::End
+                        )
+                    {
+                        a.halt(now, ext[pax], vp[pax], &physics);
+                    }
                     let cur = clamp_offset(a.wanted, ext[pax], vp[pax]);
                     let to = match k {
                         NamedKey::PageUp => cur - vp[pax],
@@ -829,6 +1212,7 @@ impl Ui<'_> {
         {
             let drag = self.scrollbar(id.with("bar-y"), Axis::Vertical, &g, reveal);
             if drag != 0.0 {
+                st.a[1].halt(now, ext[1], vp[1], &physics);
                 let cur = clamp_offset(st.a[1].wanted, ext[1], vp[1]);
                 st.a[1].jump(clamp_offset(cur + g.offset_delta(drag), ext[1], vp[1]));
             }
@@ -838,19 +1222,27 @@ impl Ui<'_> {
         {
             let drag = self.scrollbar(id.with("bar-x"), Axis::Horizontal, &g, reveal);
             if drag != 0.0 {
+                st.a[0].halt(now, ext[0], vp[0], &physics);
                 let cur = clamp_offset(st.a[0].wanted, ext[0], vp[0]);
                 st.a[0].jump(clamp_offset(cur + g.offset_delta(drag), ext[0], vp[0]));
             }
         }
 
         // Settled or moving; a change after the content drew needs a catch-up frame.
-        if st.a.iter().any(|a| a.value(now).1) {
+        let end = look(&st, &ext);
+        let moving = end.iter().any(|s| s.moving);
+        if moving {
             self.mark_moving();
         }
-        let fin = shown(&st, &ext);
-        if fin != pre {
+        // Hit regions are recorded as the area's call began, so the flag is set on its own region.
+        self.set_scroll_moving(own, moving);
+        let fin = end.map(|s| s.offset);
+        let over_fin = end.map(|s| s.over);
+        if fin != pre || over_fin != over_pre {
             self.request_catch_up();
         }
+        st.drawn = fin;
+        st.over = over_fin;
 
         let nax = usize::from(ext[1] > vp[1] || ext[0] <= vp[0]);
         let max = max_offset(ext[nax], vp[nax]);

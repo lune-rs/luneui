@@ -57,9 +57,10 @@ fn run(h: &mut UiHarness, l: &Layout) -> Seen {
         let mut ids = Vec::new();
         for r in &l.regions {
             let id = ui.id(r.0);
+            let mark = ui.registration_mark();
             ui.interact(id, r.1, Sense::SCROLL);
             ui.set_pan_axes(r.2);
-            ui.set_scroll_moving(r.3);
+            ui.set_scroll_moving(mark, r.3);
             ids.push((r.0, id));
         }
         let b = ui.id("button");

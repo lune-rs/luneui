@@ -104,7 +104,6 @@ struct Pan {
 
 /// What a region read of the touch pan this frame (D349).
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
-#[allow(dead_code)] // the scroll area reads it (M3 step 5)
 pub(crate) struct PanReading {
     /// The finger's travel this frame on the locked axes, in the finger's direction.
     pub(crate) delta: (f32, f32),

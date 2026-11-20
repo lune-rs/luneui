@@ -49,6 +49,7 @@ use crate::shortcuts::{CommandId, Scope, Shortcuts};
 use crate::strings::{ArgFormat, StringTable};
 use crate::text::TextSystem;
 use crate::theme::Theme;
+use crate::widgets::scroll_area::ScrollPhysics;
 
 use access::Routed;
 use keys::KeyPress;
@@ -137,6 +138,11 @@ pub struct Ui<'a> {
     /// The keep-alive scopes open around the current call, outermost first.
     alive: Vec<WidgetId>,
     enabled: bool,
+    /// The physics the scroll areas called now run on (D350), set by [`Ui::with_scroll_physics`].
+    scroll_physics: ScrollPhysics,
+    /// The scope whose scroll link pulled it away from where it stood this frame (D350): its area
+    /// stops a fling or a bounce before the pull applies.
+    link_pulled: Option<WidgetId>,
     pointer: PointerFrame,
     /// The pinch this frame reads, with the widget it belongs to.
     pinch: Option<(WidgetId, Pinch)>,
@@ -585,6 +591,8 @@ impl<'a> Ui<'a> {
             scopes: vec![WidgetId::ROOT],
             alive: Vec::new(),
             enabled: true,
+            scroll_physics: ScrollPhysics::default(),
+            link_pulled: None,
             pointer,
             pinch,
             registered: Vec::new(),
@@ -1171,24 +1179,23 @@ impl<'a> Ui<'a> {
 
     /// Tells the region the last `interact` registered which axes it has content to pan a touch
     /// on (D349): a scroll area calls this right after its own `interact`.
-    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
     pub(crate) fn set_pan_axes(&mut self, axes: (bool, bool)) {
         if let Some(r) = self.registered.last_mut() {
             r.pan_axes = axes;
         }
     }
 
-    /// Tells the region the last `interact` registered whether it is moving (a fling, a bounce, a
-    /// step or a reveal in flight), so a touch press catches it (D349).
-    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
-    pub(crate) fn set_scroll_moving(&mut self, moving: bool) {
-        if let Some(r) = self.registered.last_mut() {
+    /// Tells the region registered at `mark` (the [`Self::registration_mark`] before its
+    /// `interact`) whether it is moving (a fling, a bounce, a step or a reveal in flight), so a
+    /// touch press catches it (D349). A scroll area calls it when its own call ends, so the flag
+    /// is what the frame's last word on the motion was.
+    pub(crate) fn set_scroll_moving(&mut self, mark: usize, moving: bool) {
+        if let Some(r) = self.registered.get_mut(mark) {
             r.moving = moving;
         }
     }
 
     /// What the region `id` read of the touch pan this frame.
-    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
     pub(crate) fn pan(&self, id: WidgetId) -> PanReading {
         let p = &self.pointer;
         PanReading {
@@ -1340,6 +1347,40 @@ impl<'a> Ui<'a> {
         self.disabled.push(start..self.painter.hits.len());
         self.enabled = true;
         r
+    }
+
+    /// Runs `f` with `physics` for every scroll area called inside it: the fling's decay, the
+    /// overscroll at the ends and the spring that brings it back (D350). The default, outside any
+    /// scope, is [`ScrollPhysics::default`]. A fling keeps the physics it started with. The outer
+    /// value is back when `f` returns.
+    pub fn with_scroll_physics<R>(
+        &mut self,
+        physics: ScrollPhysics,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let outer = std::mem::replace(&mut self.scroll_physics, physics);
+        let r = f(self);
+        self.scroll_physics = outer;
+        r
+    }
+
+    /// Notes that the scroll link pulled the pane in scope `pane` this frame.
+    pub(crate) fn mark_link_pulled(&mut self, pane: WidgetId) {
+        self.link_pulled = Some(pane);
+    }
+
+    /// Whether a link pulled the pane in scope `pane` since its area last asked; asking clears it.
+    pub(crate) fn take_link_pulled(&mut self, pane: WidgetId) -> bool {
+        let pulled = self.link_pulled == Some(pane);
+        if pulled {
+            self.link_pulled = None;
+        }
+        pulled
+    }
+
+    /// The physics the scroll area called now runs on.
+    pub(crate) fn scroll_physics(&self) -> ScrollPhysics {
+        self.scroll_physics
     }
 
     /// Puts `text` on the clipboard; the last write of a frame is the one sent.
