@@ -37,6 +37,7 @@ the clip (D265); small APIs (D266, D267); buttons, the tab shine, the tree look,
 | `crates/lune-ui-platform` | OS glass (`Material`) per platform, the tray item, the popover window; the only crate with `unsafe` |
 | `crates/lune-ui` | Facade: `lib.rs` only, re-exports the four crates at the old paths |
 | `apps/gallery` | A page registry (legacy Painter-API pages and `Ui` pages), a glass window that is the showcase (`showcase/`, below), `--dump <dir>` (offscreen PNG frames on a headless device, no window), `--list`, `--bench` (frame-time probes). App code, outside `crates/` (D12): it bundles fonts |
+| `apps/demo` | The smallest consumer (D338): one window, one frame (heading, shapes, a frost surface, a button, edge markers), `--probe` and `--frames`; builds for the desktop, iOS (`aarch64-apple-ios`, `-sim`) and Android (`android_main`). Facade only; see `docs/mobile.md` |
 | `tools/dump-compare` | Compares two dirs of PNG frame dumps pixel by pixel (the pixel gate's compare tool) |
 | `scripts/` | Gates and generators, see "Boundary rules" and "Pixel gates"; `export-snapshot.sh` writes the snapshot an app vendors (D239) |
 | `docs/consuming.md` | How an app takes the toolkit in before a remote exists: what the snapshot holds, the app's duties, the release size, the migration map from Luneterm 296cfdc |

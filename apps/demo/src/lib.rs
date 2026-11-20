@@ -434,3 +434,25 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         .map_err(|e| format!("event loop: {e}"))?;
     app.error.map_or(Ok(()), Err)
 }
+
+/// The Android entry point: the one symbol android-activity's native glue looks up. It builds the
+/// event loop over the activity and runs the same [`run`] as the other targets.
+#[cfg(target_os = "android")]
+#[allow(unsafe_code)]
+// SAFETY: `android_main` is the name android-activity's glue resolves at start-up, and no other item
+// in this crate or its dependencies uses it, so exporting it unmangled clashes with nothing.
+#[unsafe(no_mangle)]
+fn android_main(app: winit::platform::android::activity::AndroidApp) {
+    use winit::platform::android::EventLoopBuilderExtAndroid;
+
+    let event_loop = match EventLoop::builder().with_android_app(app).build() {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("event loop: {e}");
+            return;
+        }
+    };
+    if let Err(e) = run(event_loop, Options::default()) {
+        eprintln!("{e}");
+    }
+}

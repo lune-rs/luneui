@@ -6,7 +6,8 @@ How the toolkit builds for the phone targets, how the demo runs on an iOS simula
 
 The phone targets are a rustup target each: `rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android`.
 
-- The five library crates and `apps/demo` pass `cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui -p demo --lib --bins --locked --target <target> -- -D warnings` for `aarch64-apple-ios` and `aarch64-apple-ios-sim`.
+- The five library crates and `apps/demo` pass `cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui -p demo --lib --bins --locked --target <target> -- -D warnings` for `aarch64-apple-ios`, `aarch64-apple-ios-sim` and `aarch64-linux-android`; `scripts/check-targets.sh` runs that line as its `ios`, `ios-sim` and `android` halves (D340).
+- Android: that clippy passes with no NDK installed (winit's `android-native-activity` compiles no C, and the activity feature is the demo's: `[target.'cfg(target_os = "android")'.dependencies]` in `apps/demo/Cargo.toml`). The demo's `android_main` (`apps/demo/src/lib.rs`) is the one exported symbol android-activity looks up; a `cdylib` and an APK are M8's, nothing has run on Android.
 - `arboard` is compiled only off iOS and Android (`lune-ui-winit/src/platform/clipboard_os.rs`); on both phones `clipboard_none.rs` answers every read with `ClipboardUnavailable` and drops every write (M4 gives iOS a real one).
 - `lune-ui-wgpu` asks the device for wgpu's default limits lowered to the adapter's (D337): the simulator's Metal offers 15 inter-stage shader variables, the default asks 16.
 - `lune-ui-winit --features accesskit` also passes clippy for `aarch64-apple-ios-sim` (`accesskit_ios` 0.2.0 is pulled in); input for M4's accessibility bridge.

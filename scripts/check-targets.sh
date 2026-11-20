@@ -9,7 +9,14 @@
 #            luneui-linux-{target,cargo,rustup}: created if missing, never removed. The container
 #            is --rm. Skipped (not failed) when docker is missing, the daemon is not running, or
 #            --skip-linux is given. This script never starts Docker.
-# Prints `windows: passed|FAILED`, `macos: passed|FAILED` and `linux: passed|FAILED|skipped (<reason>)`.
+#   ios, ios-sim, android
+#            cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui
+#            -p demo --lib --bins --locked --target <t> -- -D warnings, for aarch64-apple-ios,
+#            aarch64-apple-ios-sim and aarch64-linux-android (compile checks only, no run; the five library
+#            crates and the demo, never a library crate alone, never the host tools or test targets; the
+#            same rustup hint when a target is not installed)
+# Prints `windows: passed|FAILED`, `macos: passed|FAILED`, `ios: passed|FAILED`, `ios-sim: passed|FAILED`,
+# `android: passed|FAILED` and `linux: passed|FAILED|skipped (<reason>)`.
 # Exit codes: 0 every half that ran passed; 1 a check failed; 2 usage error.
 set -euo pipefail
 
@@ -54,6 +61,26 @@ else
   echo "macos: FAILED (run: rustup target add $MAC_TARGET)"
   failed=1
 fi
+
+# Mobile halves: the library crates and the demo for the phone targets.
+mobile_half() {
+  local name="$1" target="$2"
+  if grep -qx "$target" <<< "$installed"; then
+    if cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui \
+      -p demo --lib --bins --locked --target "$target" -- -D warnings; then
+      echo "$name: passed"
+    else
+      echo "$name: FAILED"
+      failed=1
+    fi
+  else
+    echo "$name: FAILED (run: rustup target add $target)"
+    failed=1
+  fi
+}
+mobile_half ios aarch64-apple-ios
+mobile_half ios-sim aarch64-apple-ios-sim
+mobile_half android aarch64-linux-android
 
 # Linux half.
 ensure_volumes() {
