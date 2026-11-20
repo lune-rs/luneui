@@ -655,14 +655,25 @@ impl Player {
         self.stage = stage;
     }
 
-    /// A player for the gallery's window size.
+    /// A player for the gallery's window size (the tests; the dump runs [`Self::for_scene_at`]).
+    #[cfg(test)]
     pub(crate) fn for_scene(page: &'static str, scene: &UiScene) -> Self {
-        let (w, h) = scene.window();
+        Self::for_scene_at(page, scene, scene.window(), scene.scale)
+    }
+
+    /// A player for `scene` in a window of `window` logical pixels at `scale` (the single-scene
+    /// dump's `--window` and `--scale`); the scene's script and state are its own.
+    pub(crate) fn for_scene_at(
+        page: &'static str,
+        scene: &UiScene,
+        window: (u32, u32),
+        scale: f32,
+    ) -> Self {
         Self::new(
             page,
             (scene.state)(),
-            (w as f32, h as f32),
-            scene.scale,
+            (window.0 as f32, window.1 as f32),
+            scale,
             scene.tier,
         )
     }
@@ -734,13 +745,25 @@ pub(crate) fn meets_expectation(expect: Expect, repaint: Repaint) -> bool {
 }
 
 /// Runs `scene` of `page`: frame 0, the script, then the capture frame. Returns the capture
-/// frame's scene and output.
+/// frame's scene and output (the tests; the dump runs [`run_scene_at`]).
+#[cfg(test)]
 pub(crate) fn run_scene(
     page: &'static str,
     scene: &UiScene,
     text: &mut dyn TextSystem,
 ) -> Result<(Scene, FrameOutput), String> {
-    let mut player = Player::for_scene(page, scene);
+    run_scene_at(page, scene, scene.window(), scene.scale, text)
+}
+
+/// [`run_scene`] in a window of `window` logical pixels at `scale`.
+pub(crate) fn run_scene_at(
+    page: &'static str,
+    scene: &UiScene,
+    window: (u32, u32),
+    scale: f32,
+    text: &mut dyn TextSystem,
+) -> Result<(Scene, FrameOutput), String> {
+    let mut player = Player::for_scene_at(page, scene, window, scale);
     player.frame(text, 0, &[])?;
     for step in scene.script {
         player.frame(text, step.at_ms, step.events)?;
