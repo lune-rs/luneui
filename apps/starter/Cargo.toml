@@ -1,0 +1,17 @@
+[package]
+name = "starter"
+description = "The smallest app on the toolkit: one window, one screen to copy (a title, a text field, a button, a list)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+lune-ui = { path = "../../crates/lune-ui" }
+winit = "0.30"
+wgpu = "30"
+pollster = "0.4"
+
+[lints]
+workspace = true
