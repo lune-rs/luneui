@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1107 items. Left out and counted: 3379 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4869 items of the omitted impls, 1308 items of the trait impls shown as one line, 2262 synthetic impls.
+94 modules, 1111 items. Left out and counted: 3415 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4921 items of the omitted impls, 1324 items of the trait impls shown as one line, 2286 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -28,7 +28,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::drag`](lune-ui-core/drag.md) | 23 |
 | [`lune_ui_core::icon`](lune-ui-core/icon.md) | 31 |
 | [`lune_ui_core::image`](lune-ui-core/image.md) | 11 |
-| [`lune_ui_core::input`](lune-ui-core/input.md) | 19 |
+| [`lune_ui_core::input`](lune-ui-core/input.md) | 23 |
 | [`lune_ui_core::json`](lune-ui-core/json.md) | 11 |
 | [`lune_ui_core::layout`](lune-ui-core/layout.md) | 11 |
 | [`lune_ui_core::motion`](lune-ui-core/motion.md) | 27 |
@@ -154,14 +154,14 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui` (`lune_ui`)
 
-7 modules, 149 re-exports shown as links.
+7 modules, 153 re-exports shown as links.
 
 | Module | Re-exports |
 | --- | --- |
 | [`lune_ui`](lune-ui/index.md) | 37 |
 | [`lune_ui::access`](lune-ui/access.md) | 19 |
 | [`lune_ui::desktop`](lune-ui/desktop.md) | 20 |
-| [`lune_ui::input`](lune-ui/input.md) | 27 |
+| [`lune_ui::input`](lune-ui/input.md) | 31 |
 | [`lune_ui::text`](lune-ui/text.md) | 16 |
 | [`lune_ui::tray`](lune-ui/tray.md) | 18 |
 | [`lune_ui::window`](lune-ui/window.md) | 12 |
@@ -974,6 +974,7 @@ Every top-level item of the four owning crates, by name.
 - [`plus_rect`](lune-ui-core/widgets/stepper.md#fn.plus_rect) - function, `lune_ui_core::widgets::stepper`
 - [`pointer`](lune-ui-platform/desktop.md#fn.pointer) - function, `lune_ui_platform::desktop`
 - [`PointerButton`](lune-ui-core/input.md#enum.PointerButton) - enum, `lune_ui_core::input`
+- [`PointerKind`](lune-ui-core/input.md#enum.PointerKind) - enum, `lune_ui_core::input`
 - [`polyline_length`](lune-ui-core/paint.md#fn.polyline_length) - function, `lune_ui_core::paint`
 - [`popover_attributes`](lune-ui-winit/window.md#fn.popover_attributes) - function, `lune_ui_winit::window`
 - [`PopoverOptions`](lune-ui-core/widgets/popover.md#struct.PopoverOptions) - struct, `lune_ui_core::widgets::popover`
@@ -1267,7 +1268,10 @@ Every top-level item of the four owning crates, by name.
 - [`Tone`](lune-ui-core/widgets/tone.md#enum.Tone) - enum, `lune_ui_core::widgets::tone`
 - [`ToolbarCols`](lune-ui-core/widgets/toolbar.md#struct.ToolbarCols) - struct, `lune_ui_core::widgets::toolbar`
 - [`ToolbarOptions`](lune-ui-core/widgets/toolbar.md#struct.ToolbarOptions) - struct, `lune_ui_core::widgets::toolbar`
+- [`TouchEvent`](lune-ui-core/input.md#struct.TouchEvent) - struct, `lune_ui_core::input`
+- [`TouchId`](lune-ui-core/input.md#struct.TouchId) - struct, `lune_ui_core::input`
 - [`touching`](lune-ui-core/dock.md#fn.touching) - function, `lune_ui_core::dock`
+- [`TouchPhase`](lune-ui-core/input.md#enum.TouchPhase) - enum, `lune_ui_core::input`
 - [`Track`](lune-ui-core/layout.md#enum.Track) - enum, `lune_ui_core::layout`
 - [`track`](lune-ui-core/widgets/slider.md#fn.track) - function, `lune_ui_core::widgets::slider`
 - [`track`](lune-ui-core/widgets/toggle.md#fn.track) - function, `lune_ui_core::widgets::toggle`

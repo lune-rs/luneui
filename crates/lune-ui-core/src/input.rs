@@ -4,12 +4,15 @@
 //!
 //! All positions, sizes and pixel scroll amounts are logical (physical ÷ scale). Time is whatever
 //! the app supplies; the toolkit never reads a clock. File drops arrive as events that carry a path
-//! the toolkit never opens. Touch, gestures, theme and occlusion events are not modelled yet.
+//! the toolkit never opens. Touch arrives as [`Event::Touch`] and the window's insets as
+//! [`Event::SafeArea`] and [`Event::KeyboardInset`]; gestures, theme and occlusion events are not
+//! modelled yet.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::access::{AccessAction, SemanticTree};
+use crate::layout::Insets;
 use crate::motion::{Cadence, Time};
 use crate::paint::Rect;
 use crate::shortcuts::CommandId;
@@ -81,6 +84,14 @@ pub enum Event {
     FileHoverCancelled,
     /// A file was dropped on the window, with the pointer at `pos`. One event per file.
     FileDrop { pos: (f32, f32), path: PathBuf },
+    /// A touch contact changed phase (see [`TouchEvent`]).
+    Touch(TouchEvent),
+    /// The window edges a system bar, notch or rounded corner covers, in logical pixels. The
+    /// core keeps the last one.
+    SafeArea(Insets),
+    /// The part of the window an on-screen keyboard covers, in logical pixels. The core keeps the
+    /// last one; `Insets::ZERO` when the keyboard is hidden.
+    KeyboardInset(Insets),
 }
 
 /// A pointer button.
@@ -92,6 +103,78 @@ pub enum PointerButton {
     Back,
     Forward,
     Other(u16),
+}
+
+/// A touch contact's identifier. The platform gives it, unique among the contacts down at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TouchId(u64);
+
+impl TouchId {
+    /// The identifier the platform gave a contact.
+    pub const fn new(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    /// The raw identifier.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// Where a touch contact is in its life.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TouchPhase {
+    /// The contact went down.
+    Started,
+    /// The contact moved while down.
+    Moved,
+    /// The contact lifted.
+    Ended,
+    /// The platform took the contact away (a system gesture, for example); it did not lift.
+    Cancelled,
+}
+
+/// One touch contact's change at logical `pos`. `force` is 0 to 1 where the device reports
+/// pressure, else `None`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct TouchEvent {
+    pub id: TouchId,
+    pub phase: TouchPhase,
+    pub pos: (f32, f32),
+    pub force: Option<f32>,
+}
+
+impl TouchEvent {
+    /// A contact's change with no pressure reading.
+    pub const fn new(id: TouchId, phase: TouchPhase, pos: (f32, f32)) -> Self {
+        Self {
+            id,
+            phase,
+            pos,
+            force: None,
+        }
+    }
+
+    /// The same change with a pressure reading of `force` (0 to 1).
+    pub const fn with_force(self, force: f32) -> Self {
+        Self {
+            id: self.id,
+            phase: self.phase,
+            pos: self.pos,
+            force: Some(force),
+        }
+    }
+}
+
+/// What the pointer is: a mouse, or a touch contact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum PointerKind {
+    #[default]
+    Mouse,
+    Touch,
 }
 
 /// A scroll amount, signed as the platform gives it.
@@ -436,7 +519,9 @@ pub fn printable(text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CursorIcon, CursorIcon as C, printable};
+    use super::{
+        CursorIcon, CursorIcon as C, PointerKind, TouchEvent, TouchId, TouchPhase, printable,
+    };
 
     /// The declaration index of every icon. No wildcard: a variant added without an entry here
     /// stops the build.
@@ -495,5 +580,29 @@ mod tests {
         assert_eq!(printable("a\tb"), Some("ab".to_owned()));
         assert_eq!(printable(""), None);
         assert_eq!(printable("é"), Some("é".to_owned()));
+    }
+
+    #[test]
+    fn touch_event_constructors_set_the_force() {
+        let id = TouchId::new(3);
+        let plain = TouchEvent::new(id, TouchPhase::Started, (1.0, 2.0));
+        assert_eq!(plain.force, None);
+        assert_eq!(plain.id, id);
+        assert_eq!(
+            plain.with_force(0.5),
+            TouchEvent {
+                id,
+                phase: TouchPhase::Started,
+                pos: (1.0, 2.0),
+                force: Some(0.5),
+            }
+        );
+    }
+
+    #[test]
+    fn the_pointer_starts_as_a_mouse_and_a_touch_id_round_trips() {
+        assert_eq!(PointerKind::default(), PointerKind::Mouse);
+        assert_eq!(TouchId::new(7).get(), 7);
+        assert!(TouchId::new(7) < TouchId::new(8));
     }
 }

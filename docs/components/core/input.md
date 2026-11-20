@@ -11,7 +11,7 @@ summary: Plain-data RawInput in, FrameOutput out; the windowing adapter translat
 
 ## What it is
 
-`RawInput` (logical size, scale, app-supplied time as `Duration`, focus, and the frame's `Event`s in arrival order), `Event` (pointer move, leave and button, scroll, key, text, IME), `PointerButton`, `ScrollDelta`, `Key`, `NamedKey`, `Modifiers`, `ImeEvent`; and `FrameOutput` (`CursorIcon`, IME area, `WindowCommand`s). `printable` is the one rule for when a key press also emits text. Coordinates are logical (physical divided by scale). `Event`, `NamedKey`, `CursorIcon` and `WindowCommand` are `#[non_exhaustive]`. Touch, gestures, file drops, theme and occlusion events are not modelled yet.
+`RawInput` (logical size, scale, app-supplied time as `Duration`, focus, and the frame's `Event`s in arrival order), `Event` (pointer move, leave and button, scroll, key, text, IME), `PointerButton`, `ScrollDelta`, `Key`, `NamedKey`, `Modifiers`, `ImeEvent`; and `FrameOutput` (`CursorIcon`, IME area, `WindowCommand`s). `printable` is the one rule for when a key press also emits text. Coordinates are logical (physical divided by scale). `Event`, `NamedKey`, `CursorIcon` and `WindowCommand` are `#[non_exhaustive]`. Touch and the window insets arrive as events (`Event::Touch`, `Event::SafeArea`, `Event::KeyboardInset`; D343, D345); gestures, theme and occlusion events are not modelled yet.
 
 ## Needs
 
@@ -49,7 +49,8 @@ Moved, today (`crates/lune-ui-core/src/input.rs`):
 Additions (new variants on the `#[non_exhaustive]` enums, so no break) [D35]:
 - M4: `Event::Access(AccessAction { target: WidgetId, action, value })`, routed by the `Ui` as the matching pointer or key input [infra.accessibility]. `FrameOutput` gains `repaint`, the semantic `tree`, `focused` and `clipboard` requests (the shapes are in [core.ui] and [platform.clipboard]); the existing three fields keep their types [R crates/lune-ui-core/src/input.rs:155-164].
 - M10: file-drop events `Event::FileHover { pos, path }`, `Event::FileHoverCancelled` and `Event::FileDrop { pos, path }` (one event per file; `pos` is the last pointer position, because winit's events carry none) [D43], [derived: winit 0.30.13 `WindowEvent::HoveredFile(PathBuf)`, `HoveredFileCancelled`, `DroppedFile(PathBuf)` at `src/event.rs:180-192` in the cargo registry].
-- M10: touch and gesture events stay out of v1 (no source needs them) [D35].
+- M10: gesture events stay out of v1 (no source needs them) [D35]. Touch is M2 (below).
+- M2: `Event::Touch(TouchEvent)`, with `TouchEvent { id: TouchId, phase: TouchPhase, pos, force: Option<f32> }`, `TouchPhase` (`Started`, `Moved`, `Ended`, `Cancelled`) and `PointerKind` (`Mouse`, the default; `Touch`); `TouchId` has a private field and `new`/`get`; the three enums and `TouchEvent` are `#[non_exhaustive]`; `TouchEvent` has `new` and `with_force` [D343]. `Event::SafeArea(Insets)` and `Event::KeyboardInset(Insets)` carry the window's insets; the core keeps the last of each [D345]. The `Ui` readers (`Ui::pointer_kind`, `Ui::safe_area`, `Ui::keyboard_inset`) and the touch reduction are the next M2 change; until then frames are unchanged.
 - Clipboard text arriving from the OS is an event the clipboard entry defines; `core.input` reserves the variant in M4, with the `clipboard` field of `FrameOutput` [platform.clipboard].
 - Coordinates stay logical (physical divided by scale) and time stays app-supplied: the toolkit reads no clock [R crates/lune-ui-core/src/input.rs:5-6], [D3].
 
