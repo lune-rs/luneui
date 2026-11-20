@@ -1,0 +1,7 @@
+# Base integration tests that scripts/check-compat.sh part 2 skips. Ships with no entries (D342).
+#
+# An entry needs a plan revision that names the test and says what it pins and why the pixel and API
+# checks do not protect that. One entry per line, four fields separated by `|`:
+#   <path of the test file> | <test name> | <reason> | <D-row>
+# The test name is passed to the test binaries as `--skip <name>`, so it skips every test of that
+# name in every binary of the run. A line starting with `#` and a blank line are ignored.
