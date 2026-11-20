@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1118 items. Left out and counted: 3433 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4947 items of the omitted impls, 1330 items of the trait impls shown as one line, 2298 synthetic impls.
+94 modules, 1119 items. Left out and counted: 3442 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4960 items of the omitted impls, 1333 items of the trait impls shown as one line, 2304 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -43,7 +43,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::theme::lunegit_dark`](lune-ui-core/theme/lunegit_dark.md) | 6 |
 | [`lune_ui_core::theme::near_black`](lune-ui-core/theme/near_black.md) | 13 |
 | [`lune_ui_core::tray`](lune-ui-core/tray.md) | 11 |
-| [`lune_ui_core::ui`](lune-ui-core/ui.md) | 11 |
+| [`lune_ui_core::ui`](lune-ui-core/ui.md) | 12 |
 | [`lune_ui_core::widgets`](lune-ui-core/widgets.md) | 0 |
 | [`lune_ui_core::widgets::badge`](lune-ui-core/widgets/badge.md) | 8 |
 | [`lune_ui_core::widgets::banner`](lune-ui-core/widgets/banner.md) | 15 |
@@ -964,6 +964,7 @@ Every top-level item of the four owning crates, by name.
 - [`PickerResponse`](lune-ui-core/widgets/search_picker.md#struct.PickerResponse) - struct, `lune_ui_core::widgets::search_picker`
 - [`PieOptions`](lune-ui-core/widgets/pie_chart.md#struct.PieOptions) - struct, `lune_ui_core::widgets::pie_chart`
 - [`PieSlice`](lune-ui-core/widgets/pie_chart.md#struct.PieSlice) - struct, `lune_ui_core::widgets::pie_chart`
+- [`Pinch`](lune-ui-core/ui.md#struct.Pinch) - struct, `lune_ui_core::ui`
 - [`PITCH`](lune-ui-core/widgets/icon_rail.md#constant.PITCH) - constant, `lune_ui_core::widgets::icon_rail`
 - [`PITCH`](lune-ui-core/widgets/nav_item.md#constant.PITCH) - constant, `lune_ui_core::widgets::nav_item`
 - [`place`](lune-ui-core/widgets/popover.md#fn.place) - function, `lune_ui_core::widgets::popover`

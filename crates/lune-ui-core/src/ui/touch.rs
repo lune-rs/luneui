@@ -7,6 +7,8 @@ use std::time::Duration;
 use crate::input::{Event, Modifiers, PointerButton, PointerKind, TouchEvent, TouchId, TouchPhase};
 use crate::motion::Time;
 
+use super::WidgetId;
+
 /// How long, after the last touch ends, the pointer events a platform copies from a touch are
 /// dropped (app time, D5).
 pub(crate) const MOUSE_AFTER_TOUCH: Time = Duration::from_millis(500);
@@ -22,17 +24,60 @@ pub(crate) enum Step<'e> {
     Cancel,
 }
 
+/// Two touches moving apart or together over the widget the first one pressed (D348), read through
+/// [`Ui::pinch`](super::Ui::pinch).
+///
+/// Nothing is cancelled by a second touch: the first keeps driving the pointer, so a widget that
+/// also senses drag sees both.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[non_exhaustive]
+pub struct Pinch {
+    /// The midpoint of the two touches now, in logical pixels.
+    pub center: (f32, f32),
+    /// The midpoint when the pinch began.
+    pub start_center: (f32, f32),
+    /// The distance between the touches now over the distance when the pinch began (a start
+    /// distance under 1 px counts as 1 px): above 1 spread, below 1 pinched.
+    pub scale: f32,
+    /// This is the pinch's first frame.
+    pub started: bool,
+    /// This is the pinch's last frame: a touch of the two ended, and the values are the last ones.
+    pub ended: bool,
+}
+
+/// A pinch in progress: the second touch it follows and the reading it started from.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PinchRun {
+    second: TouchId,
+    /// The widget the primary touch held when the pinch began; `None` when it held nothing.
+    target: Option<WidgetId>,
+    d0: f32,
+    last: Pinch,
+}
+
+fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
+    (a.0 - b.0).hypot(a.1 - b.1)
+}
+
+fn mid(a: (f32, f32), b: (f32, f32)) -> (f32, f32) {
+    ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0)
+}
+
 /// The touches that are down and the mouse guard, held in the store between frames.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct TouchState {
-    /// The contacts that are down, in the order they started.
-    down: Vec<TouchId>,
+    /// The contacts that are down with their last position, in the order they started.
+    down: Vec<(TouchId, (f32, f32))>,
     /// The contact that drives the pointer; `None` while none does.
     primary: Option<TouchId>,
     /// The mouse guard holds until this time passes.
     quiet_until: Option<Time>,
     /// The kind of the current or last press.
     pub(crate) kind: PointerKind,
+    /// The pinch in progress, if any.
+    pinch: Option<PinchRun>,
+    /// A pinch began since the last time every touch was up: no other begins before then.
+    pinched: bool,
 }
 
 impl TouchState {
@@ -44,7 +89,56 @@ impl TouchState {
     fn lifted(&mut self, time: Time) {
         if self.down.is_empty() {
             self.quiet_until = Some(time + MOUSE_AFTER_TOUCH);
+            self.pinched = false;
         }
+    }
+
+    fn pos_of(&self, id: TouchId) -> Option<(f32, f32)> {
+        self.down.iter().find(|d| d.0 == id).map(|d| d.1)
+    }
+
+    /// The pinch reading after a frame's events, as `(target, reading)` when it has a widget to
+    /// go to; `held` is the widget the pointer's press holds now. A pinch begins when a second
+    /// touch is down beside the primary and ends when either of the two is up (D348).
+    pub(crate) fn pinch_frame(&mut self, held: Option<WidgetId>) -> Option<(WidgetId, Pinch)> {
+        let primary = self.primary.and_then(|id| self.pos_of(id).map(|p| (id, p)));
+        let run = match self.pinch {
+            None => {
+                let (pid, p) = primary.filter(|_| !self.pinched)?;
+                let (second, q) = *self.down.iter().find(|d| d.0 != pid)?;
+                self.pinched = true;
+                let d0 = dist(p, q).max(1.0);
+                let c = mid(p, q);
+                PinchRun {
+                    second,
+                    target: held,
+                    d0,
+                    last: Pinch {
+                        center: c,
+                        start_center: c,
+                        scale: dist(p, q) / d0,
+                        started: true,
+                        ended: false,
+                    },
+                }
+            }
+            Some(mut run) => {
+                match (primary, self.pos_of(run.second)) {
+                    (Some((_, p)), Some(q)) => {
+                        run.last.center = mid(p, q);
+                        run.last.scale = dist(p, q) / run.d0;
+                        run.last.started = false;
+                    }
+                    _ => {
+                        run.last.started = false;
+                        run.last.ended = true;
+                    }
+                }
+                run
+            }
+        };
+        self.pinch = (!run.last.ended).then_some(run);
+        run.target.map(|id| (id, run.last))
     }
 
     /// The steps `events` take, in arrival order, at app time `time`.
@@ -81,7 +175,7 @@ impl TouchState {
     }
 
     fn touch(&mut self, t: TouchEvent, time: Time, steps: &mut Vec<Step<'_>>) {
-        let known = self.down.contains(&t.id);
+        let known = self.down.iter().any(|d| d.0 == t.id);
         let phase = match t.phase {
             TouchPhase::Started if known => TouchPhase::Moved,
             p => p,
@@ -89,7 +183,7 @@ impl TouchState {
         match phase {
             TouchPhase::Started => {
                 let first = self.down.is_empty();
-                self.down.push(t.id);
+                self.down.push((t.id, t.pos));
                 if first {
                     self.primary = Some(t.id);
                     self.kind = PointerKind::Touch;
@@ -105,6 +199,9 @@ impl TouchState {
                 }
             }
             TouchPhase::Moved => {
+                if let Some(d) = self.down.iter_mut().find(|d| d.0 == t.id) {
+                    d.1 = t.pos;
+                }
                 if known && self.primary == Some(t.id) {
                     steps.push(Step::Synth(Event::PointerMoved { pos: t.pos }));
                 }
@@ -113,7 +210,7 @@ impl TouchState {
                 if !known {
                     return;
                 }
-                self.down.retain(|d| *d != t.id);
+                self.down.retain(|d| d.0 != t.id);
                 if self.primary == Some(t.id) {
                     self.primary = None;
                     if phase == TouchPhase::Ended {

@@ -32,6 +32,7 @@ pub use id::WidgetId;
 pub use overlay::{Dismissal, OverlayFrame, OverlayOptions, OverlayPhase};
 pub use response::{Response, Sense};
 pub use store::UiStore;
+pub use touch::Pinch;
 
 use crate::access::{AccessValue, SemanticTree};
 use crate::input::{
@@ -131,6 +132,8 @@ pub struct Ui<'a> {
     alive: Vec<WidgetId>,
     enabled: bool,
     pointer: PointerFrame,
+    /// The pinch this frame reads, with the widget it belongs to.
+    pinch: Option<(WidgetId, Pinch)>,
     registered: Vec<Registration>,
     /// Ranges of painter hit indices registered while disabled.
     disabled: Vec<Range<usize>>,
@@ -301,11 +304,13 @@ impl<'a> Ui<'a> {
             .pointer
             .drop_capture_if(|id| !hits.iter().any(|h| h.id == id && eligible(h)));
         {
-            let cx = Ctx {
+            let mut cx = Ctx {
                 hits: &hits,
                 eligible: &eligible,
                 time: input.time,
+                kind: PointerKind::Mouse,
             };
+            store.pointer.tick(&cx, &mut pointer);
             let steps = store.touch.reduce(&input.events, input.time);
             for step in &steps {
                 let ev = match step {
@@ -315,6 +320,10 @@ impl<'a> Ui<'a> {
                         store.pointer.cancel();
                         continue;
                     }
+                };
+                cx.kind = match step {
+                    touch::Step::Synth(_) => PointerKind::Touch,
+                    _ => PointerKind::Mouse,
                 };
                 let after_key = last_key.take();
                 let after_fired = std::mem::take(&mut fired_press);
@@ -529,6 +538,8 @@ impl<'a> Ui<'a> {
             }
             store.pointer.settle(&cx, &mut pointer);
         }
+        let pinch = store.touch.pinch_frame(store.pointer.held());
+        let long_press_due = store.pointer.long_press_due().filter(|t| *t > input.time);
         acted |= !dismissed.is_empty() || pointer.acted();
         keys.extend(routed.keys);
         // A composition ends when focus leaves its widget.
@@ -557,11 +568,12 @@ impl<'a> Ui<'a> {
             alive: Vec::new(),
             enabled: true,
             pointer,
+            pinch,
             registered: Vec::new(),
             disabled: Vec::new(),
             in_flight: false,
             busy_frame: false,
-            repaint_at: None,
+            repaint_at: long_press_due,
             clipboard_write: None,
             clipboard_read: false,
             cursor: CursorIcon::Default,
@@ -724,6 +736,7 @@ impl<'a> Ui<'a> {
                 hits: &hits,
                 eligible: &eligible,
                 time: now,
+                kind: PointerKind::Mouse,
             };
             let mut next = PointerFrame::default();
             store.pointer.settle(&cx, &mut next);
@@ -860,6 +873,28 @@ impl<'a> Ui<'a> {
     /// [`PointerKind::Mouse`] before any touch.
     pub fn pointer_kind(&self) -> PointerKind {
         self.store.touch.kind
+    }
+
+    /// The velocity, in logical pixels per second, the pointer left with when it ended a drag
+    /// that began on `id` (the frame `drag_stopped` is set for it): a least-squares fit over the
+    /// last 100 ms of its path, clamped to 8000, zero when it had stopped moving. `(0.0, 0.0)` on
+    /// every other frame and for every other id.
+    pub fn release_velocity(&self, id: WidgetId) -> (f32, f32) {
+        self.pointer
+            .release_velocity
+            .get(&id)
+            .copied()
+            .unwrap_or((0.0, 0.0))
+    }
+
+    /// The two-touch gesture over `id` this frame, while two touches are down and the first
+    /// pressed `id`: `None` for any other widget and when no pinch is live. It is a reading only:
+    /// the first touch still drives the pointer, so a widget that pinches and also senses drag
+    /// receives both.
+    pub fn pinch(&self, id: WidgetId) -> Option<Pinch> {
+        self.pinch
+            .filter(|(target, _)| *target == id)
+            .map(|(_, p)| p)
     }
 
     /// The window edges a system bar, notch or rounded corner covers, in logical pixels: the last

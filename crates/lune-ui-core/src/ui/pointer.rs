@@ -4,14 +4,24 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use crate::input::{Modifiers, PointerButton, ScrollDelta};
+use crate::input::{Modifiers, PointerButton, PointerKind, ScrollDelta};
 use crate::motion::Time;
 use crate::paint::Rect;
 
 use super::{Sense, WidgetId};
 
-/// Travel from the press point at which a drag starts.
+/// Travel from a mouse press point at which a drag starts.
 pub(crate) const DRAG_THRESHOLD: f32 = 4.0;
+/// Travel from a touch press point at which a drag starts: a finger wobbles more than a mouse (D348).
+pub(crate) const TOUCH_SLOP: f32 = 10.0;
+/// How long a touch press holds, within the slop, before it is a long press (D348).
+pub(crate) const LONG_PRESS: Duration = Duration::from_millis(500);
+/// The release velocity is fitted over the samples this close before the release.
+const VELOCITY_WINDOW: Duration = Duration::from_millis(100);
+/// A finger that has not moved this long before the release leaves with no velocity.
+const VELOCITY_STILL: Duration = Duration::from_millis(40);
+/// The largest release velocity, in logical px/s.
+const VELOCITY_MAX: f32 = 8000.0;
 /// Two clicks on one id closer than this (frame time) are a double click.
 pub(crate) const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 
@@ -69,6 +79,121 @@ struct Press {
     at: (f32, f32),
     last: (f32, f32),
     dragging: bool,
+    /// What made the press: a touch has the larger slop and a long press.
+    kind: PointerKind,
+    /// The frame time the press began at.
+    t0: Time,
+    /// The press travelled the slop from `at` at some point.
+    passed: bool,
+    /// The long press fired: the release clicks nothing.
+    spent: bool,
+}
+
+impl Press {
+    fn new(id: Option<WidgetId>, pos: (f32, f32), kind: PointerKind, t0: Time) -> Self {
+        Self {
+            id,
+            at: pos,
+            last: pos,
+            dragging: false,
+            kind,
+            t0,
+            passed: false,
+            spent: false,
+        }
+    }
+
+    /// Whether a long press is still to fire: a touch that holds a widget, has neither dragged nor
+    /// left the slop, and has not fired yet.
+    fn long_pending(&self) -> bool {
+        self.kind == PointerKind::Touch
+            && self.id.is_some()
+            && !self.dragging
+            && !self.passed
+            && !self.spent
+    }
+
+    fn slop(&self) -> f32 {
+        if self.kind == PointerKind::Touch {
+            TOUCH_SLOP
+        } else {
+            DRAG_THRESHOLD
+        }
+    }
+}
+
+/// The primary press's positions by frame, for the release velocity (D348).
+#[derive(Debug, Clone, Default, PartialEq)]
+struct Tracker {
+    samples: Vec<(Time, (f32, f32))>,
+}
+
+impl Tracker {
+    fn clear(&mut self) {
+        self.samples.clear();
+    }
+
+    /// Records `pos` at `time`; a second sample of one frame replaces the first. Samples older
+    /// than the window before `time` go.
+    fn sample(&mut self, time: Time, pos: (f32, f32)) {
+        match self.samples.last_mut() {
+            Some(last) if last.0 == time => last.1 = pos,
+            _ => self.samples.push((time, pos)),
+        }
+        self.samples
+            .retain(|s| time.saturating_sub(s.0) <= VELOCITY_WINDOW);
+    }
+
+    /// The least-squares slope of each axis over the samples, in px/s, clamped in magnitude.
+    /// Zero with fewer than two samples, with no time across them, or when the finger has not
+    /// moved from its last position for the still window.
+    fn velocity(&self) -> (f32, f32) {
+        let Some(&(end, rest)) = self.samples.last() else {
+            return (0.0, 0.0);
+        };
+        if self.samples.len() < 2
+            || self
+                .samples
+                .iter()
+                .filter(|s| end.saturating_sub(s.0) <= VELOCITY_STILL)
+                .all(|s| s.1 == rest)
+        {
+            return (0.0, 0.0);
+        }
+        let t0 = self.samples[0].0;
+        let n = self.samples.len() as f64;
+        let ts: Vec<f64> = self
+            .samples
+            .iter()
+            .map(|s| s.0.saturating_sub(t0).as_secs_f64())
+            .collect();
+        let tm = ts.iter().sum::<f64>() / n;
+        let var: f64 = ts.iter().map(|t| (t - tm) * (t - tm)).sum();
+        if var <= 0.0 {
+            return (0.0, 0.0);
+        }
+        let slope = |axis: fn(&(f32, f32)) -> f32| {
+            let vm = self
+                .samples
+                .iter()
+                .map(|s| f64::from(axis(&s.1)))
+                .sum::<f64>()
+                / n;
+            ts.iter()
+                .zip(&self.samples)
+                .map(|(t, s)| (t - tm) * (f64::from(axis(&s.1)) - vm))
+                .sum::<f64>()
+                / var
+        };
+        let (vx, vy) = (slope(|p| p.0) as f32, slope(|p| p.1) as f32);
+        let mag = vx.hypot(vy);
+        if mag > VELOCITY_MAX {
+            let k = VELOCITY_MAX / mag;
+            (vx * k, vy * k)
+        } else {
+            (vx, vy)
+        }
+    }
 }
 
 /// Pointer state that outlives a frame (held in the store).
@@ -76,6 +201,7 @@ struct Press {
 pub(crate) struct PointerState {
     pos: Option<(f32, f32)>,
     press: Option<Press>,
+    tracker: Tracker,
     /// The id a secondary press landed on, until its release.
     secondary: Option<Option<WidgetId>>,
     last_click: Option<(WidgetId, Time)>,
@@ -96,6 +222,8 @@ pub(crate) struct PointerFrame {
     pub(crate) drag_stopped: BTreeSet<WidgetId>,
     pub(crate) press_started: BTreeMap<WidgetId, PressInfo>,
     pub(crate) drag_delta: BTreeMap<WidgetId, (f32, f32)>,
+    /// The velocity a dragged press left with, on the frame its `drag_stopped` is set.
+    pub(crate) release_velocity: BTreeMap<WidgetId, (f32, f32)>,
     pub(crate) scroll_lines: BTreeMap<WidgetId, (f32, f32)>,
     pub(crate) scroll_pixels: BTreeMap<WidgetId, (f32, f32)>,
 }
@@ -126,12 +254,17 @@ pub(crate) struct Ctx<'c> {
     pub(crate) hits: &'c [HitRecord],
     pub(crate) eligible: &'c dyn Fn(&HitRecord) -> bool,
     pub(crate) time: Time,
+    /// What made the press this event may begin: set per event by the loop.
+    pub(crate) kind: PointerKind,
 }
 
 impl PointerState {
     /// The pointer moved to `pos`.
     pub(crate) fn moved(&mut self, pos: (f32, f32), cx: &Ctx<'_>, out: &mut PointerFrame) {
         self.pos = Some(pos);
+        if self.press.is_some() {
+            self.tracker.sample(cx.time, pos);
+        }
         let Some(p) = &mut self.press else { return };
         if let Some(id) = p.id {
             if p.dragging {
@@ -142,10 +275,13 @@ impl PointerState {
                 );
             } else {
                 let (dx, dy) = (pos.0 - p.at.0, pos.1 - p.at.1);
-                if (dx * dx + dy * dy).sqrt() >= DRAG_THRESHOLD && senses_drag(cx.hits, id) {
-                    p.dragging = true;
-                    out.drag_started.insert(id);
-                    add(&mut out.drag_delta, id, (dx, dy));
+                if (dx * dx + dy * dy).sqrt() >= p.slop() {
+                    p.passed = true;
+                    if senses_drag(cx.hits, id) {
+                        p.dragging = true;
+                        out.drag_started.insert(id);
+                        add(&mut out.drag_delta, id, (dx, dy));
+                    }
                 }
             }
         }
@@ -182,12 +318,9 @@ impl PointerState {
         match (button, pressed) {
             (PointerButton::Primary, true) => {
                 let id = target.filter(|h| senses_capture(h)).map(|h| h.id);
-                self.press = Some(Press {
-                    id,
-                    at: pos,
-                    last: pos,
-                    dragging: false,
-                });
+                self.press = Some(Press::new(id, pos, cx.kind, cx.time));
+                self.tracker.clear();
+                self.tracker.sample(cx.time, pos);
                 self.last_press = match id {
                     Some(id) => {
                         let count = match self.last_press {
@@ -217,6 +350,10 @@ impl PointerState {
                 let id = p.id?;
                 if p.dragging {
                     out.drag_stopped.insert(id);
+                    out.release_velocity.insert(id, self.tracker.velocity());
+                    return None;
+                }
+                if p.spent {
                     return None;
                 }
                 if target.map(|h| h.id) == Some(id) {
@@ -307,12 +444,8 @@ impl PointerState {
     /// Drops a primary press without capturing (an outside press that dismissed an overlay).
     pub(crate) fn press_consumed(&mut self, pos: (f32, f32)) {
         self.pos = Some(pos);
-        self.press = Some(Press {
-            id: None,
-            at: pos,
-            last: pos,
-            dragging: false,
-        });
+        self.press = Some(Press::new(None, pos, PointerKind::Mouse, Time::ZERO));
+        self.tracker.clear();
     }
 
     /// Drops every press in flight with no click, no drag stop and no secondary click (a touch
@@ -320,6 +453,27 @@ impl PointerState {
     pub(crate) fn cancel(&mut self) {
         self.press = None;
         self.secondary = None;
+        self.tracker.clear();
+    }
+
+    /// Fires the long press that came due by `cx.time`, before the frame's events: the press is
+    /// spent, and its widget reads `secondary_clicked` once (D348).
+    pub(crate) fn tick(&mut self, cx: &Ctx<'_>, out: &mut PointerFrame) {
+        if let Some(p) = &mut self.press
+            && p.long_pending()
+            && cx.time >= p.t0 + LONG_PRESS
+            && let Some(id) = p.id
+        {
+            p.spent = true;
+            out.secondary_clicked.insert(id);
+        }
+    }
+
+    /// The time a long press still to fire comes due at.
+    pub(crate) fn long_press_due(&self) -> Option<Time> {
+        self.press
+            .filter(Press::long_pending)
+            .map(|p| p.t0 + LONG_PRESS)
     }
 
     /// Whether a press holds a widget's capture now, at this point in the frame's event batch.

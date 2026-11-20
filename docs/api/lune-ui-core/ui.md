@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:60`
+Source: `crates/lune-ui-core/src/ui.rs:61`
 
 **Fields**
 
@@ -165,6 +165,59 @@ Source: `crates/lune-ui-core/src/ui/overlay.rs:13`
 - `impl Debug for OverlayOptions`
 - `impl PartialEq for OverlayOptions`
 - `impl StructuralPartialEq for OverlayOptions`
+
+<a id="struct.Pinch"></a>
+### Struct `Pinch`
+
+```rust
+#[non_exhaustive]
+pub struct Pinch {
+    pub center: (f32, f32),
+    pub start_center: (f32, f32),
+    pub scale: f32,
+    pub started: bool,
+    pub ended: bool,
+}
+```
+
+Two touches moving apart or together over the widget the first one pressed (D348), read through
+[`Ui::pinch`](ui.md#method.Ui.pinch).
+
+Nothing is cancelled by a second touch: the first keeps driving the pointer, so a widget that
+also senses drag sees both.
+
+Source: `crates/lune-ui-core/src/ui/touch.rs:34`
+
+**Fields**
+
+- <a id="structfield.Pinch.center"></a>`pub center: (f32, f32)`
+
+  The midpoint of the two touches now, in logical pixels.
+
+- <a id="structfield.Pinch.start_center"></a>`pub start_center: (f32, f32)`
+
+  The midpoint when the pinch began.
+
+- <a id="structfield.Pinch.scale"></a>`pub scale: f32`
+
+  The distance between the touches now over the distance when the pinch began (a start
+  distance under 1 px counts as 1 px): above 1 spread, below 1 pinched.
+
+- <a id="structfield.Pinch.started"></a>`pub started: bool`
+
+  This is the pinch's first frame.
+
+- <a id="structfield.Pinch.ended"></a>`pub ended: bool`
+
+  This is the pinch's last frame: a touch of the two ended, and the values are the last ones.
+
+**Trait implementations**
+
+- `impl Clone for Pinch`
+- `impl Copy for Pinch`
+- `impl Debug for Pinch`
+- `impl PartialEq for Pinch`
+- `impl StructuralPartialEq for Pinch`
 
 <a id="struct.Response"></a>
 ### Struct `Response`
@@ -381,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:123`
+Source: `crates/lune-ui-core/src/ui.rs:124`
 
 **Methods and associated items**
 
@@ -1616,6 +1669,13 @@ Source: `crates/lune-ui-core/src/ui.rs:123`
   State of type `T` for `id` that also survives undrawn frames while a keep-alive scope open
   around its last use is live.
 
+- <a id="method.Ui.pinch"></a>`pub fn pinch(&self, id: WidgetId) -> Option<Pinch>`
+
+  The two-touch gesture over `id` this frame, while two touches are down and the first
+  pressed `id`: `None` for any other widget and when no pinch is live. It is a reading only:
+  the first touch still drives the pointer, so a widget that pinches and also senses drag
+  receives both.
+
 - <a id="method.Ui.pointer_in"></a>`pub fn pointer_in(&self, rect: Rect) -> bool`
 
   Whether the pointer is inside `rect`, given in the current drawing space (it goes through
@@ -1633,6 +1693,13 @@ Source: `crates/lune-ui-core/src/ui.rs:123`
 - <a id="method.Ui.pointer_pos"></a>`pub fn pointer_pos(&self) -> Option<(f32, f32)>`
 
   The pointer's position in logical pixels, or `None` when it is outside the window.
+
+- <a id="method.Ui.release_velocity"></a>`pub fn release_velocity(&self, id: WidgetId) -> (f32, f32)`
+
+  The velocity, in logical pixels per second, the pointer left with when it ended a drag
+  that began on `id` (the frame `drag_stopped` is set for it): a least-squares fit over the
+  last 100 ms of its path, clamped to 8000, zero when it had stopped moving. `(0.0, 0.0)` on
+  every other frame and for every other id.
 
 - <a id="method.Ui.request_busy_frame"></a>`pub fn request_busy_frame(&mut self, rect: Rect)`
 

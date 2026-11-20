@@ -57,6 +57,13 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   click), other touches never reach the pointer, the mouse copy a platform makes of a touch is
   dropped for 500 ms of app time, and `Ui::pointer_kind`, `Ui::safe_area` and `Ui::keyboard_inset`
   read the kind of the last press and the window's latched insets (D344, D345).
+- R-core-12 [new] A touch press is told apart from a mouse press in the pointer machine, and only a
+  touch press changes: it starts a drag at 10 px (a mouse at 4), a hold of 500 ms of app time
+  within that slop is a secondary click (so every widget's `context` answers a long press, D292)
+  and the lift after it clicks nothing, the pointer's travel of every press is read once as a
+  release velocity (`Ui::release_velocity`, a fit over the last 100 ms, at most 8000 px/s), and two
+  touches read as a pinch over the widget the first one pressed (`Ui::pinch`, a reading that
+  cancels nothing). All of it is a function of the events and the app's time (D348).
 
 ### Text
 
