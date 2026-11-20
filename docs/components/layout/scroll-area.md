@@ -115,6 +115,11 @@ None: the area has no text of its own.
 - `scroll-area-wheel`: one wheel step from offset 0, t = 90 ms (half of `fast`).
 - `scroll-area-into-view`: scroll-into-view of a row 1 viewport away, t = 90 ms.
 - `scroll-area-thumb-reveal`: pointer enters the area, t = 90 ms.
+- `phone-touch-fling`: a flick at 2000 px/s up, 200 ms after the lift: the list is still coasting, in the phone window.
+- `phone-touch-fling-120`: the same flick with a frame every 8 ms: the same picture.
+- `phone-touch-landed`: the same flick after the decay's end (about 3 s): at rest, settled.
+- `phone-touch-rubber-band`: the finger pulled 150 px past the top and holds: the list is stretched by less than the pull, settled.
+- `phone-touch-bounce`: 100 ms after that pull is let go: the list is springing back, moving.
 
 ### Painter primitives
 
@@ -135,9 +140,9 @@ None: the area has no text of its own.
 
 ### Build
 
-- Milestone: M5. Built in M5 (steps 7 and 10; the page is `scroll-area`, 8 scenes). M11 audited it against D47 (the `Done` line). Unverified here: the Windows and Linux run time (the lint for both is `scripts/check-targets.sh`).
+- Milestone: M5. Built in M5 (steps 7 and 10; the page is `scroll-area`, 8 scenes; the physics are shown on the `touch` page, 5 `phone-touch-*` scenes). M11 audited it against D47 (the `Done` line). Unverified here: the Windows and Linux run time (the lint for both is `scripts/check-targets.sh`).
 - Depends on: core.ui, core.focus, infra.accessibility, motion.transitions, layout.stack, widget.scrollbar
-- Done (D47, M11): tests `crates/lune-ui-core/tests/widget_scroll_area.rs::a_wheel_line_steps_48_px_and_settles_exactly, crates/lune-ui-core/tests/widget_scroll_area.rs::the_wheel_clamps_at_both_ends, crates/lune-ui-core/tests/widget_scroll_area.rs::a_trackpad_delta_moves_the_offset_one_to_one_at_once, crates/lune-ui-core/tests/widget_scroll_area.rs::clamp_restore_offset_known_answers, crates/lune-ui-core/tests/widget_scroll_area.rs::a_hidden_area_under_keep_alive_keeps_its_offset_for_600_undrawn_frames, crates/lune-ui-core/tests/widget_scroll_area.rs::centring_row_100_of_45_in_a_400_viewport_is_4322_5_before_the_clamp, crates/lune-ui-core/tests/widget_scroll_area.rs::the_clip_edge_is_exact_and_content_at_offset_40_is_shifted_by_80_device_px, crates/lune-ui-core/tests/widget_scroll_area.rs::the_wheel_and_into_view_rows_conform_in_every_tier, crates/lune-ui-core/tests/widget_scroll_area.rs::the_node_is_a_scroll_area_with_the_offset_as_its_value_and_children_nested`; page `scroll-area` (8 scenes); unverified here: Windows and Linux run time.
+- Done (D47, M11): tests `crates/lune-ui-core/tests/widget_scroll_area.rs::a_wheel_line_steps_48_px_and_settles_exactly, crates/lune-ui-core/tests/widget_scroll_area.rs::the_wheel_clamps_at_both_ends, crates/lune-ui-core/tests/widget_scroll_area.rs::a_trackpad_delta_moves_the_offset_one_to_one_at_once, crates/lune-ui-core/tests/widget_scroll_area.rs::clamp_restore_offset_known_answers, crates/lune-ui-core/tests/widget_scroll_area.rs::a_hidden_area_under_keep_alive_keeps_its_offset_for_600_undrawn_frames, crates/lune-ui-core/tests/widget_scroll_area.rs::centring_row_100_of_45_in_a_400_viewport_is_4322_5_before_the_clamp, crates/lune-ui-core/tests/widget_scroll_area.rs::the_clip_edge_is_exact_and_content_at_offset_40_is_shifted_by_80_device_px, crates/lune-ui-core/tests/widget_scroll_area.rs::the_wheel_and_into_view_rows_conform_in_every_tier, crates/lune-ui-core/tests/widget_scroll_area.rs::the_node_is_a_scroll_area_with_the_offset_as_its_value_and_children_nested`; page `scroll-area` (8 scenes) and `touch` (the physics scenes); unverified here: Windows and Linux run time, and the feel of a real finger.
 
 ## Open questions
 

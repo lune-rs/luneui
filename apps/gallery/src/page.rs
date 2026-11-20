@@ -15,6 +15,7 @@ use lune_ui::image::{ImageData, ImageId, ImageStore};
 use lune_ui::input::{
     FrameOutput, ImeEvent, Key, Keymap, Modifiers, NamedKey, PointerButton, RawInput, Repaint,
 };
+use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark::THEME;
 use lune_ui::material::Material;
 use lune_ui::motion::{Cadence, MotionTier};
@@ -330,6 +331,12 @@ pub(crate) enum Expect {
     Waiting,
 }
 
+/// A phone's window in logical pixels: the iPhone 16 Pro simulator's, measured (402 by 874 points,
+/// 62 pt of status bar and notch above and 34 pt of home indicator below, which the `phone-*`
+/// scenes tell the page with an `Ev::SafeArea`). It is the one size every phone scene runs in and
+/// the parameter the mobile pages reuse.
+pub(crate) const PHONE: (u32, u32) = (402, 874);
+
 /// One scripted Ui scene: input events at times, then a capture frame.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct UiScene {
@@ -352,11 +359,14 @@ impl UiScene {
         format!("{}@{}x", self.id, self.scale)
     }
 
-    /// The window the scene runs in, in logical pixels: the gallery's 1040 by 660, or for the
-    /// showcase's own scenes (`showcase-*`) the 1600 by 900 its window opens at.
+    /// The window the scene runs in, in logical pixels: the gallery's 1040 by 660, for the
+    /// showcase's own scenes (`showcase-*`) the 1600 by 900 its window opens at, and for a phone
+    /// scene (`phone-*`) [`PHONE`].
     pub(crate) fn window(&self) -> (u32, u32) {
         if self.id.starts_with("showcase-") {
             (1600, 900)
+        } else if self.id.starts_with("phone-") {
+            PHONE
         } else {
             (W, H)
         }
@@ -427,6 +437,19 @@ pub(crate) enum Ev {
     FileHoverCancelled,
     /// A file is dropped on the window.
     FileDrop(&'static str),
+    /// A touch contact (its id, then its position) goes down at the logical position.
+    TouchStart(u64, f32, f32),
+    /// A touch contact moves to the logical position.
+    TouchMove(u64, f32, f32),
+    /// A touch contact lifts at the logical position.
+    TouchEnd(u64, f32, f32),
+    /// The platform cancels a touch contact.
+    TouchCancel(u64, f32, f32),
+    /// A touch contact goes down at the centre of the widget at the path (the previous frame's
+    /// rect).
+    TouchOn(u64, &'static [&'static str]),
+    /// The window's safe area: the left, top, right and bottom insets in logical pixels.
+    SafeArea(f32, f32, f32, f32),
 }
 
 /// The id of the widget at `path` under page `page`.
@@ -583,6 +606,25 @@ pub(crate) fn apply_event(
         }
         Ev::FileDrop(path) => {
             input.file_drop(*path);
+        }
+        Ev::TouchStart(id, x, y) => {
+            input.touch_start(*id, *x + shift.0, *y + shift.1);
+        }
+        Ev::TouchMove(id, x, y) => {
+            input.touch_move(*id, *x + shift.0, *y + shift.1);
+        }
+        Ev::TouchEnd(id, x, y) => {
+            input.touch_end(*id, *x + shift.0, *y + shift.1);
+        }
+        Ev::TouchCancel(id, x, y) => {
+            input.touch_cancel(*id, *x + shift.0, *y + shift.1);
+        }
+        Ev::TouchOn(id, path) => {
+            let r = scope.rect_of(path)?;
+            input.touch_start(*id, r.x + r.w / 2.0, r.y + r.h / 2.0);
+        }
+        Ev::SafeArea(left, top, right, bottom) => {
+            input.safe_area(Insets::new(*left, *top, *right, *bottom));
         }
     }
     Ok(())

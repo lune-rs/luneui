@@ -486,8 +486,9 @@ functions; mid-transition and interaction scenes are live scripted `Ui` frames. 
 `nav_item`, `radio_group`, `star_rating`, `slider`, `filter_bar`, `search_picker`, `tab_strip`, `toolbar` and `banner`, and from M7
 `flyout`, `toast-notifications`, `command-palette`, `page`, `panel`, `sidebar`, `side-panel`, `icon-rail`, `split-panes`,
 `tree-view` and `settings-page`, from M8 `table`, `bar-chart`, `pie-chart`, `kanban-board` and `lane-graph`, and from M9 `code-block`,
-`code-editor-view`, `markdown-preview` and `diff-view`, from M10 `theme`, `tray` and `file-drop`, and from M11 `window`
-(86 pages in all, the showcase's nine labs and its shell page among them, 453 scene names, one of them at scale 1.5, `ui-controls@1.5x`, D243; every page of the same pattern: a live state, scripted scenes, a bench timeline); `apps/gallery/src/pages/controls_ui.rs` is the shared composition of every M4 widget that the
+`code-editor-view`, `markdown-preview` and `diff-view`, from M10 `theme`, `tray` and `file-drop`, from M11 `window`, and from mobile M3 `touch`
+(87 pages in all, the showcase's nine labs and its shell page among them, 463 scene names, one of them at scale 1.5, `ui-controls@1.5x`, D243; every page of the same pattern: a live state, scripted scenes, a bench timeline).
+The `touch` page lays out for a phone and honours `Ui::safe_area`; its ten `phone-touch-*` scenes run in `page::PHONE`, a 402 by 874 logical window (the iPhone 16 Pro simulator's, 62 pt above and 34 pt below for the bars) at scale 3, chosen by the `phone-` prefix of the scene id (`UiScene::window`), with the safe area told by `Ev::SafeArea` and the finger by `Ev::TouchStart`, `TouchMove`, `TouchEnd`, `TouchCancel` and `TouchOn` (D351); `apps/gallery/src/pages/controls_ui.rs` is the shared composition of every M4 widget that the
 core pages draw. Window mode builds a `Ui` per frame over the page's live state; dump and bench
 drive the same state through a `Player` (a scripted input, the retained store and the page state). A scene's `Expect` is `Settled` (`Idle`),
 `Moving` (`Now`) or, for a pending tooltip, `Waiting` (`At`). `Ev` scripts pointer, scroll, typed text, keys

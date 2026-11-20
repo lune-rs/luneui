@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 101 |
+| done | 102 |
 | external | 4 |
-| **total** | **107** |
+| **total** | **108** |
 
 ## core
 
@@ -24,6 +24,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [core.acrylic](core/acrylic.md) | Acrylic colour math and noise opacity | done | luneterm | Avalonia acrylic colour math with tests, and the noise opacity |
 | [core.color](core/color.md) | Colour helpers | done | luneterm | Straight-alpha RGBA values with premultiply, blend-over and alpha helpers |
 | [core.focus](core/focus.md) | Keyboard focus | done | any | Tab order by call order within focus scopes, focus-visible, scope push, trap and restore, roving focus in composites |
+| [core.gestures](core/gestures.md) | Touch gestures | done | any | A touch press in the pointer machine: a 10 px slop, a long press as a secondary click, a release velocity, a pinch reading, the pan to a scroll region, and the motion physics under a fling |
 | [core.icon](core/icon.md) | Codicon glyph constants | done | luneterm, wane | Codicon glyph constants and a glyph helper; the app supplies the icon font |
 | [core.image](core/image.md) | Image drawing | done | lunegit, wane | Image primitive: app-decoded RGBA drawn into a rect with a fit mode, alpha, optional corner radius, a part of the picture (sprite sheets) and per-draw sampling; explicit resource lifetime and in-place rect updates |
 | [core.input](core/input.md) | Input model | done | any | Plain-data RawInput in, FrameOutput out; the windowing adapter translates both |
