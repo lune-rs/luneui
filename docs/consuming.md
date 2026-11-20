@@ -340,6 +340,29 @@ raw.events.push(Event::KeyboardInset(Insets::new(0.0, 0.0, 0.0, keyboard_height)
 
 **Unverified here.** Desktop touchscreens: the order in which Windows delivers a touch and its promoted mouse copy is read from source, not seen (D12). The feel of a real finger: every constant (10 px slop, 500 ms long press, decay rate 0.998 per ms, rubber band 0.55, the 0.4 s spring) is the toolkit's starting value. The motion is proven headless and rate-independent (60 and 120 Hz agree).
 
+## 0.7.1 to 0.7.2: memory
+
+D408 to D410. Additive, hence 0.7.2: no struct gains a field, no trait a required method, no enum a variant, so **nothing breaks** and nothing needs to change. The pixel gate reads zero delta on every scene of 0.7.1. Two things get cheaper without a line of the app changing, and two additions let an app take the rest.
+
+**A frame with no glass draws straight into its target.** Before, every frame drew into an offscreen scene texture (4 bytes per pixel at the window size) and blitted it to the target, whether or not any layer asked for a backdrop. Now a frame with no backdrop request is one pass into the target, and the offscreen scene, its blur levels and the pong texture are made on the first frame that has one. The first glass frame after a long run without any makes them (about 1 ms more than a steady glass frame on a 3456x2234 display, D410); they are then kept, because the library has no clock and cannot tell an idle period. An app that wants them back, for example while its window is hidden, calls `FrameRenderer::release_offscreen()` between frames; the next frame with a backdrop request makes them again.
+
+**Bundled fonts are no longer copied.** `TextCache::new` and `with_locale` copy every face's bytes into the heap, which is right for bytes read at run time. For `include_bytes!` fonts, which already sit in the binary, `TextCache::new_static` and `with_locale_static` take `&[&'static [u8]]` and keep a reference. The faces, their order and every shaped layout are the same.
+
+**Additions.**
+
+| item | what it is |
+| --- | --- |
+| `FrameRenderer::release_offscreen()` | frees the offscreen scene, its blur levels and pong; made again by the next frame with a backdrop request (D408) |
+| `TextCache::new_static(font_data: &[&'static [u8]], ui_family, mono_family)`, `TextCache::with_locale_static(.., locale)` | as `new` and `with_locale` without the copy, for fonts that live for the program (D409) |
+
+**To take it.** Pass bundled fonts through `new_static` (the gallery's `text_cache` and `apps/starter/src/main.rs` are the worked examples); call `release_offscreen` when the window is hidden or minimised, if the app has that signal.
+
+**Measured** (D410; Apple M1 Pro, release builds, `footprint` `phys_footprint`, median of 3 runs against 77aecf1, windows untouched): the starter (800x600 logical, scale 2) 45.66 MB to 34.47 MB (-11.2 MB: the 7.68 MB scene texture and its levels, and the 2.46 MB face); the gallery (1600x900 logical, launch page, no glass) 222.9 MB to 200.2 MB (-22.7 MB: the 23.04 MB scene texture, less run noise in the heap). A window with glass open pays what it paid before.
+
+**Unverified here.** Luneterm itself was not measured: it re-measures with its own method when it bumps its pin. The drawable count (wgpu-hal sets it from `SurfaceOptions.frame_latency`, D410) and freeing drawables while hidden are not done.
+
+**Release size.** `starter` 8,285,136 bytes at 0.7.2 against 8,285,120 at 77aecf1, `gallery` 10,665,184 both (`wc -c` of `target/release/*`, macOS, the repo profile).
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
