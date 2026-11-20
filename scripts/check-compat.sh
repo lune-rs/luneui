@@ -4,8 +4,8 @@
 #   1 API      the public API of the five library crates at <rev> against the tree, from rustdoc JSON
 #              (`api-docs compat`, tools/api-docs/src/compat.rs), plus the manifests: rust-version
 #              and the winit and wgpu requirements.
-#   2 consumers  <rev>'s gallery and integration tests (crates/*/tests), unmodified, built against the
-#              tree's libraries in a hybrid tree and run.
+#   2 consumers  <rev>'s gallery, integration tests (crates/*/tests) and docs/ (the data files those
+#              tests read), unmodified, built against the tree's libraries in a hybrid tree and run.
 #   3 pixels   <rev>'s gallery dumped against <rev>'s own libraries and against the tree's, compared
 #              with dump-compare, no --allow.
 #
@@ -422,6 +422,17 @@ for d in "$BASE_SRC"/crates/*/tests; do
   [ -d "$HYBRID/crates/$name" ] || continue
   cp -R "$d" "$HYBRID/crates/$name/tests"
 done
+# The base's tests read the workspace's data files (docs/requirements.md, the component entries): a
+# consumer ships its own, so the hybrid's docs/ is the base's too (D342). A base with no docs/ gives
+# a hybrid with none.
+rm -rf "$HYBRID/docs"
+if [ -d "$BASE_SRC/docs" ]; then
+  cp -R "$BASE_SRC/docs" "$HYBRID/docs"
+  cmp -s "$BASE_SRC/docs/requirements.md" "$HYBRID/docs/requirements.md" \
+    || die "the hybrid's docs/requirements.md is not the base's after the copy"
+elif [ -e "$HYBRID/docs" ]; then
+  die "the hybrid holds a docs/ the base does not have"
+fi
 cp "$TREE/Cargo.lock" "$HYBRID/Cargo.lock"
 
 # Packages the base does not have are left out of the workspace run.
