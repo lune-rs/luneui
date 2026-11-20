@@ -18,6 +18,8 @@ mod focus;
 mod id;
 mod keys;
 mod overlay;
+#[cfg(test)]
+mod pan_tests;
 mod pointer;
 mod response;
 mod store;
@@ -51,7 +53,7 @@ use crate::theme::Theme;
 use access::Routed;
 use keys::KeyPress;
 use overlay::Dismissal as D;
-use pointer::{Ctx, HitRecord, PointerFrame, topmost};
+use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost};
 
 /// The opacity of a disabled subtree.
 pub(crate) const DISABLED_ALPHA: f32 = 0.4;
@@ -94,6 +96,10 @@ struct Registration {
     enabled: bool,
     /// The axes a scroll region is live on, `(x, y)` (D178).
     scroll_axes: (bool, bool),
+    /// The axes the region has content to pan a touch on, `(x, y)` (D349).
+    pan_axes: (bool, bool),
+    /// The region was moving last frame (D349).
+    moving: bool,
     /// The [`Ui::tab_scope`] order it was registered in.
     order: i32,
 }
@@ -135,6 +141,8 @@ pub struct Ui<'a> {
     /// The pinch this frame reads, with the widget it belongs to.
     pinch: Option<(WidgetId, Pinch)>,
     registered: Vec<Registration>,
+    /// The drag axes widgets claimed this frame, by id (D349).
+    drag_claims: BTreeMap<WidgetId, (bool, bool)>,
     /// Ranges of painter hit indices registered while disabled.
     disabled: Vec<Range<usize>>,
     in_flight: bool,
@@ -303,6 +311,10 @@ impl<'a> Ui<'a> {
         store
             .pointer
             .drop_capture_if(|id| !hits.iter().any(|h| h.id == id && eligible(h)));
+        store.pointer.drop_pan_if(
+            |id| !hits.iter().any(|h| h.id == id && eligible(h)),
+            &mut pointer,
+        );
         {
             let mut cx = Ctx {
                 hits: &hits,
@@ -317,7 +329,7 @@ impl<'a> Ui<'a> {
                     touch::Step::Pass(ev) => *ev,
                     touch::Step::Synth(ev) => ev,
                     touch::Step::Cancel => {
-                        store.pointer.cancel();
+                        store.pointer.cancel(&mut pointer);
                         continue;
                     }
                 };
@@ -349,6 +361,12 @@ impl<'a> Ui<'a> {
                             // D22: the press that dismisses reaches nothing.
                             dismissed.entry(t.id).or_insert(D::OutsidePress);
                             store.pointer.press_consumed(*pos);
+                            continue;
+                        }
+                        // D349: a touch that lands on a moving region stops it and nothing else.
+                        if cx.kind == PointerKind::Touch
+                            && store.pointer.catch(*pos, &cx, &mut pointer)
+                        {
                             continue;
                         }
                         store
@@ -570,6 +588,7 @@ impl<'a> Ui<'a> {
             pointer,
             pinch,
             registered: Vec::new(),
+            drag_claims: BTreeMap::new(),
             disabled: Vec::new(),
             in_flight: false,
             busy_frame: false,
@@ -625,6 +644,7 @@ impl<'a> Ui<'a> {
             input_acted,
             focus_at_begin,
             theme_cut,
+            drag_claims,
             ..
         } = self;
         let now = input.time;
@@ -692,15 +712,25 @@ impl<'a> Ui<'a> {
             if tag == SUPPRESSED {
                 continue;
             }
-            let (sense, enabled, scroll_axes, order) = match senses.get(i).copied().flatten() {
-                Some(r) => (r.sense, r.enabled, r.scroll_axes, r.order),
-                None => (
-                    Sense::CLICK,
-                    !disabled.iter().any(|d| d.contains(&i)),
-                    (true, true),
-                    0,
-                ),
-            };
+            let (sense, enabled, scroll_axes, pan_axes, moving, order) =
+                match senses.get(i).copied().flatten() {
+                    Some(r) => (
+                        r.sense,
+                        r.enabled,
+                        r.scroll_axes,
+                        r.pan_axes,
+                        r.moving,
+                        r.order,
+                    ),
+                    None => (
+                        Sense::CLICK,
+                        !disabled.iter().any(|d| d.contains(&i)),
+                        (true, true),
+                        (false, false),
+                        false,
+                        0,
+                    ),
+                };
             hits.push(HitRecord {
                 id,
                 rect,
@@ -709,6 +739,9 @@ impl<'a> Ui<'a> {
                 tag,
                 enabled,
                 scroll_axes,
+                drag_axes: drag_claims.get(&id).copied().unwrap_or((true, true)),
+                pan_axes,
+                moving,
                 order,
             });
             rects.insert(id, rect);
@@ -876,7 +909,7 @@ impl<'a> Ui<'a> {
     }
 
     /// The velocity, in logical pixels per second, the pointer left with when it ended a drag
-    /// that began on `id` (the frame `drag_stopped` is set for it): a least-squares fit over the
+    /// that began on `id` (the frame `drag_stopped` is set for it) or a pan of the region `id`: a least-squares fit over the
     /// last 100 ms of its path, clamped to 8000, zero when it had stopped moving. `(0.0, 0.0)` on
     /// every other frame and for every other id.
     pub fn release_velocity(&self, id: WidgetId) -> (f32, f32) {
@@ -1038,6 +1071,8 @@ impl<'a> Ui<'a> {
             sense,
             enabled: self.enabled,
             scroll_axes: (true, true),
+            pan_axes: (false, false),
+            moving: false,
             order: self.tab_order,
         });
         if !self.enabled {
@@ -1132,6 +1167,47 @@ impl<'a> Ui<'a> {
         if let Some(r) = self.registered.last_mut() {
             r.scroll_axes = axes;
         }
+    }
+
+    /// Tells the region the last `interact` registered which axes it has content to pan a touch
+    /// on (D349): a scroll area calls this right after its own `interact`.
+    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
+    pub(crate) fn set_pan_axes(&mut self, axes: (bool, bool)) {
+        if let Some(r) = self.registered.last_mut() {
+            r.pan_axes = axes;
+        }
+    }
+
+    /// Tells the region the last `interact` registered whether it is moving (a fling, a bounce, a
+    /// step or a reveal in flight), so a touch press catches it (D349).
+    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
+    pub(crate) fn set_scroll_moving(&mut self, moving: bool) {
+        if let Some(r) = self.registered.last_mut() {
+            r.moving = moving;
+        }
+    }
+
+    /// What the region `id` read of the touch pan this frame.
+    #[allow(dead_code)] // the scroll area calls it (M3 step 5)
+    pub(crate) fn pan(&self, id: WidgetId) -> PanReading {
+        let p = &self.pointer;
+        PanReading {
+            delta: p.pan_delta.get(&id).copied().unwrap_or((0.0, 0.0)),
+            started: p.pan_started.contains(&id),
+            ended: p.pan_ended.contains(&id),
+            caught: p.caught.contains(&id),
+            active: p.panning == Some(id),
+        }
+    }
+
+    /// Which axes a touch drag on `id` is the widget's own, from the next frame on (D349): a
+    /// touch that starts on the widget and travels along an axis it claims drags the widget; along
+    /// one it does not, a scroll region under it with content on that axis takes the touch
+    /// instead and the widget's press is cancelled (no click, no drag stop). Call it in the frame
+    /// the widget registers; like a hit region it governs the next frame's events. A widget that
+    /// never calls it claims both axes, as before. A mouse press ignores it.
+    pub fn set_drag_axes(&mut self, id: WidgetId, horizontal: bool, vertical: bool) {
+        self.drag_claims.insert(id, (horizontal, vertical));
     }
 
     /// The length of the watch list now: a scroll area's mark before it runs its content.

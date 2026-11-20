@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:61`
+Source: `crates/lune-ui-core/src/ui.rs:63`
 
 **Fields**
 
@@ -434,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:124`
+Source: `crates/lune-ui-core/src/ui.rs:130`
 
 **Methods and associated items**
 
@@ -1697,7 +1697,7 @@ Source: `crates/lune-ui-core/src/ui.rs:124`
 - <a id="method.Ui.release_velocity"></a>`pub fn release_velocity(&self, id: WidgetId) -> (f32, f32)`
 
   The velocity, in logical pixels per second, the pointer left with when it ended a drag
-  that began on `id` (the frame `drag_stopped` is set for it): a least-squares fit over the
+  that began on `id` (the frame `drag_stopped` is set for it) or a pan of the region `id`: a least-squares fit over the
   last 100 ms of its path, clamped to 8000, zero when it had stopped moving. `(0.0, 0.0)` on
   every other frame and for every other id.
 
@@ -1730,6 +1730,15 @@ Source: `crates/lune-ui-core/src/ui.rs:124`
 - <a id="method.Ui.set_cursor"></a>`pub fn set_cursor(&mut self, icon: CursorIcon)`
 
   The cursor icon this frame asks for; the last call wins. Default: [`CursorIcon::Default`](input.md#variant.CursorIcon.Default).
+
+- <a id="method.Ui.set_drag_axes"></a>`pub fn set_drag_axes(&mut self, id: WidgetId, horizontal: bool, vertical: bool)`
+
+  Which axes a touch drag on `id` is the widget's own, from the next frame on (D349): a
+  touch that starts on the widget and travels along an axis it claims drags the widget; along
+  one it does not, a scroll region under it with content on that axis takes the touch
+  instead and the widget's press is cancelled (no click, no drag stop). Call it in the frame
+  the widget registers; like a hit region it governs the next frame's events. A widget that
+  never calls it claims both axes, as before. A mouse press ignores it.
 
 - <a id="method.Ui.set_ime_area"></a>`pub fn set_ime_area(&mut self, area: Option<Rect>)`
 
