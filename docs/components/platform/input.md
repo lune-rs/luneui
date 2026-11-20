@@ -11,7 +11,7 @@ summary: Translator turns winit events into RawInput; OutputState applies FrameO
 
 ## What it is
 
-`Translator` (one per window: `window_event` or the per-event methods, then `take(time)` to get a `RawInput`) divides physical positions by the scale factor and ignores gestures, file drops, theme and occlusion. `OutputState` (one per window) applies a `FrameOutput` and touches the cursor and the IME only when they changed; `apply` returns true when the frame asked to close. `cursor_icon` maps the core `CursorIcon` to winit's. The app owns the event loop and calls these from it.
+`Translator` (one per window: `window_event` or the per-event methods, then `take(time)` to get a `RawInput`) divides physical positions by the scale factor and ignores gestures, theme and occlusion. `OutputState` (one per window) applies a `FrameOutput` and touches the cursor and the IME only when they changed; `apply` returns true when the frame asked to close. `cursor_icon` maps the core `CursorIcon` to winit's. The app owns the event loop and calls these from it.
 
 ## Needs
 
@@ -39,7 +39,7 @@ No consumer in the repo calls `Translator` or `OutputState` yet: the gallery han
 
 Moved, today (`crates/lune-ui-winit/src/input.rs`):
 - `Translator` (one per window) keeps the window state between frames: physical size, scale, pointer, modifiers, focus and the event list [R crates/lune-ui-winit/src/input.rs:26-33].
-- `window_event` dispatches resize, scale-factor, cursor move and leave, mouse button, wheel, keyboard, modifiers, IME and focus; every other `WindowEvent` (touch until `set_touch_enabled(true)`, gestures, theme, occlusion, axis motion) is ignored [R crates/lune-ui-winit/src/input.rs:53-74].
+- `window_event` dispatches resize, scale-factor, cursor move and leave, mouse button, wheel, keyboard, modifiers, IME, focus, file hover (and its cancel) and file drop, and touch once `set_touch_enabled(true)` is called; every other `WindowEvent` (touch before that, gestures, theme, occlusion, axis motion) is ignored [R crates/lune-ui-winit/src/input.rs:90-115].
 - Positions and wheel pixels are divided by the latest scale factor; an event before the first pointer move carries (0, 0) [R crates/lune-ui-winit/src/input.rs:19-24,48-51,87-91,108-122].
 - `key` pushes `Event::Key`, then `Event::Text` when the press typed something `printable` returns [R crates/lune-ui-winit/src/input.rs:125-137]; `map_key` maps 27 named keys, passes characters through and turns everything else into `Key::Unidentified` [R crates/lune-ui-winit/src/input.rs:194-232].
 - `take(time)` builds the `RawInput` (logical size, scale, the app's time, focus, the drained events) and leaves the window state in place [R crates/lune-ui-winit/src/input.rs:171-181].

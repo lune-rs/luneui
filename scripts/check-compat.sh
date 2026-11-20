@@ -18,7 +18,7 @@
 #   --api-only   part 1 only (warm, a few seconds; this is the part that is in the gate).
 #   --only-part  part 2 or part 3 alone, without part 1 (the deliberate-break proofs of D342 use it, as
 #                a full run costs about 40 minutes; with no flag all three parts run, as always).
-#   --self-test  part 1's proof on known breaks: each of 11 edits (B1-B11) must exit 1 and name the
+#   --self-test  part 1's proof on known breaks: each of 13 edits (B1-B13) must exit 1 and name the
 #                item, each of 4 (A1-A4) must exit 0. Runs nothing else and needs no base. Case ids
 #                after it limit the run (a debugging aid; the full run is the proof).
 # Exit 0 held; 1 a break (one `break: ...` line per finding, then a count; or a failed self-test);
@@ -185,6 +185,14 @@ edit() {
   OLD="$2" NEW="$3" perl -0777 -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/' "$f"
 }
 
+# fixture <file under the copy> <old text> <new text>: an edit that stays: the base side of a case
+# that needs something the tree does not have (applied before the pristine build, and never restored).
+fixture() {
+  edit "$@"
+  rm -rf "$ORIG"
+  TOUCHED=""
+}
+
 restore_all() {
   local f
   for f in $TOUCHED; do cp "$ORIG/$f" "$ST/$f"; done
@@ -237,6 +245,32 @@ self_test() {
   rm -rf "$ST" "$ORIG" "$S/st-pristine"
   copy_tree "$TREE" "$ST"
   guard_cargo_config "$ST"
+  # Two public types the tree has no use for: one with two inherent blocks of different bounds (B13)
+  # and one whose trait impl has an associated type (B12). Both sides of every case carry them.
+  fixture crates/lune-ui-core/src/color.rs '/// `c` with alpha 0:' '/// Self-test fixture: a generic type with two inherent blocks.
+pub struct SelftestPair<T>(pub T);
+
+impl<T> SelftestPair<T> {
+    /// Self-test fixture.
+    pub fn plain(&self) {}
+}
+
+impl<T: Clone> SelftestPair<T> {
+    /// Self-test fixture.
+    pub fn cloned(&self) {}
+}
+
+/// Self-test fixture: a type whose trait impl has an associated type.
+pub struct SelftestIter;
+
+impl Iterator for SelftestIter {
+    type Item = u8;
+    fn next(&mut self) -> Option<u8> {
+        None
+    }
+}
+
+/// `c` with alpha 0:'
   echo "check-compat: self-test: building the pristine copy"
   doc_json "$ST" "$STT" --offline $PACKAGES
   mkdir -p "$S/st-pristine"
@@ -315,6 +349,15 @@ pub struct Insets {'
   if want_case B11; then
     edit crates/lune-ui-winit/Cargo.toml 'winit = "0.30"' 'winit = "0.31"'
     run_case B11 1 '' 'winit'
+  fi
+  if want_case B12; then
+    edit $color 'type Item = u8;' 'type Item = u16;'
+    edit $color 'fn next(&mut self) -> Option<u8> {' 'fn next(&mut self) -> Option<u16> {'
+    run_case B12 1 $core 'SelftestIter::Item'
+  fi
+  if want_case B13; then
+    edit $color 'impl<T: Clone> SelftestPair<T> {' 'impl<T: Clone + Copy> SelftestPair<T> {'
+    run_case B13 1 $core 'SelftestPair'
   fi
   if want_case A1; then
     edit $color '/// `c` with alpha 0:' '/// Self-test: a new public function.
@@ -473,9 +516,9 @@ hybrid_run() {
 }
 if [ -z "$ONLY_PART" ] || [ "$ONLY_PART" = 2 ]; then
   echo "check-compat: part 2 (consumers)"
-  hybrid_run workspace test --offline --workspace ${EXCLUDE[@]+"${EXCLUDE[@]}"} --test '*' ${TAIL[@]+"${TAIL[@]}"}
-  hybrid_run winit test --offline -p lune-ui-winit --test '*' ${TAIL[@]+"${TAIL[@]}"}
-  hybrid_run gallery test --offline -p gallery ${TAIL[@]+"${TAIL[@]}"}
+  hybrid_run workspace test --offline --workspace ${EXCLUDE[@]+"${EXCLUDE[@]}"} --test '*' --no-fail-fast ${TAIL[@]+"${TAIL[@]}"}
+  hybrid_run winit test --offline -p lune-ui-winit --test '*' --no-fail-fast ${TAIL[@]+"${TAIL[@]}"}
+  hybrid_run gallery test --offline -p gallery --no-fail-fast ${TAIL[@]+"${TAIL[@]}"}
 fi
 
 # --- part 3: pixels -----------------------------------------------------------------------------------

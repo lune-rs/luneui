@@ -15,7 +15,19 @@
 //!
 //! The rules fail closed: an item kind this code does not handle is a finding ("cannot classify").
 //! The comparison is conservative where Rust itself is loose: a changed bound or a loosened
-//! signature is reported, never passed silently.
+//! signature is reported, never passed silently. Impls are compared too: an inherent impl is keyed
+//! by its generics and self type (a split or merged block is "impl missing"), a trait impl by its
+//! trait and self type, and the bounds of synthetic auto-trait impls count. The associated types and
+//! consts of a trait impl are compared like those of an inherent one.
+//!
+//! What it does not compare, the whole list: the value of a constant, a static or an associated
+//! const (its type is compared); the rules of a macro (its path must still resolve); function
+//! bodies and behaviour (parts 2 and 3 of `scripts/check-compat.sh` run those); the methods of a
+//! trait impl (the trait's signature is compared); an item added to an existing trait impl (it
+//! cannot be added without the trait changing); any impl only the head has; the blanket impls
+//! rustdoc derives for every type (`Any`, `Into`, `From<T>`); impls that live in another crate;
+//! attributes other than `#[non_exhaustive]` (`#[repr]`, `#[must_use]`, `#[deprecated]`); and doc
+//! comments.
 //!
 //! Exit 0 held, 1 at least one `break:` line, 2 a setup problem (unreadable input, a JSON format
 //! this tool does not read).
@@ -1080,32 +1092,49 @@ impl Cmp<'_> {
                         ),
                         false,
                     ),
-                    None => (format!("inherent for {for_}"), true),
+                    // The generics are part of the key: two inherent blocks of one type with
+                    // different bounds are two impls, whatever order the JSON lists them in.
+                    None => (format!("inherent{generics} for {for_}"), true),
                 };
                 let mut items = BTreeMap::new();
-                if inherent {
-                    for id in &i.items {
-                        let Some(item) = k.data.index.get(id) else {
-                            continue;
-                        };
-                        let name = item.name.clone().unwrap_or_default();
-                        match &item.inner {
-                            ItemEnum::Function(f) => {
-                                items.insert(format!("fn {name}"), ImplItem::Fn(fn_sig(&mut c, f)));
-                            }
-                            ItemEnum::AssocConst { type_, .. } => {
-                                items.insert(format!("const {name}"), ImplItem::Const(c.ty(type_)));
-                            }
-                            _ => {
-                                items.insert(format!("other {name}"), ImplItem::Other);
-                            }
+                for id in &i.items {
+                    let Some(item) = k.data.index.get(id) else {
+                        continue;
+                    };
+                    let name = item.name.clone().unwrap_or_default();
+                    match &item.inner {
+                        // A trait impl's methods are the trait's signatures; only its associated
+                        // types and consts carry a type an app can name.
+                        ItemEnum::Function(f) if inherent => {
+                            items.insert(format!("fn {name}"), ImplItem::Fn(fn_sig(&mut c, f)));
                         }
+                        ItemEnum::AssocConst { type_, .. } => {
+                            items.insert(format!("const {name}"), ImplItem::Const(c.ty(type_)));
+                        }
+                        ItemEnum::AssocType {
+                            generics: g,
+                            type_: Some(t),
+                            ..
+                        } if !inherent => {
+                            let mm = c.mark();
+                            let gs = c.generics(g);
+                            let ts = c.ty(t);
+                            c.reset(mm);
+                            items.insert(
+                                format!("type {name}"),
+                                ImplItem::Type(format!("{gs} = {ts}")),
+                            );
+                        }
+                        _ if inherent => {
+                            items.insert(format!("other {name}"), ImplItem::Other);
+                        }
+                        _ => {}
                     }
                 }
                 c.reset(m);
                 let rec = out.entry(key).or_insert_with(|| ImplRec {
-                    synthetic: i.is_synthetic,
                     generics: generics.clone(),
+                    for_: inherent.then(|| for_.clone()),
                     items: BTreeMap::new(),
                 });
                 rec.items.extend(items);
@@ -1123,7 +1152,7 @@ impl Cmp<'_> {
                 continue;
             };
             self.compared += 1;
-            if !b.synthetic && b.generics != h.generics {
+            if b.generics != h.generics {
                 self.found(
                     key,
                     format!(
@@ -1132,14 +1161,11 @@ impl Cmp<'_> {
                     ),
                 );
             }
-            let prefix = key.strip_prefix("inherent for ");
             for (ik, bi) in &b.items {
-                let shown = match prefix {
-                    Some(p) => format!(
-                        "{p}::{}",
-                        ik.split_once(' ').map_or(ik.as_str(), |(_, n)| n)
-                    ),
-                    None => key.clone(),
+                let name = ik.split_once(' ').map_or(ik.as_str(), |(_, n)| n);
+                let shown = match &b.for_ {
+                    Some(p) => format!("{p}::{name}"),
+                    None => format!("{key}::{name}"),
                 };
                 match (bi, h.items.get(ik)) {
                     (_, None) => self.found(&shown, "removed (or no longer public)"),
@@ -1151,6 +1177,11 @@ impl Cmp<'_> {
                     (ImplItem::Const(x), Some(ImplItem::Const(y))) => {
                         if x != y {
                             self.found(&shown, format!("type changed: {x} -> {y}"));
+                        }
+                    }
+                    (ImplItem::Type(x), Some(ImplItem::Type(y))) => {
+                        if x != y {
+                            self.found(&shown, format!("associated type changed: {x} -> {y}"));
                         }
                     }
                     (ImplItem::Other, _) | (_, Some(ImplItem::Other)) => {
@@ -1182,12 +1213,15 @@ enum TraitMember {
 enum ImplItem {
     Fn(FnSig),
     Const(String),
+    /// A trait impl's associated type: its generics and the type it names.
+    Type(String),
     Other,
 }
 
 struct ImplRec {
-    synthetic: bool,
     generics: String,
+    /// The canonical self type of an inherent impl (shown in findings); `None` for a trait impl.
+    for_: Option<String>,
     items: BTreeMap<String, ImplItem>,
 }
 
