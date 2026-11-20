@@ -293,15 +293,17 @@ Measured: the format table and the resolver (unit tests with Metal's, DX12's and
 
 The gallery's release build (`cargo build --release -p gallery`, the repo's profile, macOS) is **10,433,424 bytes** at 0.7.0, against **10,416,752 bytes** at a5f6237 (0.6.2, built from a clean archive of that commit): +16,672 bytes (+0.16 %), which is the resolver, the deep-format readers, the display read and the gallery's two new pages, not a new dependency. The facade gains no dependency (D332), and the only crate feature added is `objc2-app-kit`'s `objc2-core-foundation` on macOS, already in the lock.
 
-## Touch (on the branch; ships in 0.7.1)
+## 0.7.0 to 0.7.1: touch, gestures and scroll physics
 
-Touch is an opt-in. Nothing to migrate: an app that does not ask gets what 0.7.0 gave it, on a touchscreen too, because the winit `Translator` drops `WindowEvent::Touch` until it is switched on. To take touch, once per window:
+D343 to D352. Additive, hence 0.7.1: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and nothing needs to change. Touch is off until an app asks (D16): an app that never calls `set_touch_enabled(true)` gets 0.7.0's behaviour on a touchscreen too, and its scroll areas run their 0.7.0 code.
+
+Touch is an opt-in. To take touch, once per window:
 
 ```rust
 translator.set_touch_enabled(true); // off at start; `touch_enabled()` reads it back
 ```
 
-Each finger then arrives as `Event::Touch(TouchEvent)` in `RawInput::events`, and the core reduces the first finger to the pointer path every widget already reads: a tap clicks, a drag drags, nothing stays hovered after the lift, and a second finger never touches the pointer. `Ui::pointer_kind()` says whether the last press was a `Mouse` or a `Touch`. The mouse copy that Windows makes of a touch is dropped for 500 ms of app time after the last lift. Turning the switch off while fingers are down cancels each one.
+Each finger then arrives as `Event::Touch(TouchEvent)` in `RawInput::events`. The core reduces the first finger to the pointer path every widget already reads: a tap clicks, a drag drags, nothing stays hovered after the lift, and a second finger never touches the pointer. `Ui::pointer_kind()` says whether the last press was a `Mouse` or a `Touch`. The mouse copy a platform makes of a touch is dropped while a touch is down and for 500 ms of app time after the last lift (D344). Turning the switch off while fingers are down cancels each one.
 
 The window insets are two more events the app pushes after `take`, from whatever its platform reports (logical pixels); the core latches the last of each, and `ui.safe_area()` and `ui.keyboard_inset()` read them (`Insets::ZERO` until one arrives):
 
@@ -311,7 +313,32 @@ raw.events.push(Event::SafeArea(Insets::new(left, top, right, bottom)));
 raw.events.push(Event::KeyboardInset(Insets::new(0.0, 0.0, 0.0, keyboard_height)));
 ```
 
-`Ui::input()` still returns the raw `RawInput`: a widget of the app's own that reads pointer events from `ui.input().events` sees `Event::Touch`, not the synthesized pointer events. No toolkit widget does. Unverified here: the order in which Windows delivers a touch and its promoted mouse messages (read from source, not seen); a desktop touchscreen is checked in M3.
+`Ui::input()` still returns the raw `RawInput`: a widget of the app's own that reads pointer events from `ui.input().events` sees `Event::Touch`, not the synthesized pointer events. No toolkit widget does.
+
+**Additions.**
+
+| item | what it is |
+| --- | --- |
+| `Event::Touch(TouchEvent)`, `TouchEvent` (`new`, `with_force`), `TouchId` (`new`, `get`), `TouchPhase` (`Started`, `Moved`, `Ended`, `Cancelled`) | one finger, its logical position and an optional force (D343) |
+| `Event::SafeArea(Insets)`, `Event::KeyboardInset(Insets)` | the edges a system bar covers, and the part an on-screen keyboard covers; the core keeps the last of each (D345) |
+| `PointerKind` (`Mouse`, `Touch`), `Ui::pointer_kind()` | what the last press was (D344) |
+| `Ui::safe_area()`, `Ui::keyboard_inset()` | the latched insets (D345) |
+| `Translator::set_touch_enabled`, `Translator::touch_enabled` | the winit switch, off at start (D346) |
+| `ScriptedInput::touch_start`, `touch_move`, `touch_end`, `touch_cancel`, `touch_force`, `safe_area`, `keyboard_inset` | the test driver's touches and insets |
+| `Ui::release_velocity(id) -> (f32, f32)` | the velocity of a release in logical px/s, read once on the frame `drag_stopped` is set for `id` (D348) |
+| `Ui::set_drag_axes(id, horizontal, vertical)` | the axes a drag widget claims from a touch pan; a drag widget that never calls it claims both (D349) |
+| `Ui::pinch(id) -> Option<Pinch>`, `ui::Pinch` (`#[non_exhaustive]`) | two fingers: the scale, the centre, the start centre, and `started` and `ended` (D348) |
+| `Ui::with_scroll_physics(physics, f)`, `scroll_area::ScrollPhysics`, `scroll_area::Overscroll` (`RubberBand`, `Clamp`) | the physics of every scroll area inside the scope (D350, D351) |
+| `motion::Decay` (`NORMAL`, `FAST`, `new`) | a fling's exponential decay (D347) |
+| `motion::DampedSpring` (`BOUNCE`, `new`) | the spring that brings an overscroll back (D347) |
+| `motion::rubber_band`, `motion::rubber_band_inverse` | the rubber band past an end and its inverse (D347) |
+| `motion::conformance_at`, `motion::conformance_of_at` | the conformance harness at any rate; `conformance` and `conformance_of` are these at 60 (D347) |
+
+**Gestures.** A tap is `clicked`. A touch held 500 ms inside the 10 px slop is `secondary_clicked` on its widget, once, so every widget's `context` answers a long press (D292); its lift clicks nothing. A touch press starts a drag at 10 logical px (a mouse press keeps 4 px). Velocity is a least-squares fit over the last 100 ms of samples, at most 8000 px/s. At the slop the dominant axis decides a pan: a pressed widget that senses drag and claims that axis keeps the touch, otherwise the topmost scroll region with content on that axis takes it (D349). `Ui::pinch` reads two fingers and cancels nothing; a pinch consumer that must not also pan senses drag, which claims both axes.
+
+**Scroll physics.** A scroll area follows the finger 1:1. A lift of 50 px/s or more flings on `Decay`, a pull past an end rubber-bands, and a fling that reaches an end bounces off it on `DampedSpring`. `ScrollView.offset` and `ScrollResponse.offset` stay clamped, so no widget on the area changes. An app that wants the ends to stop calls `ui.with_scroll_physics(ScrollPhysics::default().with_overscroll(Overscroll::Clamp), |ui| ...)`. The physics ignore the motion tier: a fling lasts seconds even under `Off` (D350; `docs/motion.md`, "Scroll physics", names the exception).
+
+**Unverified here.** Desktop touchscreens: the order in which Windows delivers a touch and its promoted mouse copy is read from source, not seen (D12). The feel of a real finger: every constant (10 px slop, 500 ms long press, decay rate 0.998 per ms, rubber band 0.55, the 0.4 s spring) is the toolkit's starting value. The motion is proven headless and rate-independent (60 and 120 Hz agree).
 
 ## API changes of the library pass
 

@@ -585,6 +585,14 @@ From M1 to M3:
 - new: `RawInput`, `FrameOutput`, `Translator`, `OutputState`, `Backdrop::apply`, `WindowBackdrop`,
   the `testing` module.
 
+Since 0.7.0 (touch input, gestures and scroll physics, D343 to D352; the workspace version is 0.7.1; `docs/consuming.md`, "0.7.0 to 0.7.1", is the migration map; additive, nothing breaks):
+
+- `lune_ui_core::input`: `Event::Touch(TouchEvent)`, `Event::SafeArea`, `Event::KeyboardInset` (`#[non_exhaustive]` `Event`), `TouchEvent`, `TouchId`, `TouchPhase`, `PointerKind` (D343, D345). `Ui::pointer_kind`, `Ui::safe_area` and `Ui::keyboard_inset` read them (D344, D345); `testing::ScriptedInput` gains `touch_start`, `touch_move`, `touch_end`, `touch_cancel`, `touch_force`, `safe_area` and `keyboard_inset`;
+- `lune_ui_core::ui`: `Ui::release_velocity`, `Ui::set_drag_axes`, `Ui::pinch` and `ui::Pinch` (D348, D349), `Ui::with_scroll_physics` (D350, D351); the pointer machine's touch rules are in `ui/pointer.rs` and the touch reducer in `ui/touch.rs`;
+- `lune_ui_core::motion`: `Decay`, `DampedSpring`, `rubber_band`, `rubber_band_inverse`, `conformance_at` and `conformance_of_at` (D347); `widgets::scroll_area`: `ScrollPhysics` and `Overscroll` (D350);
+- `lune-ui-winit`: `Translator::set_touch_enabled` and `touch_enabled`, off at start, so an app that does not ask gets 0.7.0's behaviour (D346);
+- the gallery: a `touch` page and ten `phone-touch-*` scenes at 402 by 874 logical px (`page::PHONE`, D351), with a 60 and 120 Hz equality test.
+
 Since 0.6.2 (window depth, D328 to D336; the workspace version is 0.7.0; `docs/consuming.md`, "0.6.2 to 0.7.0", is the migration map; breaking):
 
 - `lune-ui-wgpu`: `SurfaceDepth` (`#[non_exhaustive]`) and the `SurfaceOptions` fields `depth`, `display_bits`, `opaque`; `WindowSurface::depth()`; the format resolution is a pure function over the surface's formats and colour spaces, the alpha mode and the display's depth, configured in the sRGB colour space (D328). `Auto` is 8-bit on a glass window on every OS (D329, D330). `FrameRenderer::for_surface`, `with_display`, `follow`, `follow_target`; `dither_lsb(format, display_bits)` is `max(format step, display step)` and `Gpu.formats` is keyed by (format, dither amplitude) (D333); `dump::read_rgba` reads the deep formats and `read_rgba_f32` keeps their precision (D334); `Gpu::new` asks for `TEXTURE_FORMAT_16BIT_NORM` and `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` where the adapter has them;
