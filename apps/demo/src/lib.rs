@@ -20,6 +20,7 @@ use lune_ui::frame::FrameRenderer;
 use lune_ui::gpu::{self, Gpu};
 use lune_ui::input::{OutputState, Translator, control_flow, keymap};
 use lune_ui::lunegit_dark::THEME;
+use lune_ui::mobile::{self, SceneAttach};
 use lune_ui::motion::{Cadence, MotionTier};
 use lune_ui::paint::Rect;
 use lune_ui::scene::{FrameParams, LayerId};
@@ -52,6 +53,10 @@ pub struct Options {
     /// Exit the event loop after this many presented frames. Desktop only: on iOS and Android the
     /// loop cannot return, so it is ignored there.
     pub frames: Option<u32>,
+    /// Hand the window to the app's window scene after creating it (`mobile::attach_to_scene`,
+    /// which does nothing off iOS). Off only for the control run that shows what an unattached
+    /// window looks like.
+    pub scene_attach: bool,
 }
 
 impl Default for Options {
@@ -60,12 +65,38 @@ impl Default for Options {
             log_frames: 3,
             probe: false,
             frames: None,
+            scene_attach: true,
         }
     }
 }
 
 /// Whether this platform's event loop can return, so `Options::frames` applies.
 const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android")));
+
+/// The presented frame at which a `--probe` run prints the scene state a second time; the demo
+/// keeps requesting frames until it.
+const PROBE_LAST_FRAME: u32 = 30;
+
+/// The `probe scene` word for an attach state.
+fn scene_word(state: SceneAttach) -> &'static str {
+    match state {
+        SceneAttach::Attached => "attached",
+        SceneAttach::Waiting => "waiting",
+        SceneAttach::NotNeeded => "not-needed",
+        _ => "unknown",
+    }
+}
+
+/// Prints `probe scene <state>`: with `attach`, the result of attaching `window` to its scene;
+/// without it, the attach state queried the same way (the call is idempotent), or `skipped`.
+fn probe_scene(window: &Window, attach: bool) {
+    let word = if attach {
+        scene_word(mobile::attach_to_scene(window))
+    } else {
+        "skipped"
+    };
+    probe_line("scene", word);
+}
 
 /// Prints one `probe <key> <value>` line.
 fn probe_line(key: &str, value: impl std::fmt::Display) {
@@ -162,7 +193,8 @@ struct App {
 }
 
 /// Opens the window, the GPU and the surface.
-fn setup(event_loop: &ActiveEventLoop, probe: bool) -> Result<Shown, String> {
+fn setup(event_loop: &ActiveEventLoop, options: Options) -> Result<Shown, String> {
+    let probe = options.probe;
     let attrs = Window::default_attributes()
         .with_title("luneui demo")
         .with_inner_size(LogicalSize::new(PHONE.0, PHONE.1));
@@ -171,6 +203,8 @@ fn setup(event_loop: &ActiveEventLoop, probe: bool) -> Result<Shown, String> {
             .create_window(attrs)
             .map_err(|e| format!("window: {e}"))?,
     );
+    // Under the iOS scene life cycle the window shows only once it belongs to a window scene.
+    probe_scene(&window, options.scene_attach);
     let instance = gpu::instance(Some(Box::new(event_loop.owned_display_handle())));
     let surface = instance
         .create_surface(window.clone())
@@ -268,6 +302,9 @@ impl App {
             println!("presented {} {}x{}", self.presented, size.0, size.1);
             window.request_redraw();
         }
+        if self.presented == 1 || (self.options.probe && self.presented == PROBE_LAST_FRAME) {
+            probe_scene(window, self.options.scene_attach);
+        }
         if LOOP_RETURNS && let Some(n) = self.options.frames {
             if self.presented >= n {
                 event_loop.exit();
@@ -346,7 +383,7 @@ impl ApplicationHandler for App {
             shown.window.request_redraw();
             return;
         }
-        match setup(event_loop, self.options.probe) {
+        match setup(event_loop, self.options) {
             Ok(shown) => {
                 shown.window.request_redraw();
                 self.shown = Some(shown);
@@ -364,6 +401,17 @@ impl ApplicationHandler for App {
             if let Some(shown) = &self.shown {
                 probe_window("suspended", &shown.window, &shown.surface);
             }
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // A `--probe` run draws until its last probe frame. The request is made here: one made
+        // inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
+        if self.options.probe
+            && self.presented < PROBE_LAST_FRAME
+            && let Some(shown) = &self.shown
+        {
+            shown.window.request_redraw();
         }
     }
 

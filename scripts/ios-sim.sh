@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds apps/demo for the iOS simulator, runs it on one simulator device of its own and checks that
-# a frame was presented. Usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]
+# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke] [--no-manifest] [--landscape]
+#   [--demo-arg <arg>] [--keep-booted | --delete-device]
 #   (default)       build, assemble target/ios-sim/Demo.app (ad-hoc signed), boot the device, install,
 #                   launch, wait up to 60 s for `presented 1` in target/ios-sim/stdout.log, take one
 #                   screenshot (target/ios-sim/shot-1.png), terminate, shut the device down.
@@ -9,11 +10,21 @@
 #                   (simctl launch only, never the UI), bring it back with a second launch without
 #                   --terminate-running-process, take shot-2.png (two screenshots in all), and write the
 #                   `probe` lines of both launches to target/ios-sim/probe.txt.
+#   --smoke         --probe, and also require `probe scene attached` by the demo's frame 30 (its third
+#                   `probe scene` line) and, in launch 1's output, `probe lifecycle resumed` at launch, then
+#                   `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
+#   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
+#                   the app without the scene life cycle).
+#   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
+#                   bundle copy's Info.plist, so the app launches in landscape.
+#   --demo-arg <a>  pass one more argument to the demo (repeatable), e.g. --no-scene-attach.
 #   --keep-booted   leave the device booted at the end.
 #   --delete-device shut down and delete the device named below, then exit.
 # The device is named luneui-demo-iphone (type iPhone-16-Pro, runtime iOS-18-0; override with
-# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix). It is found by
-# exact name and created when missing.
+# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix); any other runtime
+# gets a device of its own, luneui-demo-iphone-<runtime>. It is found by exact name and created when
+# missing. The Info.plist edits apply to the copy in target/ios-sim/Demo.app only, never to
+# apps/demo/ios/Info.plist.
 # Never: touches any other device, uses `booted` as a device argument, opens Simulator.app, drives the
 # UI, records video, or writes outside target/ios-sim/ (cargo's own target dir aside).
 # Exit codes: 0 passed; 1 a check failed (build, launch, no frame); 2 usage or setup (a tool, the rustup
@@ -23,24 +34,47 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-NAME=luneui-demo-iphone
+DEFAULT_RUNTIME=iOS-18-0
 DEVICE_TYPE="${LUNEUI_IOS_DEVICE_TYPE:-iPhone-16-Pro}"
-RUNTIME="${LUNEUI_IOS_RUNTIME:-iOS-18-0}"
+RUNTIME="${LUNEUI_IOS_RUNTIME:-$DEFAULT_RUNTIME}"
+if [ "$RUNTIME" = "$DEFAULT_RUNTIME" ]; then
+  NAME=luneui-demo-iphone
+else
+  NAME="luneui-demo-iphone-$RUNTIME"
+fi
 TARGET=aarch64-apple-ios-sim
 BUNDLE_ID=rs.lune.luneui.demo
 OUT="$ROOT/target/ios-sim"
 APP="$OUT/Demo.app"
 
+usage() {
+  echo "usage: scripts/ios-sim.sh [--probe | --smoke] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
+  exit 2
+}
+
 keep=0
 delete=0
 probe=0
-for arg in "$@"; do
-  case "$arg" in
+smoke=0
+no_manifest=0
+landscape=0
+demo_args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --probe) probe=1 ;;
+    --smoke) smoke=1; probe=1 ;;
+    --no-manifest) no_manifest=1 ;;
+    --landscape) landscape=1 ;;
+    --demo-arg)
+      [ "$#" -ge 2 ] || usage
+      demo_args+=("$2")
+      shift
+      ;;
     --keep-booted) keep=1 ;;
     --delete-device) delete=1 ;;
-    *) echo "usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]" >&2; exit 2 ;;
+    *) usage ;;
   esac
+  shift
 done
 
 UDID=""
@@ -111,6 +145,18 @@ rm -rf "$APP"
 mkdir -p "$APP"
 cp "$BIN" "$APP/demo"
 cp "$ROOT/apps/demo/ios/Info.plist" "$APP/Info.plist"
+PLB=/usr/libexec/PlistBuddy
+if [ "$no_manifest" -eq 1 ]; then
+  "$PLB" -c "Delete :UIApplicationSceneManifest" "$APP/Info.plist" >/dev/null || fail "--no-manifest (PlistBuddy)"
+  echo "ios-sim: bundle copy without UIApplicationSceneManifest"
+fi
+if [ "$landscape" -eq 1 ]; then
+  "$PLB" -c "Delete :UISupportedInterfaceOrientations" "$APP/Info.plist" >/dev/null 2>&1 || true
+  "$PLB" -c "Add :UISupportedInterfaceOrientations array" \
+    -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" \
+    "$APP/Info.plist" >/dev/null || fail "--landscape (PlistBuddy)"
+  echo "ios-sim: bundle copy in landscape (UIInterfaceOrientationLandscapeLeft)"
+fi
 codesign --force --sign - "$APP" >/dev/null 2>&1 || fail "codesign (ad-hoc)"
 
 state="$(xcrun simctl list devices | grep -F "($UDID)" | head -n 1)"
@@ -130,6 +176,7 @@ app_args=()
 if [ "$probe" -eq 1 ]; then
   app_args=(--probe)
 fi
+app_args+=(${demo_args[@]+"${demo_args[@]}"})
 xcrun simctl launch --terminate-running-process \
   --stdout="$OUT/stdout.log" --stderr="$OUT/stderr.log" "$UDID" "$BUNDLE_ID" ${app_args[@]+"${app_args[@]}"} || fail "launch"
 
@@ -154,6 +201,16 @@ if [ "$probe" -eq 1 ]; then
 else
   sleep 1
 fi
+if [ "$smoke" -eq 1 ]; then
+  # The demo prints `probe scene` at window creation, at frame 1 and at frame 30.
+  for _ in $(seq 1 60); do
+    [ "$(grep -c '^probe scene ' "$OUT/stdout.log" || true)" -ge 3 ] && break
+    sleep 0.5
+  done
+  grep '^probe scene ' "$OUT/stdout.log" || true
+  [ "$(grep '^probe scene ' "$OUT/stdout.log" | sed -n 3p)" = "probe scene attached" ] \
+    || fail "no 'probe scene attached' by frame 30"
+fi
 xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-1.png" >/dev/null 2>&1 || fail "screenshot"
 [ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
 sips -g pixelWidth -g pixelHeight "$OUT/shot-1.png" | tail -n 2
@@ -165,7 +222,7 @@ if [ "$probe" -eq 1 ]; then
   : > "$OUT/stdout-2.log"
   : > "$OUT/stderr-2.log"
   xcrun simctl launch --stdout="$OUT/stdout-2.log" --stderr="$OUT/stderr-2.log" \
-    "$UDID" "$BUNDLE_ID" --probe || fail "second launch"
+    "$UDID" "$BUNDLE_ID" "${app_args[@]}" || fail "second launch"
   sleep 3
   xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
   [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
@@ -177,6 +234,14 @@ if [ "$probe" -eq 1 ]; then
     grep "^probe \|^presented " "$OUT/stdout-2.log" || true
   } > "$OUT/probe.txt"
   echo "ios-sim: probe lines in $OUT/probe.txt ($(grep -c '^probe ' "$OUT/probe.txt") lines)"
+fi
+
+if [ "$smoke" -eq 1 ]; then
+  # Launch 1's process keeps writing to stdout.log across the round trip (docs/mobile.md).
+  cycle="$(grep '^probe lifecycle ' "$OUT/stdout.log" | sed 's/^probe lifecycle //' | tr '\n' ' ')"
+  echo "ios-sim: life cycle: $cycle"
+  grep -qE '^resumed .*suspended .*resumed' <<< "$cycle" \
+    || fail "life cycle not 'resumed' at launch, then 'suspended' and 'resumed'"
 fi
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true

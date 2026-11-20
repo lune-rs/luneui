@@ -1,8 +1,8 @@
 //! OS layer of the glass UI toolkit: the platform glass effect behind a transparent window, behind
 //! the core's `Backdrop` capability ([`material`]), the tray item ([`tray`]), the popover window
 //! a tray surface draws in ([`popover`]), the desktop and window shapes ([`desktop`]) and window
-//! groups ([`group`]). The OS code lives in `material/` and `platform/`, one file per platform,
-//! selected by `cfg`.
+//! groups ([`group`]), and what a phone app needs from the OS ([`mobile`]). The OS code lives in
+//! `material/` and `platform/`, one file per platform, selected by `cfg`.
 
 // The platform modules name the core's backdrop types as `crate::backdrop::…`.
 use lune_ui_core::backdrop;
@@ -10,6 +10,7 @@ use lune_ui_core::backdrop;
 pub mod desktop;
 pub mod group;
 pub mod material;
+pub mod mobile;
 mod platform;
 pub mod popover;
 pub mod tray;

@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use demo::Options;
 use winit::event_loop::EventLoop;
 
-const USAGE: &str = "usage: demo [--probe] [--frames <n>]";
+const USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach]";
 
 /// The options the command line asks for, or `None` for an argument that is not understood.
 fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
@@ -18,6 +18,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
         match arg.as_str() {
             "--probe" => options.probe = true,
             "--frames" => options.frames = Some(args.next()?.parse().ok()?),
+            "--no-scene-attach" => options.scene_attach = false,
             _ => return None,
         }
     }

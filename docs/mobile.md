@@ -17,9 +17,11 @@ The phone targets are a rustup target each: `rustup target add aarch64-apple-ios
 
 Builds `apps/demo` for `aarch64-apple-ios-sim`, assembles `target/ios-sim/Demo.app` (the binary and `apps/demo/ios/Info.plist`, ad-hoc signed), runs it on one simulator device of its own and checks that a frame was presented.
 
-- Device: `luneui-demo-iphone`, type `iPhone-16-Pro`, runtime `iOS-18-0` (override with `LUNEUI_IOS_DEVICE_TYPE`, `LUNEUI_IOS_RUNTIME`); found by exact name, created when missing, shut down at the end (`--keep-booted` leaves it booted, `--delete-device` deletes it).
+- Device: `luneui-demo-iphone`, type `iPhone-16-Pro`, runtime `iOS-18-0` (override with `LUNEUI_IOS_DEVICE_TYPE`, `LUNEUI_IOS_RUNTIME`; any other runtime gets a device of its own, `luneui-demo-iphone-<runtime>`, as `luneui-demo-iphone-iOS-27-2`); found by exact name, created when missing, shut down at the end (`--keep-booted` leaves it booted, `--delete-device` deletes it).
 - Default mode: waits up to 60 s for `presented 1` in `target/ios-sim/stdout.log`, takes one screenshot (`shot-1.png`), exits 0 on `ios-sim: passed`. Exit 1 a check failed, 2 setup (tool, rustup target or runtime missing).
 - `--probe`: launches the demo with `--probe`, screenshot `shot-1.png` 2 s after `presented 1`, launches the Settings app (`com.apple.Preferences`, by `simctl launch`) to send the demo to the background, launches the demo again (no `--terminate-running-process`), screenshot `shot-2.png`, and writes the `probe`/`presented` lines of both launches to `target/ios-sim/probe.txt`. Two screenshots in all.
+- `--smoke`: `--probe`, and also requires `probe scene attached` as the demo's third `probe scene` line (frame 30) and, in launch 1's output, `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
+- Control flags, which edit only the bundle copy `target/ios-sim/Demo.app/Info.plist` (with `/usr/libexec/PlistBuddy`), never `apps/demo/ios/Info.plist`: `--no-manifest` deletes `UIApplicationSceneManifest` (the app without the scene life cycle); `--landscape` sets `UISupportedInterfaceOrientations` to `UIInterfaceOrientationLandscapeLeft`. `--demo-arg <arg>` passes one more argument to the demo (repeatable), as `--no-scene-attach`, which skips `mobile::attach_to_scene`.
 - Never: touches another device, uses `booted` as a device argument, opens Simulator.app or drives the UI, records video, writes outside `target/ios-sim/`.
 
 `cargo run -p demo -- --probe --frames 60` does the same probe on the desktop: a phone-shaped window (402 x 874 points) for about a second, exit 0 after 60 presented frames. `--frames` is ignored on iOS and Android, where the loop cannot return.
@@ -63,9 +65,56 @@ Redraws on iOS: a `request_redraw()` made inside the `RedrawRequested` handler w
 
 `simctl launch --terminate-running-process` worked in every script run and in one manual retry with the app running (new pid, new output file). It was refused (SBMainWorkspace) twice in earlier manual retries after a previous run; not reproduced, cause unknown.
 
+## M4 reading: the scene life cycle
+
+Run 2026-11-20 and 2026-11-21 on `iPhone-16-Pro` devices: iOS 18.0 (`luneui-demo-iphone`) and iOS 27.2 (24B8117, `luneui-demo-iphone-iOS-27-2`); Xcode SDK 27.2, winit 0.30.13. Each run's `stdout.log`, `stderr.log` and screenshots are kept under `target/ios-sim/runs/<run>/`.
+
+The route (D354): `apps/demo/ios/Info.plist` declares the scene manifest, with no scene delegate class and no storyboard:
+
+```xml
+<key>UIApplicationSceneManifest</key>
+<dict>
+	<key>UIApplicationSupportsMultipleScenes</key>
+	<false/>
+	<key>UISceneConfigurations</key>
+	<dict>
+		<key>UIWindowSceneSessionRoleApplication</key>
+		<array>
+			<dict>
+				<key>UISceneConfigurationName</key>
+				<string>Default Configuration</string>
+			</dict>
+		</array>
+	</dict>
+</dict>
+```
+
+and the app calls `lune_ui::mobile::attach_to_scene(&window)` right after `create_window`, which hands winit's `UIWindow` to the connected `UIWindowScene` (or to the next one that connects) and re-seats the root view controller. The demo prints `probe scene <attached|waiting|not-needed|skipped>` at window creation, at frame 1 and, under `--probe`, at frame 30.
+
+| run | flags | what it printed | screenshot |
+| --- | --- | --- | --- |
+| R1, iOS 18.0 (`r1-smoke-reseat`) | `--smoke` | `probe scene attached` three times; `presented 1 1206x2622`; `ios-sim: passed` | the frame full screen, the four edge markers on the screen edges, as in M1 |
+| R1, iOS 27.2 (`ios27-r1-smoke`) | `--smoke` | the same; life cycle `resumed suspended resumed`; `ios-sim: passed` | 1206x2622, both shots |
+| R2, iOS 18.0 and 27.2 | (R1's output) | `inner_size` 1206x2334 at `inner_position` 0,186; `outer_size` 1206x2622 at 0,0; scale 3; derived insets 0, 62, 0, 34; last `Resized` 1206x2622: M1's values | |
+| R3, iOS 18.0 and 27.2 | (R1's output) | `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip | |
+| R4, control A, iOS 18.0 (`r4-no-manifest`) | `--no-manifest` | M1's behaviour: frames, `Resized` 1206x2622 only; `probe scene attached` (UIKit gives a manifest-less app an implicit scene and puts winit's window in it) | the frame |
+| R4, control A, iOS 27.2 (`ios27-r4-no-manifest`) | `--no-manifest` | nothing: the process stops at launch with `SIGTRAP` (`EXC_BREAKPOINT`) in UIKit's `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, called from `-[UIApplication workspace:didCreateScene:…]` under `UIApplicationMain` (the crash report, `crash.ips`); empty stdout and stderr, so `resumed` never arrives | none |
+| R5, control B, iOS 18.0 (`r5-no-attach`) | `--demo-arg --no-scene-attach` | `probe scene skipped`; every size 0x0, safe area 0, the surface 1x1, no `presented` line | black (status bar and home indicator only): the screenshot tells an attached window from one that is not |
+| R6, iOS 18.0 (`r6-landscape`, before the re-seat) | `--landscape` | `inner_size` 2622x918 at 0,186, insets 0, 62, 0, 34: the portrait safe area in a landscape window (wrong) | |
+| R6, iOS 18.0 (`r6-landscape-reseat`) | `--landscape` | `inner_size` 2250x1143 at 186,0, insets 62, 0, 62, 21, the same as the landscape run without the manifest (`r6-landscape-no-manifest`) | |
+
+What the values say:
+
+- The manifest with no scene delegate class is enough: with the attach the window shows and draws on 18.0 and 27.2, and iOS 27.2 refuses an app built with the iOS 27 SDK that has no manifest (R4), which is the refusal TN3187 announced. So `launches on iOS 27`: held on the 27.2 simulator; a real device is unverified here.
+- Under the manifest the attach is what shows the window (R5): without it the window has no scene, every size reads 0 and nothing is presented.
+- The order matters for the safe area: winit sets its root view controller before the window has a scene, so the controller keeps the portrait orientation (R6, first run). `attach_to_scene` sets the root view controller to none and back after setting the scene, and the landscape insets come out right; portrait is unchanged (R1). The re-seat makes UIKit print `Unbalanced calls to begin/end appearance transitions for <WinitUIViewController …>` twice on stderr; nothing else follows from it in these runs.
+- With the manifest a first `Resized` 0x0 arrives before the 1206x2622 one (without it only 1206x2622 arrives): an app skips a 0 size (the demo does; `WindowSurface::resize` would clamp it to 1x1).
+- winit's `resumed` and `suspended` keep arriving under the manifest, at launch and across the background round trip (R3), so the life cycle stays winit's (D356's branch: no `mobile::Lifecycle`).
+- Not driven here: a scene the OS discards and reconnects (the observer attaches the window to each scene that connects, by design; the simulator gives no way to force it) and rotation at run time.
+
 ## Unverified here
 
 - A real device: 120 Hz (the simulator reports 60000 mHz), the GPU's cost (glass blur), thermal behaviour, the real safe area of other models, landscape and the Dynamic Island's insets.
 - Touch (the demo's button is drawn but taps are not translated; `Translator` drops `WindowEvent::Touch`), the soft keyboard and IME, rotation, the home indicator behaviour.
-- iOS 27: winit 0.30.13 has no `UIScene` life cycle (no `UIScene` symbol in `platform_impl/ios`), and an app built with the iOS 27 SDK that does not adopt it is expected to be refused on iOS 27 (Apple TN3187). This Mac's Xcode SDK is 27.2 and the installed runtimes are 17.5 and 18.0, so the readings above run; no iOS 27 runtime is installed. M4 adopts the scene life cycle outside winit (roadmap revision 2).
+- iOS 27 on a real device: winit 0.30.13 has no `UIScene` life cycle, and the toolkit adopts it outside winit (`mobile::attach_to_scene` and the manifest, M4 reading above), which launches on the iOS 27.2 simulator; nothing ran on a device. A scene the OS discards and reconnects, and rotation at run time, were not driven.
 - Android: nothing was run (`aarch64-linux-android` is compile-checked only).

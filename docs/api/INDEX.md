@@ -141,7 +141,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-6 modules, 26 items. Left out and counted: 148 blanket impls, 138 items of the omitted impls, 33 items of the trait impls shown as one line, 72 synthetic impls.
+7 modules, 28 items. Left out and counted: 161 blanket impls, 151 items of the omitted impls, 36 items of the trait impls shown as one line, 78 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -149,16 +149,17 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 12 |
 | [`lune_ui_platform::group`](lune-ui-platform/group.md) | 2 |
 | [`lune_ui_platform::material`](lune-ui-platform/material.md) | 3 |
+| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 2 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
 
 ### `lune-ui` (`lune_ui`)
 
-7 modules, 153 re-exports shown as links.
+7 modules, 154 re-exports shown as links.
 
 | Module | Re-exports |
 | --- | --- |
-| [`lune_ui`](lune-ui/index.md) | 37 |
+| [`lune_ui`](lune-ui/index.md) | 38 |
 | [`lune_ui::access`](lune-ui/access.md) | 19 |
 | [`lune_ui::desktop`](lune-ui/desktop.md) | 20 |
 | [`lune_ui::input`](lune-ui/input.md) | 31 |
@@ -207,6 +208,7 @@ Every top-level item of the four owning crates, by name.
 - [`ARROW_GAP`](lune-ui-core/widgets/table.md#constant.ARROW_GAP) - constant, `lune_ui_core::widgets::table`
 - [`ARROW_LEFT`](lune-ui-core/icon.md#constant.ARROW_LEFT) - constant, `lune_ui_core::icon`
 - [`ARROW_UP`](lune-ui-core/icon.md#constant.ARROW_UP) - constant, `lune_ui_core::icon`
+- [`attach_to_scene`](lune-ui-platform/mobile.md#fn.attach_to_scene) - function, `lune_ui_platform::mobile`
 - [`audit_template`](lune-ui-core/strings.md#fn.audit_template) - function, `lune_ui_core::strings`
 - [`AUTO_SCROLL_MAX`](lune-ui-core/drag.md#constant.AUTO_SCROLL_MAX) - constant, `lune_ui_core::drag`
 - [`AUTO_SCROLL_TICK`](lune-ui-core/drag.md#constant.AUTO_SCROLL_TICK) - constant, `lune_ui_core::drag`
@@ -1077,6 +1079,7 @@ Every top-level item of the four owning crates, by name.
 - [`Sampling`](lune-ui-core/image.md#enum.Sampling) - enum, `lune_ui_core::image`
 - [`Scene`](lune-ui-core/scene.md#struct.Scene) - struct, `lune_ui_core::scene`
 - [`SCENE_LAYERS`](lune-ui-core/scene.md#constant.SCENE_LAYERS) - constant, `lune_ui_core::scene`
+- [`SceneAttach`](lune-ui-platform/mobile.md#enum.SceneAttach) - enum, `lune_ui_platform::mobile`
 - [`Scope`](lune-ui-core/shortcuts.md#enum.Scope) - enum, `lune_ui_core::shortcuts`
 - [`scripted_input_contract`](lune-ui-core/testing.md#fn.scripted_input_contract) - function, `lune_ui_core::testing`
 - [`ScriptedInput`](lune-ui-core/testing.md#struct.ScriptedInput) - struct, `lune_ui_core::testing`
