@@ -112,6 +112,9 @@ enum Mode {
 const USAGE: &str = "usage: starter [--dump <file.png> [--window <W>x<H>] [--scale <S>]]\n  W and H 1..=4096, S 0.5..=4.0 (default 800x600 at 2)";
 
 /// `<W>x<H>`: digits only, each side 1 to 4096.
+/// The longest physical side a dump may have (what the gallery's dump allows).
+const MAX_PHYSICAL: u32 = 8192;
+
 fn parse_window(v: &str) -> Option<(u32, u32)> {
     let (w, h) = v.split_once('x')?;
     let side = |t: &str| {
@@ -155,18 +158,39 @@ fn parse(args: &[String]) -> Result<Mode, String> {
             None => return Err(format!("{name} `{value}` is out of range\n{USAGE}")),
         }
     }
+    let (window, scale) = (window.unwrap_or((800, 600)), scale.unwrap_or(2.0));
+    // The target's physical sides are the GPU's to take: refuse what it cannot make.
+    let physical = |side: u32| (side as f32 * scale).round() as u32;
+    if physical(window.0).max(physical(window.1)) > MAX_PHYSICAL {
+        return Err(format!(
+            "--window {}x{} at --scale {scale} is {}x{} physical pixels; a side is at most {MAX_PHYSICAL}\n{USAGE}",
+            window.0,
+            window.1,
+            physical(window.0),
+            physical(window.1)
+        ));
+    }
     Ok(Mode::Dump {
         path: PathBuf::from(path),
-        window: window.unwrap_or((800, 600)),
-        scale: scale.unwrap_or(2.0),
+        window,
+        scale,
     })
 }
 
 /// Renders one frame of a fresh app headless: the size in physical pixels and its RGBA bytes.
 fn render(window: (u32, u32), scale: f32) -> Result<((u32, u32), Vec<u8>), String> {
     let mut gpu = pollster::block_on(Gpu::new(gpu::instance(None), None))?;
+    render_with(&mut gpu, window, scale)
+}
+
+/// [`render`] on a device the caller made.
+fn render_with(
+    gpu: &mut Gpu,
+    window: (u32, u32),
+    scale: f32,
+) -> Result<((u32, u32), Vec<u8>), String> {
     let format = wgpu::TextureFormat::Bgra8Unorm;
-    let mut renderer = FrameRenderer::new(&mut gpu, format);
+    let mut renderer = FrameRenderer::new(gpu, format);
     let mut text = text_cache();
     let mut input = ScriptedInput::new((window.0 as f32, window.1 as f32), scale);
     input.focus(true);
@@ -189,7 +213,7 @@ fn render(window: (u32, u32), scale: f32) -> Result<((u32, u32), Vec<u8>), Strin
     };
     // Twice: the first draw fills the glyph atlas, the second is the one to keep.
     for _ in 0..2 {
-        renderer.draw(&mut gpu, &mut text, &scene, &view, params)?;
+        renderer.draw(gpu, &mut text, &scene, &view, params)?;
         gpu.end_frame(&mut text);
     }
     Ok((size, dump::read_rgba(&gpu.device, &gpu.queue, &target)?))
@@ -475,6 +499,13 @@ mod tests {
             ])),
             Ok(dump((402, 874), 3.0))
         );
+        // The limit is on the physical side: 4096 at scale 2 is 8192 and is allowed.
+        assert_eq!(
+            parse(&args(&[
+                "--dump", "a.png", "--window", "4096x10", "--scale", "2"
+            ])),
+            Ok(dump((4096, 10), 2.0))
+        );
         for bad in [
             &["--dump"][..],
             &["--nope"],
@@ -486,6 +517,9 @@ mod tests {
             &["--dump", "a.png", "--scale", "2", "--scale", "2"],
             &["--dump", "a.png", "--bogus", "1"],
             &["--dump", "a.png", "--scale"],
+            // A physical side above 8192: 4096 x 3 is 12288.
+            &["--dump", "a.png", "--window", "4096x100", "--scale", "3"],
+            &["--dump", "a.png", "--window", "100x3000", "--scale", "3"],
         ] {
             assert!(parse(&args(bad)).is_err(), "{bad:?}");
         }
@@ -493,8 +527,9 @@ mod tests {
 
     #[test]
     fn a_phone_sized_render_has_the_size_and_more_than_one_colour() {
-        let (size, rgba) = match render((402, 874), 3.0) {
-            Ok(r) => r,
+        // Only a missing adapter skips; a broken draw or readback fails.
+        let mut gpu = match pollster::block_on(Gpu::new(gpu::instance(None), None)) {
+            Ok(gpu) => gpu,
             Err(e) => {
                 assert!(
                     !std::env::var("LUNEUI_REQUIRE_GPU").is_ok_and(|v| v == "1"),
@@ -504,6 +539,7 @@ mod tests {
                 return;
             }
         };
+        let (size, rgba) = render_with(&mut gpu, (402, 874), 3.0).expect("the render works");
         assert_eq!(size, (1206, 2622));
         assert_eq!(rgba.len(), 1206 * 2622 * 4);
         let colours: HashSet<[u8; 4]> = rgba

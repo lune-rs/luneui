@@ -5,7 +5,7 @@ One line per row of `docs/DECISIONS.md` (344 rows), oldest first. The file is ge
 `scripts/gen-decisions-index.sh` (the gate checks it is current); do not edit it.
 
 - **decision** is the row's first sentence (the next one too when the first is short), cut at 160 characters. Open the row in `docs/DECISIONS.md` (search `| D<n> |`) for the full text, the reason and what was rejected.
-- **status** is `in force`, or `changed by D<n> (<keyword>)` when a later row says it supersedes, amends or refines this one, in whole or in part. The index does not judge whole versus part: read the later row before relying on a row that is changed. A later row that changes an earlier one in other words is not caught, so the full row has the last word.
+- **status** is `in force`, or `changed by D<n> (<keyword>)` when a later row says it supersedes, amends or refines this one, in whole or in part. The index does not judge whole versus part: read the later row before relying on a row that is changed. A later row that changes an earlier one in other words, or says so only in its reason or rejected cell, is not caught, so the full row has the last word.
 - Numbering has gaps (a range may be reserved by another branch); ids are never reused.
 
 | id | date | decision | status |

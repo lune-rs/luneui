@@ -180,8 +180,10 @@ fn is_word_char(c: char) -> bool {
 }
 
 /// For every row, the later rows that supersede, amend or refine it. Keywords are looked up in the
-/// whole row line; the ids that follow a keyword up to the first `. `, `;`, `)`, ` | ` or the end
-/// are its targets, except an id that follows `plan ` or `roadmap ` (a plan-local id).
+/// row's decision text (the cell after the date; the reason and rejected cells are not read, so a
+/// change said only there reads as in force); the ids that follow a keyword up to the first `. `,
+/// `;`, `)` or the end are its targets, except an id that follows `plan ` or `roadmap ` (a
+/// plan-local id).
 fn changes(rows: &[Row]) -> Result<ChangeMap, Errs> {
     let known: BTreeSet<u32> = rows.iter().map(|r| r.id).collect();
     let mut out: BTreeMap<u32, BTreeSet<Change>> = BTreeMap::new();
@@ -394,7 +396,7 @@ fn render(rows: &[Row], changes: &ChangeMap) -> String {
         rows.len()
     ));
     o.push_str("- **decision** is the row's first sentence (the next one too when the first is short), cut at 160 characters. Open the row in `docs/DECISIONS.md` (search `| D<n> |`) for the full text, the reason and what was rejected.\n");
-    o.push_str("- **status** is `in force`, or `changed by D<n> (<keyword>)` when a later row says it supersedes, amends or refines this one, in whole or in part. The index does not judge whole versus part: read the later row before relying on a row that is changed. A later row that changes an earlier one in other words is not caught, so the full row has the last word.\n");
+    o.push_str("- **status** is `in force`, or `changed by D<n> (<keyword>)` when a later row says it supersedes, amends or refines this one, in whole or in part. The index does not judge whole versus part: read the later row before relying on a row that is changed. A later row that changes an earlier one in other words, or says so only in its reason or rejected cell, is not caught, so the full row has the last word.\n");
     o.push_str("- Numbering has gaps (a range may be reserved by another branch); ids are never reused.\n\n");
     o.push_str("| id | date | decision | status |\n|---|---|---|---|\n");
     for r in rows {

@@ -25,16 +25,13 @@ const AREAS: [(&str, &str); 4] = [
     ("data", "Data"),
 ];
 
-/// Words a module name cannot be.
-const KEYWORDS: [&str; 22] = [
-    "as", "async", "await", "break", "const", "continue", "crate", "else", "enum", "extern",
-    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut",
-];
-/// More of them (a second list keeps each line short).
-const KEYWORDS_MORE: [&str; 22] = [
-    "pub", "ref", "return", "self", "static", "struct", "super", "trait", "true", "type", "unsafe",
-    "use", "where", "while", "dyn", "abstract", "become", "box", "do", "final", "macro",
-    "override",
+/// Words a module name cannot be: the strict and reserved keywords of edition 2024.
+const KEYWORDS: &[&str] = &[
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
+    "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
 
 /// The arguments of a run.
@@ -121,7 +118,7 @@ fn validate_slug(slug: &str) -> Result<(), String> {
         return Err(format!("slug `{slug}` must start with a letter"));
     }
     let module = module_name(slug);
-    if KEYWORDS.contains(&module.as_str()) || KEYWORDS_MORE.contains(&module.as_str()) {
+    if KEYWORDS.contains(&module.as_str()) {
         return Err(format!("slug `{slug}` is a Rust keyword as a module name"));
     }
     Ok(())
@@ -495,6 +492,7 @@ use lune_ui::widgets::{m}::{t}Options;
 
 use crate::page::Stage;
 use crate::page::{{Expect, Page, PageKind, PageState, UiPage, UiScene}};
+use crate::showcase::knobs::Knobs;
 
 pub(crate) static PAGE: Page = Page {{
     id: "{slug}",
@@ -507,19 +505,28 @@ pub(crate) static PAGE: Page = Page {{
 }};
 
 fn sheet() -> Box<dyn PageState> {{
-    Box::new(Sheet)
+    Box::new(Sheet {{ wide: false }})
 }}
 
-/// The widget at rest, laid out from the stage's rect.
-struct Sheet;
+/// The widget at rest, laid out from the stage's rect; the knob widens it.
+struct Sheet {{
+    wide: bool,
+}}
 
 impl PageState for Sheet {{
     fn draw(&mut self, ui: &mut Ui<'_>, stage: &Stage) {{
         let window = stage.area(ui);
         let background = ui.theme().glass.window.tint;
         ui.painter().fill(window, 0.0, background);
-        let at = Rect::new(window.x + 16.0, window.y + 16.0, 160.0, 32.0);
+        let width = if self.wide {{ 320.0 }} else {{ 160.0 }};
+        let at = Rect::new(window.x + 16.0, window.y + 16.0, width, 32.0);
         ui.{m}("{slug}", at, &{t}Options::default().label("{title}"));
+    }}
+
+    /// Every page of the sidebar has a knob (a test holds it): replace this with the component's
+    /// own options.
+    fn knobs(&mut self, ui: &mut Ui<'_>, panel: &mut Knobs<'_>) {{
+        panel.toggle(ui, "Wide", &mut self.wide);
     }}
 }}
 
@@ -862,7 +869,8 @@ mod tests {
             assert_eq!(validate_slug(ok), Ok(()), "{ok}");
         }
         for bad in [
-            "", "Probe", "a--b", "-a", "a-", "1a", "a_b", "a b", "type", "loop", "self",
+            "", "Probe", "a--b", "-a", "a-", "1a", "a_b", "a b", "type", "loop", "self", "gen",
+            "try", "yield", "priv", "typeof", "unsized", "virtual",
         ] {
             assert!(validate_slug(bad).is_err(), "{bad}");
         }
@@ -1075,6 +1083,8 @@ mod tests {
         let p = page_source(&n);
         assert!(p.contains("id: \"probe-chip\"") && p.contains("id: \"probe-chip-default\""));
         assert!(p.contains("stage.area(ui)") && p.contains("scale: 2.0"));
+        // Every sidebar page needs a knob (showcase::knobs test): the stub has one.
+        assert!(p.contains("fn knobs(&mut self") && p.contains("panel.toggle("));
     }
 
     // -- the checklist ---------------------------------------------------------------------

@@ -244,11 +244,7 @@ fn recipe_list(ui: &mut Ui<'_>, area: Rect, d: &mut Data) {
         ..FieldOptions::default()
     };
     ui.text_field_with("filter", g.cell(0, 0), &mut d.filter, &filter);
-    let needle = d.filter.to_lowercase();
-    let shown: Vec<&(&str, &str, &str, u32)> = UPSTREAMS
-        .iter()
-        .filter(|u| u.0.contains(&needle) || u.1.contains(&needle))
-        .collect();
+    let shown = matching(&d.filter);
     let row_of = |u: &(&'static str, &'static str, &'static str, u32)| ListRow {
         name: u.0,
         sub: Some(u.1),
@@ -256,11 +252,14 @@ fn recipe_list(ui: &mut Ui<'_>, area: Rect, d: &mut Data) {
         dot: Some(tone_of(u.2)),
         ..ListRow::default()
     };
+    // A row is keyed by its upstream, not by its place among the matches, so the selection stays
+    // on the same upstream when the filter changes; `index_of` finds a key's place again.
+    let index_of = |k: RowKey| shown.iter().position(|&u| u as u64 == k.0);
     let opts = ListOptions {
         count: shown.len(),
         heights: Heights::Fixed(height(&row_of(&UPSTREAMS[0]), SIDE_PANEL_PADDING)),
         selection: SelectionMode::Single,
-        index_of: None,
+        index_of: Some(&index_of),
         label: "Upstreams",
     };
     if shown.is_empty() {
@@ -269,10 +268,22 @@ fn recipe_list(ui: &mut Ui<'_>, area: Rect, d: &mut Data) {
         let text = "No upstream matches the filter.";
         ui.label("empty", (at.x + 8.0, at.y + 8.0), text, LabelRole::Small);
     }
-    let key = |i: usize| RowKey(i as u64);
+    let key = |i: usize| RowKey(shown[i] as u64);
     ui.virtual_list("list", g.cell(0, 1), &opts, key, |ui, ctx| {
-        ui.list_row(ctx, &row_of(shown[ctx.index]), SIDE_PANEL_PADDING)
+        ui.list_row(
+            ctx,
+            &row_of(&UPSTREAMS[shown[ctx.index]]),
+            SIDE_PANEL_PADDING,
+        )
     });
+}
+
+/// The indices into `UPSTREAMS` of the upstreams whose name or address holds `filter`.
+fn matching(filter: &str) -> Vec<usize> {
+    let needle = filter.to_lowercase();
+    (0..UPSTREAMS.len())
+        .filter(|&i| UPSTREAMS[i].0.contains(&needle) || UPSTREAMS[i].1.contains(&needle))
+        .collect()
 }
 
 /// The table's columns: the name fills what the fixed two leave.
@@ -734,6 +745,24 @@ mod tests {
                 "the doc names `{id}`, which is no scene"
             );
         }
+    }
+
+    #[test]
+    fn a_list_row_keeps_its_key_when_the_filter_changes() {
+        let all = matching("");
+        assert_eq!(all, (0..UPSTREAMS.len()).collect::<Vec<_>>());
+        // `llama3.1` is row 1 unfiltered and row 0 of the matches, but its key is 1 in both.
+        let llama = matching("llama");
+        assert_eq!(llama, [1]);
+        assert_eq!(UPSTREAMS[llama[0]].0, "llama3.1");
+        let index_of = |k: u64| llama.iter().position(|&u| u as u64 == k);
+        assert_eq!(
+            index_of(1),
+            Some(0),
+            "the key finds its row among the matches"
+        );
+        assert_eq!(index_of(0), None, "a key the filter hid has no row");
+        assert!(matching("zzz").is_empty());
     }
 
     #[test]

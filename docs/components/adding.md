@@ -74,7 +74,8 @@ cargo run -p gallery -- --dump <dir> --only <slug>-default --window 402x874 --sc
 Open each PNG with the image-reading tool and go through the rubric in
 [`../screen-review.md`](../screen-review.md); record one verdict per item (pass, or fail and what),
 in your task notes. Fix what fails, or write it into the entry as a limit. `cargo test -p gallery
-showcase` checks the page is in a sidebar group and draws inside its stage.
+showcase` checks the page is in a sidebar group, has a knob (the stub has one; make it a real one) and
+draws inside its stage.
 
 ## 6. Fill the catalogue entry
 
