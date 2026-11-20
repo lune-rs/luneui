@@ -15,17 +15,17 @@ and none is `[open]`. The catalogue holds 97 entries: 91 `done` (the done standa
 holds for each by something that runs here, `docs/components/README.md` "Status"), 2 `in-progress` by
 their own text (`platform.material` and `render.surface`: what they name needs a real OS run, D234)
 and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, said on the id
-(R-nfr-2, R-nfr-4, R-nfr-7, R-ext-3, R-ext-5). What only a real OS shows is listed in
+(R-nfr-2, R-nfr-4, R-nfr-7, R-ext-3, R-ext-5, and later R-infra-7). What only a real OS shows is listed in
 `docs/STATE.md`, "Unverified here"; none of it is ticked.
 
 ## Consumers
 
-- **Luneterm** (this author's terminal, `~/Projects/Luneterm`): its milestones M9 to M11
+- **Luneterm** (this author's terminal): its milestones M9 to M11
   (the app end to end, tabs and settings, finish) consume the toolkit. M8 (the C ABI) does not.
   Today only the `glass-ui` spike exercises the painter, frame and window APIs.
 - **A possible Rust rebuild of Lunegit** (the Avalonia git client): about 75 views, custom controls
   and AvaloniaEdit-based editors. Not a commitment; its needs are rough stubs in the catalogue.
-- **Wane** (this author's LLM gateway desktop app, `~/Projects/wane`): its window and tray UI. Its
+- **Wane** (this author's LLM gateway desktop app): its window and tray UI. Its
   HTML mocks and component spec (`docs/ui/components.md`, 35 components, P0-P2 build order) name what it
   needs; 20 of them are new here (2026-11-04).
 - **Others**: any app that wants the same glass look. The toolkit stays app-agnostic.
@@ -52,6 +52,18 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-core-9 [new] Image drawing: a painter primitive that draws an app-supplied bitmap (`core.image`).
 - R-core-10 [new] Painter primitives beyond today's fill, ring, stroke, acrylic, text, clip and
   transform: the set each catalogue spec lists, aggregated in `core.painter`.
+- R-core-11 [new] Touch reaches widgets through the pointer path they already read: the primary
+  touch is a primary press, move and release (a tap clicks, a cancel drops the press with no
+  click), other touches never reach the pointer, the mouse copy a platform makes of a touch is
+  dropped for 500 ms of app time, and `Ui::pointer_kind`, `Ui::safe_area` and `Ui::keyboard_inset`
+  read the kind of the last press and the window's latched insets (D344, D345).
+- R-core-12 [new] A touch press is told apart from a mouse press in the pointer machine, and only a
+  touch press changes: it starts a drag at 10 px (a mouse at 4), a hold of 500 ms of app time
+  within that slop is a secondary click (so every widget's `context` answers a long press, D292)
+  and the lift after it clicks nothing, the pointer's travel of every press is read once as a
+  release velocity (`Ui::release_velocity`, a fit over the last 100 ms, at most 8000 px/s), and two
+  touches read as a pinch over the widget the first one pressed (`Ui::pinch`, a reading that
+  cancels nothing). All of it is a function of the events and the app's time (D348).
 
 ### Text
 
@@ -160,6 +172,10 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-motion-3 [new] The motion system and the 60 fps contract: closed-form values of the app's time, a
   60 Hz conformance harness for every transition, a bench budget at milestone acceptance and Idle
   when settled (D41).
+- R-motion-4 [new] A finger's motion: a fling's exponential decay, a damped spring for the bounce back,
+  and a rubber band for the pull past an end, each a closed form of the app's time that gives the
+  same value at 60 Hz and 120 Hz, with the conformance harness run at any rate (D347;
+  `motion.transitions`, `docs/motion.md`, "Scroll physics").
 
 ### Infrastructure
 
@@ -176,6 +192,13 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   cards and the split diff in Lunegit. OS-level drag and drop is R-platform-5.
 - R-infra-6 [new] A small bounded JSON reader in core (input size, depth and string-length limits,
   fail-closed errors, no panics) behind theme and locale loading (`infra.json`, D44).
+- R-infra-7 [new] A release since `v0.7.0` keeps an app written against that release compiling,
+  passing its tests and drawing the same: every public item of the five library crates stays (an
+  addition is allowed, a removal, a moved path, a changed signature, a new required trait method or
+  a lost trait impl is not), an exhaustive type gains no field or variant, and `rust-version` and
+  the `winit` and `wgpu` requirements do not move. `scripts/check-compat.sh` holds it from
+  rustdoc JSON, from the base's own gallery and integration tests built on the new libraries, and
+  from the base's gallery dump compared with no allow list (D342).
 
 ## Non-functional
 

@@ -20,7 +20,7 @@ A pie chart for storage usage: slices sized by their share of the total, drawn f
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Controls/StoragePieChartControl.cs`
 
 ## Spec

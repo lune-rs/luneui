@@ -19,7 +19,7 @@ Lunegit's settings page: a page shell with a restart banner, and eight section v
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Views/SettingsPageView.axaml`
 - `src/Lunegit.Desktop/Views/Settings/GeneralSettingsView.axaml`
 - `src/Lunegit.Desktop/Views/Settings/AppearanceSettingsView.axaml`

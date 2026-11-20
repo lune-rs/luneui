@@ -18,6 +18,12 @@ The pure functions ([`clamp_offset`](scroll_area.md#fn.clamp_offset), [`should_r
 [`centre_target`](scroll_area.md#fn.centre_target), [`reveal_offset`](scroll_area.md#fn.reveal_offset)) port the reference app's offset preserver and its centring
 formula; the frame logic lives in [`Ui::scroll_area`](../ui.md#method.Ui.scroll_area).
 
+A finger scrolls it too (D350): a touch pan on the area follows the finger 1:1, lets go as a
+fling that decays at a rate and rubber-bands at the ends, then springs back. The overscroll is
+drawn as one extra translate around the content; [`ScrollView::offset`](scroll_area.md#structfield.ScrollView.offset) and
+[`ScrollResponse::offset`](scroll_area.md#structfield.ScrollResponse.offset) stay clamped. [`ScrollPhysics`](scroll_area.md#struct.ScrollPhysics) and [`Ui::with_scroll_physics`](../ui.md#method.Ui.with_scroll_physics) set
+the decay, the ends and the spring.
+
 Frame order: the wheel and key input of the frame moves the offset, the content draws at it,
 then everything that needs the content's size runs (the measured clamp, follow-tail, reveals,
 page keys, the thumb). When one of those moves the offset after the content drew, the frame asks
@@ -39,7 +45,7 @@ pub struct Extent {
 
 The size of the content, as the content measured it.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:115`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:124`
 
 **Fields**
 
@@ -80,7 +86,7 @@ pub struct ScrollOptions {
 
 What a scroll area is given besides its rect.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:71`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:80`
 
 **Fields**
 
@@ -122,6 +128,63 @@ Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:71`
 - `impl PartialEq for ScrollOptions`
 - `impl StructuralPartialEq for ScrollOptions`
 
+<a id="struct.ScrollPhysics"></a>
+### Struct `ScrollPhysics`
+
+```rust
+#[non_exhaustive]
+pub struct ScrollPhysics {
+    pub decay: Decay,
+    pub overscroll: Overscroll,
+    pub spring: DampedSpring,
+}
+```
+
+How a scroll area moves under a finger: how a fling decays, what the ends do, and the spring
+that brings an overscroll back. A fling and a bounce ignore the motion tier (D350): they are
+the finger's own motion. Set for the areas inside a scope by [`Ui::with_scroll_physics`](../ui.md#method.Ui.with_scroll_physics).
+
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:276`
+
+**Fields**
+
+- <a id="structfield.ScrollPhysics.decay"></a>`pub decay: Decay`
+
+  How a fling slows down.
+
+- <a id="structfield.ScrollPhysics.overscroll"></a>`pub overscroll: Overscroll`
+
+  What an end does.
+
+- <a id="structfield.ScrollPhysics.spring"></a>`pub spring: DampedSpring`
+
+  The spring that takes an overscroll back to the end.
+
+**Methods and associated items**
+
+`impl ScrollPhysics`
+
+- <a id="method.ScrollPhysics.with_decay"></a>`pub const fn with_decay(self, decay: Decay) -> Self`
+
+  These physics with `decay`.
+
+- <a id="method.ScrollPhysics.with_overscroll"></a>`pub const fn with_overscroll(self, overscroll: Overscroll) -> Self`
+
+  These physics with `overscroll` at the ends.
+
+- <a id="method.ScrollPhysics.with_spring"></a>`pub const fn with_spring(self, spring: DampedSpring) -> Self`
+
+  These physics with `spring` for the way back.
+
+**Trait implementations**
+
+- `impl Clone for ScrollPhysics`
+- `impl Copy for ScrollPhysics`
+- `impl Debug for ScrollPhysics`
+- `impl Default for ScrollPhysics`
+- `impl PartialEq for ScrollPhysics`
+- `impl StructuralPartialEq for ScrollPhysics`
+
 <a id="struct.ScrollResponse"></a>
 ### Struct `ScrollResponse`
 
@@ -137,7 +200,7 @@ pub struct ScrollResponse<R> {
 
 What [`Ui::scroll_area`](../ui.md#method.Ui.scroll_area) returns.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:129`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:138`
 
 **Fields**
 
@@ -180,7 +243,7 @@ What the content closure is told: the viewport (in the area's own space) and the
 content is drawn at. Content coordinates have their origin at the viewport's top-left corner
 (offset 0): a box drawn at `viewport.y + 100` is at `y = 100` for [`Ui::scroll_to`](../ui.md#method.Ui.scroll_to).
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:108`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:117`
 
 **Fields**
 
@@ -208,7 +271,7 @@ pub struct Target {
 
 A box in content coordinates, per axis a `(start, length)` or nothing (that axis stays put).
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:152`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:161`
 
 **Fields**
 
@@ -256,7 +319,7 @@ pub enum Bars {
 
 Whether an axis shows its bar.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:45`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:54`
 
 **Variants**
 
@@ -281,6 +344,42 @@ Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:45`
 - `impl PartialEq for Bars`
 - `impl StructuralPartialEq for Bars`
 
+<a id="enum.Overscroll"></a>
+### Enum `Overscroll`
+
+```rust
+#[non_exhaustive]
+pub enum Overscroll {
+    RubberBand,
+    Clamp,
+}
+```
+
+What happens past an end of the content under a finger (D350).
+
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:262`
+
+**Variants**
+
+- <a id="variant.Overscroll.RubberBand"></a>`RubberBand`
+
+  A pull past the end shows a rubber-banded distance of it ([`rubber_band`](../motion.md#fn.rubber_band)); a fling that
+  reaches the end bounces off it, and both spring back.
+
+- <a id="variant.Overscroll.Clamp"></a>`Clamp`
+
+  The offset stops at the end: nothing shows past it and a fling that reaches it stops dead.
+
+**Trait implementations**
+
+- `impl Clone for Overscroll`
+- `impl Copy for Overscroll`
+- `impl Debug for Overscroll`
+- `impl Default for Overscroll`
+- `impl Eq for Overscroll`
+- `impl PartialEq for Overscroll`
+- `impl StructuralPartialEq for Overscroll`
+
 <a id="enum.Reveal"></a>
 ### Enum `Reveal`
 
@@ -293,7 +392,7 @@ pub enum Reveal {
 
 How a target is brought into view.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:143`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:152`
 
 **Variants**
 
@@ -326,7 +425,7 @@ pub fn centre_target(index: usize, row: f64, viewport: f64, extent: f64) -> f64
 The offset that centres the row `index` of height `row` in a viewport, clamped to the range:
 `index * row - (viewport - row) / 2`. The reference app's `ComputeCenteredOffsetY`.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:218`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:227`
 
 <a id="fn.clamp_offset"></a>
 ### Function `clamp_offset`
@@ -338,7 +437,7 @@ pub fn clamp_offset(offset: f64, extent: f64, viewport: f64) -> f64
 `offset` clamped to `[0, max(0, extent - viewport)]`; 0 for anything not finite or not
 positive (the reference app's `ClampRestoreOffset`).
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:193`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:202`
 
 <a id="fn.max_offset"></a>
 ### Function `max_offset`
@@ -349,7 +448,7 @@ pub fn max_offset(extent: f64, viewport: f64) -> f64
 
 The offset range's end: `extent - viewport`, at least 0 (0 for anything not finite).
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:184`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:193`
 
 <a id="fn.restore_offset"></a>
 ### Function `restore_offset`
@@ -361,7 +460,7 @@ pub fn restore_offset(saved: f64, extent: f64, viewport: f64, current: f64) -> O
 The offset a restore writes, or `None` for no write: a saved offset of 0 or less is not
 restored, and a change under 0.5 px from `current` is not written.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:208`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:217`
 
 <a id="fn.reveal_offset"></a>
 ### Function `reveal_offset`
@@ -373,7 +472,7 @@ pub fn reveal_offset(start: f64, len: f64, viewport: f64, current: f64, how: Rev
 The offset that shows the span `start .. start + len` in a viewport that is at `current`,
 before the clamp. A span taller than the viewport aligns its start unless it already covers it.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:228`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:237`
 
 <a id="fn.should_restore"></a>
 ### Function `should_restore`
@@ -385,7 +484,7 @@ pub fn should_restore(has_rendered: bool, last_key: Option<u64>, new_key: Option
 Whether a rebind restores the previous offset: the area has rendered, the new key is `Some` and
 equals the last one (`None` never restores). The reference app's `ShouldRestore`.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:202`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:211`
 
 ## Constants
 
@@ -398,7 +497,7 @@ pub const INTO_VIEW: Motion;
 
 Scroll-into-view within two viewports: `fast`, `sine-in-out`, snapped in Reduced.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:36`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:45`
 
 <a id="constant.LINE"></a>
 ### Constant `LINE`
@@ -409,7 +508,7 @@ pub const LINE: f64 = 48.0;
 
 Logical px per wheel line (D9).
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:32`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:41`
 
 <a id="constant.SNAP_DISTANCE"></a>
 ### Constant `SNAP_DISTANCE`
@@ -420,7 +519,7 @@ pub const SNAP_DISTANCE: f64 = 2.0;
 
 A reveal farther than this many viewports snaps.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:41`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:50`
 
 <a id="constant.WHEEL"></a>
 ### Constant `WHEEL`
@@ -431,5 +530,5 @@ pub const WHEEL: Motion;
 
 The wheel step: `scroll` kind, `fast`, `quad-out`, snapped in Reduced.
 
-Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:34`
+Source: `crates/lune-ui-core/src/widgets/scroll_area.rs:43`
 

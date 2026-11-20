@@ -27,7 +27,7 @@ Tree rows with guide lines. `TreeGuideControl` draws the trunk and rounded elbow
 
 `crates/lune-ui-core/src/widgets/tree_view.rs` (`Ui::tree_view`, `Ui::tree_state`, `TreeRow`, `TreeOptions`, `TreeRowCtx`, `TreeResponse`, `TreeState`, `guide_paths`), on `Ui::scroll_area_untranslated` (rows are placed in `f64`, as in the virtual list). `GuideStyle`, `ChevronStyle`, `straight_paths`. Tests: `crates/lune-ui-core/tests/widget_tree_view.rs`. Page: `apps/gallery/src/pages/tree_view.rs`.
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Controls/TreeGuideControl.cs`
 - `src/Lunegit.Desktop/ViewModels/SidePanelRow.cs`
 - `src/Lunegit.Desktop/Views/SidePanels/BranchesPanelView.axaml`

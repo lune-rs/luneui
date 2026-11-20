@@ -23,7 +23,7 @@ pub struct OutputPlan {
 
 What [`OutputState::apply`](input.md#method.OutputState.apply) changes on the window for a frame, apart from its commands.
 
-Source: `crates/lune-ui-winit/src/input.rs:383`
+Source: `crates/lune-ui-winit/src/input.rs:440`
 
 **Fields**
 
@@ -52,7 +52,7 @@ pub struct OutputState {
 
 Applies a window's [`FrameOutput`](../lune-ui-core/input.md#struct.FrameOutput), touching the cursor and the IME only when they changed.
 
-Source: `crates/lune-ui-winit/src/input.rs:391`
+Source: `crates/lune-ui-winit/src/input.rs:448`
 
 **Methods and associated items**
 
@@ -92,10 +92,13 @@ Collects one window's winit events into [`RawInput`](../lune-ui-core/input.md#st
 Positions and sizes are divided by the latest scale factor. Events that arrive before the
 first pointer move carry the position (0, 0). The window starts unfocused until winit says
 otherwise. A hovered, cancelled or dropped file becomes a file event (one per file) at the last
-pointer position, in logical pixels: winit gives none. Touch, gestures, theme, moved, occluded,
-axis motion and touchpad pressure events are ignored.
+pointer position, in logical pixels: winit gives none. Touch is ignored until
+[`set_touch_enabled`](input.md#method.Translator.set_touch_enabled) turns it on (it is off at start, so an app that
+does not ask sees no touch, as at 0.7.0); then each `WindowEvent::Touch` becomes an
+[`Event::Touch`](../lune-ui-core/input.md#variant.Event.Touch) at its logical position and does not move the pointer. Gestures, theme, moved,
+occluded, axis motion and touchpad pressure events are ignored.
 
-Source: `crates/lune-ui-winit/src/input.rs:31`
+Source: `crates/lune-ui-winit/src/input.rs:36`
 
 **Methods and associated items**
 
@@ -170,10 +173,21 @@ Source: `crates/lune-ui-winit/src/input.rs:31`
 
   The scale factor changed.
 
+- <a id="method.Translator.set_touch_enabled"></a>`pub fn set_touch_enabled(&mut self, on: bool)`
+
+  Turns touch on or off (off at start). While on, `WindowEvent::Touch` becomes
+  [`Event::Touch`](../lune-ui-core/input.md#variant.Event.Touch); while off it is dropped. Turning it off while forwarded touches are down
+  pushes a `Cancelled` for each, at its last position, so the core never holds a touch that
+  will not end.
+
 - <a id="method.Translator.take"></a>`pub fn take(&mut self, time: Duration) -> RawInput`
 
   The frame's input at app time `time`; the event list starts empty again, the window state
   (size, scale, pointer, modifiers, focus) stays.
+
+- <a id="method.Translator.touch_enabled"></a>`pub fn touch_enabled(&self) -> bool`
+
+  Whether touch is forwarded (off by default).
 
 - <a id="method.Translator.window_event"></a>`pub fn window_event(&mut self, event: &WindowEvent)`
 
@@ -198,7 +212,7 @@ pub enum ImePlan {
 
 What [`OutputState::apply`](input.md#method.OutputState.apply) does with the IME for a frame.
 
-Source: `crates/lune-ui-winit/src/input.rs:372`
+Source: `crates/lune-ui-winit/src/input.rs:429`
 
 **Variants**
 
@@ -239,7 +253,7 @@ The event loop's control flow for a frame's [`Repaint`](../lune-ui-core/input.md
 where `origin` is the instant the app's time `0` was taken (a `t` too far to represent waits
 for input). Reads no clock.
 
-Source: `crates/lune-ui-winit/src/input.rs:333`
+Source: `crates/lune-ui-winit/src/input.rs:390`
 
 <a id="fn.cursor_icon"></a>
 ### Function `cursor_icon`
@@ -250,7 +264,7 @@ pub fn cursor_icon(icon: lune_ui_core::input::CursorIcon) -> winit::window::Curs
 
 The winit cursor icon of `icon`.
 
-Source: `crates/lune-ui-winit/src/input.rs:285`
+Source: `crates/lune-ui-winit/src/input.rs:342`
 
 <a id="fn.ime_area_physical"></a>
 ### Function `ime_area_physical`
@@ -269,7 +283,7 @@ scale is not finite, or the scale is not above 0: nothing is sent for it.
 The UI's scale is the display's scale times the page's zoom, so under a zoom the area is not
 in the window's own logical units; physical pixels are the one unit both agree on.
 
-Source: `crates/lune-ui-winit/src/input.rs:352`
+Source: `crates/lune-ui-winit/src/input.rs:409`
 
 <a id="fn.keymap"></a>
 ### Function `keymap`
@@ -281,5 +295,5 @@ pub fn keymap() -> lune_ui_core::input::Keymap
 The keyboard conventions of the platform this adapter was built for: `Keymap::MAC` on macOS,
 `Keymap::PC` elsewhere. The app passes it in `FrameConfig` (the core never reads the OS, D7).
 
-Source: `crates/lune-ui-winit/src/input.rs:229`
+Source: `crates/lune-ui-winit/src/input.rs:286`
 

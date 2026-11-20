@@ -957,6 +957,9 @@ impl Ui<'_> {
             let y = (mem.heights.top(index) - offset) as f32 + rect.y;
             let slot = Rect::new(rect.x, y, rect.w, mem.heights.height(index) as f32);
             let r = self.interact(row_id, slot, Sense::DRAG);
+            // A row claims no drag axis: a touch pan on it scrolls the list (D350). The mouse's
+            // drag-select is untouched, since claims are read for touch only.
+            self.set_drag_axes(row_id, false, false);
             if r.press_started {
                 let primary = keymap.is_primary(r.press_modifiers);
                 out.changed |= st.press(index, r.press_modifiers, primary, rows);

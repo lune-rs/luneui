@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 102 |
+| done | 103 |
 | external | 4 |
-| **total** | **108** |
+| **total** | **109** |
 
 ## core
 
@@ -24,6 +24,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [core.acrylic](core/acrylic.md) | Acrylic colour math and noise opacity | done | luneterm | Avalonia acrylic colour math with tests, and the noise opacity |
 | [core.color](core/color.md) | Colour helpers | done | luneterm | Straight-alpha RGBA values with premultiply, blend-over and alpha helpers |
 | [core.focus](core/focus.md) | Keyboard focus | done | any | Tab order by call order within focus scopes, focus-visible, scope push, trap and restore, roving focus in composites |
+| [core.gestures](core/gestures.md) | Touch gestures | done | any | A touch press in the pointer machine: a 10 px slop, a long press as a secondary click, a release velocity, a pinch reading, the pan to a scroll region, and the motion physics under a fling |
 | [core.icon](core/icon.md) | Codicon glyph constants | done | luneterm, wane | Codicon glyph constants and a glyph helper; the app supplies the icon font |
 | [core.image](core/image.md) | Image drawing | done | lunegit, wane | Image primitive: app-decoded RGBA drawn into a rect with a fit mode, alpha, optional corner radius, a part of the picture (sprite sheets) and per-draw sampling; explicit resource lifetime and in-place rect updates |
 | [core.input](core/input.md) | Input model | done | any | Plain-data RawInput in, FrameOutput out; the windowing adapter translates both |
@@ -157,7 +158,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | --- | --- | --- | --- | --- |
 | [motion.animation-tiers](motion/animation-tiers.md) | Animation tiers and reduced motion | done | any | Full, Reduced and Off motion tiers passed in by the app, with the per-token Reduced duration map |
 | [motion.curves](motion/curves.md) | Easing curves and menu motion | done | luneterm | cubic_bezier easing and the menu open and close values; becomes the cubic-out and ease-in tokens |
-| [motion.transitions](motion/transitions.md) | Motion system and transitions | done | any | Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a 60 Hz conformance harness |
+| [motion.transitions](motion/transitions.md) | Motion system and transitions | done | any | Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a conformance harness at 60 Hz or any rate, and the physics of a finger's motion (Decay, DampedSpring, rubber_band) |
 
 ## infra
 

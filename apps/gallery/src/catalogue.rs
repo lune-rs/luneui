@@ -39,6 +39,10 @@ const UNCITED: &[(&str, &str)] = &[
     ("R-nfr-2", "a non-functional rule about the whole repo"),
     ("R-nfr-4", "a non-functional rule about the whole repo"),
     ("R-nfr-7", "a non-functional rule about the whole repo"),
+    (
+        "R-infra-7",
+        "a compatibility rule about the whole API, held by scripts/check-compat.sh",
+    ),
 ];
 
 /// Widget modules no catalogue entry claims in its `source:`: routines shared by several widgets
@@ -1709,13 +1713,14 @@ mod tests {
             }
         }
         assert!(cited >= 8, "the table cites {cited} tests");
-        // The mobile rules are slots: nothing claims to enforce them.
+        // The mobile rules still open are slots: nothing claims to enforce them. The mobile program
+        // fills them as it decides them (M3 filled four of the seven).
         assert!(
             rules
                 .iter()
                 .filter(|r| r.kind == RuleKind::MobileSlot)
                 .count()
-                >= 7
+                >= 3
         );
     }
 }

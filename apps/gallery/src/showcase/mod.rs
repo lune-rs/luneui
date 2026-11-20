@@ -142,7 +142,7 @@ const SEARCH: &[&str] = &["search"];
 const FOUND_ROWS: &[&str] = &["sidebar", "found"];
 /// The row key of the table page in the sidebar: `Target::Page(index of "table").key()`, which
 /// `the_table_scenes_row_key_is_the_first_match_of_the_search` pins.
-const TABLE_ROW: u64 = 100 + 62;
+const TABLE_ROW: u64 = 100 + 63;
 
 const SCENES: &[UiScene] = &[
     UiScene {
@@ -248,6 +248,10 @@ struct Replay {
     /// The hosted state has drawn once, so the rects the script aims at exist.
     drawn: bool,
     held: Modifiers,
+    /// The touches the script has put down and not lifted, with their last position: a scene
+    /// that ends with a finger down (a pan held, a pinch) has them cancelled when it is over, so
+    /// the window's mouse is not left guarded by a touch no one lifts.
+    touches: Vec<(u64, (f32, f32))>,
 }
 
 impl Replay {
@@ -258,6 +262,22 @@ impl Replay {
             start: None,
             drawn: false,
             held: Modifiers::default(),
+            touches: Vec::new(),
+        }
+    }
+
+    /// Notes what `ev` does to the touches that are down.
+    fn track(&mut self, ev: &Ev) {
+        match *ev {
+            Ev::TouchStart(id, x, y) => self.touches.push((id, (x, y))),
+            Ev::TouchOn(id, _) => self.touches.push((id, (0.0, 0.0))),
+            Ev::TouchMove(id, x, y) => {
+                if let Some(t) = self.touches.iter_mut().find(|t| t.0 == id) {
+                    t.1 = (x, y);
+                }
+            }
+            Ev::TouchEnd(id, ..) | Ev::TouchCancel(id, ..) => self.touches.retain(|t| t.0 != id),
+            _ => {}
         }
     }
 }
@@ -655,6 +675,16 @@ impl PageState for Showcase {
             self.replay = Some(replay);
             return;
         }
+        if replay.next >= replay.script.len() {
+            // Only kept for the fingers still down: the scene is over, they lift.
+            let mut scripted = ScriptedInput::new(input.size, input.scale);
+            scripted.set_time(input.time);
+            for (id, (x, y)) in replay.touches.drain(..) {
+                scripted.touch_cancel(id, x, y);
+            }
+            input.events.extend(scripted.end_frame().events);
+            return;
+        }
         let start = *replay.start.get_or_insert(input.time);
         let elapsed = input.time.saturating_sub(start);
         let scope = Scope {
@@ -672,6 +702,7 @@ impl PageState for Showcase {
                 break;
             }
             for ev in step.events {
+                replay.track(ev);
                 let result = apply_event(
                     &mut scripted,
                     &mut replay.held,
@@ -687,7 +718,7 @@ impl PageState for Showcase {
             replay.next += 1;
         }
         input.events.extend(scripted.end_frame().events);
-        if replay.next < replay.script.len() {
+        if replay.next < replay.script.len() || !replay.touches.is_empty() {
             self.replay = Some(replay);
         }
     }

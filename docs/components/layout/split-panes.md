@@ -19,7 +19,7 @@ Resizable split layout between the side-panel column and the content, and betwee
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/MainWindow.axaml`
 - `src/Lunegit.Desktop/Views/RepositoryContentView.axaml`
 - `src/Lunegit.Desktop/Views/ExplorerContentView.axaml`

@@ -284,7 +284,7 @@ starts at (0, 0), the window starts unfocused, button and scroll events carry th
 position and modifiers current at that point, and a key press with printable text is followed
 by a `Text` event.
 
-Source: `crates/lune-ui-core/src/testing/input.rs:18`
+Source: `crates/lune-ui-core/src/testing/input.rs:20`
 
 **Methods and associated items**
 
@@ -342,6 +342,10 @@ Source: `crates/lune-ui-core/src/testing/input.rs:18`
 
   Releases `key`.
 
+- <a id="method.ScriptedInput.keyboard_inset"></a>`pub fn keyboard_inset(&mut self, insets: Insets) -> &mut Self`
+
+  The part of the window an on-screen keyboard covers now (logical pixels).
+
 - <a id="method.ScriptedInput.new"></a>`pub fn new(size: (f32, f32), scale: f32) -> Self`
 
   A window of logical `size` at `scale`.
@@ -366,6 +370,10 @@ Source: `crates/lune-ui-core/src/testing/input.rs:18`
 
   Resizes the window (logical pixels). Not an event.
 
+- <a id="method.ScriptedInput.safe_area"></a>`pub fn safe_area(&mut self, insets: Insets) -> &mut Self`
+
+  The window edges a system bar, notch or corner covers now (logical pixels).
+
 - <a id="method.ScriptedInput.scroll_lines"></a>`pub fn scroll_lines(&mut self, x: f32, y: f32) -> &mut Self`
 
   Scrolls by lines.
@@ -385,6 +393,27 @@ Source: `crates/lune-ui-core/src/testing/input.rs:18`
 - <a id="method.ScriptedInput.set_time"></a>`pub fn set_time(&mut self, time: Duration) -> &mut Self`
 
   Sets the time the following frames report.
+
+- <a id="method.ScriptedInput.touch_cancel"></a>`pub fn touch_cancel(&mut self, id: u64, x: f32, y: f32) -> &mut Self`
+
+  The platform cancels a touch contact at logical (`x`, `y`).
+
+- <a id="method.ScriptedInput.touch_end"></a>`pub fn touch_end(&mut self, id: u64, x: f32, y: f32) -> &mut Self`
+
+  A touch contact lifts at logical (`x`, `y`).
+
+- <a id="method.ScriptedInput.touch_force"></a>`pub fn touch_force(&mut self, id: u64, x: f32, y: f32, phase: TouchPhase, force: f32) -> &mut Self`
+
+  A touch contact changes phase at logical (`x`, `y`) with a pressure reading of `force`
+  (0 to 1).
+
+- <a id="method.ScriptedInput.touch_move"></a>`pub fn touch_move(&mut self, id: u64, x: f32, y: f32) -> &mut Self`
+
+  A touch contact moves to logical (`x`, `y`).
+
+- <a id="method.ScriptedInput.touch_start"></a>`pub fn touch_start(&mut self, id: u64, x: f32, y: f32) -> &mut Self`
+
+  A touch contact goes down at logical (`x`, `y`).
 
 **Trait implementations**
 
@@ -702,9 +731,12 @@ and a fake that only wraps or forwards it must pass the same suite.
 - I4: a button or scroll event carries the pointer position and modifiers current at that
   point of the script, not the ones at the end of the frame;
 - I5: a key press with printable text is followed by one `Text` event; control characters are
-  dropped and a press with nothing left emits none.
+  dropped and a press with nothing left emits none;
+- I6: touch and inset events come out once, in order, with their id, phase, position, force
+  and insets as scripted, and a button event after them still carries the pointer position
+  set by `pointer_to`, not a touch position.
 
-Source: `crates/lune-ui-core/src/testing/input.rs:240`
+Source: `crates/lune-ui-core/src/testing/input.rs:307`
 
 <a id="fn.spec_line_contract"></a>
 ### Function `spec_line_contract`

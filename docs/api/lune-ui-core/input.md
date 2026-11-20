@@ -10,7 +10,9 @@ events into [`RawInput`](input.md#struct.RawInput) and applies [`FrameOutput`](i
 
 All positions, sizes and pixel scroll amounts are logical (physical ÷ scale). Time is whatever
 the app supplies; the toolkit never reads a clock. File drops arrive as events that carry a path
-the toolkit never opens. Touch, gestures, theme and occlusion events are not modelled yet.
+the toolkit never opens. Touch arrives as [`Event::Touch`](input.md#variant.Event.Touch) and the window's insets as
+[`Event::SafeArea`](input.md#variant.Event.SafeArea) and [`Event::KeyboardInset`](input.md#variant.Event.KeyboardInset); gestures, theme and occlusion events are not
+modelled yet.
 
 Source: `crates/lune-ui-core/src/input.rs:1`
 
@@ -34,7 +36,7 @@ pub struct FrameOutput {
 
 What the toolkit asks of the window after a frame.
 
-Source: `crates/lune-ui-core/src/input.rs:298`
+Source: `crates/lune-ui-core/src/input.rs:381`
 
 **Fields**
 
@@ -92,7 +94,7 @@ pub struct Keymap {
 
 The platform's keyboard conventions, handed in by the app (the toolkit never reads the OS).
 
-Source: `crates/lune-ui-core/src/input.rs:219`
+Source: `crates/lune-ui-core/src/input.rs:302`
 
 **Fields**
 
@@ -145,7 +147,7 @@ pub struct Modifiers {
 
 Modifier keys held.
 
-Source: `crates/lune-ui-core/src/input.rs:151`
+Source: `crates/lune-ui-core/src/input.rs:234`
 
 **Fields**
 
@@ -184,7 +186,7 @@ pub struct RawInput {
 
 Everything the app knows about one window at the start of a frame.
 
-Source: `crates/lune-ui-core/src/input.rs:21`
+Source: `crates/lune-ui-core/src/input.rs:24`
 
 **Fields**
 
@@ -216,6 +218,89 @@ Source: `crates/lune-ui-core/src/input.rs:21`
 - `impl PartialEq for RawInput`
 - `impl StructuralPartialEq for RawInput`
 
+<a id="struct.TouchEvent"></a>
+### Struct `TouchEvent`
+
+```rust
+#[non_exhaustive]
+pub struct TouchEvent {
+    pub id: TouchId,
+    pub phase: TouchPhase,
+    pub pos: (f32, f32),
+    pub force: Option<f32>,
+}
+```
+
+One touch contact's change at logical `pos`. `force` is 0 to 1 where the device reports
+pressure, else `None`.
+
+Source: `crates/lune-ui-core/src/input.rs:142`
+
+**Fields**
+
+- <a id="structfield.TouchEvent.id"></a>`pub id: TouchId`
+
+- <a id="structfield.TouchEvent.phase"></a>`pub phase: TouchPhase`
+
+- <a id="structfield.TouchEvent.pos"></a>`pub pos: (f32, f32)`
+
+- <a id="structfield.TouchEvent.force"></a>`pub force: Option<f32>`
+
+**Methods and associated items**
+
+`impl TouchEvent`
+
+- <a id="method.TouchEvent.new"></a>`pub const fn new(id: TouchId, phase: TouchPhase, pos: (f32, f32)) -> Self`
+
+  A contact's change with no pressure reading.
+
+- <a id="method.TouchEvent.with_force"></a>`pub const fn with_force(self, force: f32) -> Self`
+
+  The same change with a pressure reading of `force` (0 to 1).
+
+**Trait implementations**
+
+- `impl Clone for TouchEvent`
+- `impl Copy for TouchEvent`
+- `impl Debug for TouchEvent`
+- `impl PartialEq for TouchEvent`
+- `impl StructuralPartialEq for TouchEvent`
+
+<a id="struct.TouchId"></a>
+### Struct `TouchId`
+
+```rust
+pub struct TouchId(/* private */);
+```
+
+A touch contact's identifier. The platform gives it, unique among the contacts down at once.
+
+Source: `crates/lune-ui-core/src/input.rs:110`
+
+**Methods and associated items**
+
+`impl TouchId`
+
+- <a id="method.TouchId.get"></a>`pub const fn get(self) -> u64`
+
+  The raw identifier.
+
+- <a id="method.TouchId.new"></a>`pub const fn new(raw: u64) -> Self`
+
+  The identifier the platform gave a contact.
+
+**Trait implementations**
+
+- `impl Clone for TouchId`
+- `impl Copy for TouchId`
+- `impl Debug for TouchId`
+- `impl Eq for TouchId`
+- `impl Hash for TouchId`
+- `impl Ord for TouchId`
+- `impl PartialEq for TouchId`
+- `impl PartialOrd for TouchId`
+- `impl StructuralPartialEq for TouchId`
+
 ## Enums
 
 <a id="enum.ClipboardRequest"></a>
@@ -231,7 +316,7 @@ pub enum ClipboardRequest {
 A clipboard operation the toolkit asks of the adapter. Requests are answered, if at all, by
 an `Event` on a later frame.
 
-Source: `crates/lune-ui-core/src/input.rs:259`
+Source: `crates/lune-ui-core/src/input.rs:342`
 
 **Variants**
 
@@ -298,7 +383,7 @@ pub enum CursorIcon {
 
 Cursor icons: the CSS cursor names.
 
-Source: `crates/lune-ui-core/src/input.rs:348`
+Source: `crates/lune-ui-core/src/input.rs:431`
 
 **Variants**
 
@@ -413,12 +498,15 @@ pub enum Event {
     FileHover { pos: (f32, f32), path: std::path::PathBuf },
     FileHoverCancelled,
     FileDrop { pos: (f32, f32), path: std::path::PathBuf },
+    Touch(TouchEvent),
+    SafeArea(Insets),
+    KeyboardInset(Insets),
 }
 ```
 
 One input event. Positions are logical pixels.
 
-Source: `crates/lune-ui-core/src/input.rs:37`
+Source: `crates/lune-ui-core/src/input.rs:40`
 
 **Variants**
 
@@ -484,6 +572,20 @@ Source: `crates/lune-ui-core/src/input.rs:37`
 
   A file was dropped on the window, with the pointer at `pos`. One event per file.
 
+- <a id="variant.Event.Touch"></a>`Touch(TouchEvent)`
+
+  A touch contact changed phase (see [`TouchEvent`](input.md#struct.TouchEvent)).
+
+- <a id="variant.Event.SafeArea"></a>`SafeArea(Insets)`
+
+  The window edges a system bar, notch or rounded corner covers, in logical pixels. The
+  core keeps the last one.
+
+- <a id="variant.Event.KeyboardInset"></a>`KeyboardInset(Insets)`
+
+  The part of the window an on-screen keyboard covers, in logical pixels. The core keeps the
+  last one; `Insets::ZERO` when the keyboard is hidden.
+
 **Trait implementations**
 
 - `impl Clone for Event`
@@ -508,7 +610,7 @@ One event a focused widget reads through `Ui::focus_events`, in arrival order. K
 their modifiers and repeat flag; characters come as [`Key::Character`](input.md#variant.Key.Character), named keys as
 [`Key::Named`](input.md#variant.Key.Named).
 
-Source: `crates/lune-ui-core/src/input.rs:177`
+Source: `crates/lune-ui-core/src/input.rs:260`
 
 **Variants**
 
@@ -552,7 +654,7 @@ pub enum ImeEvent {
 
 An input-method editor event. Offsets are byte offsets, as the platform gives them.
 
-Source: `crates/lune-ui-core/src/input.rs:161`
+Source: `crates/lune-ui-core/src/input.rs:244`
 
 **Variants**
 
@@ -588,7 +690,7 @@ pub enum Key {
 
 A logical key.
 
-Source: `crates/lune-ui-core/src/input.rs:108`
+Source: `crates/lune-ui-core/src/input.rs:191`
 
 **Variants**
 
@@ -648,7 +750,7 @@ pub enum NamedKey {
 
 Named keys the toolkit models.
 
-Source: `crates/lune-ui-core/src/input.rs:119`
+Source: `crates/lune-ui-core/src/input.rs:202`
 
 **Variants**
 
@@ -731,7 +833,7 @@ pub enum PointerButton {
 
 A pointer button.
 
-Source: `crates/lune-ui-core/src/input.rs:88`
+Source: `crates/lune-ui-core/src/input.rs:99`
 
 **Variants**
 
@@ -756,6 +858,37 @@ Source: `crates/lune-ui-core/src/input.rs:88`
 - `impl PartialEq for PointerButton`
 - `impl StructuralPartialEq for PointerButton`
 
+<a id="enum.PointerKind"></a>
+### Enum `PointerKind`
+
+```rust
+#[non_exhaustive]
+pub enum PointerKind {
+    Mouse,
+    Touch,
+}
+```
+
+What the pointer is: a mouse, or a touch contact.
+
+Source: `crates/lune-ui-core/src/input.rs:174`
+
+**Variants**
+
+- <a id="variant.PointerKind.Mouse"></a>`Mouse`
+
+- <a id="variant.PointerKind.Touch"></a>`Touch`
+
+**Trait implementations**
+
+- `impl Clone for PointerKind`
+- `impl Copy for PointerKind`
+- `impl Debug for PointerKind`
+- `impl Default for PointerKind`
+- `impl Eq for PointerKind`
+- `impl PartialEq for PointerKind`
+- `impl StructuralPartialEq for PointerKind`
+
 <a id="enum.Primary"></a>
 ### Enum `Primary`
 
@@ -768,7 +901,7 @@ pub enum Primary {
 
 The modifier that makes a chord "primary" on a platform.
 
-Source: `crates/lune-ui-core/src/input.rs:195`
+Source: `crates/lune-ui-core/src/input.rs:278`
 
 **Variants**
 
@@ -800,7 +933,7 @@ pub enum Repaint {
 
 When the app should draw its next frame.
 
-Source: `crates/lune-ui-core/src/input.rs:268`
+Source: `crates/lune-ui-core/src/input.rs:351`
 
 **Variants**
 
@@ -854,7 +987,7 @@ pub enum ScrollDelta {
 
 A scroll amount, signed as the platform gives it.
 
-Source: `crates/lune-ui-core/src/input.rs:99`
+Source: `crates/lune-ui-core/src/input.rs:182`
 
 **Variants**
 
@@ -873,6 +1006,50 @@ Source: `crates/lune-ui-core/src/input.rs:99`
 - `impl Debug for ScrollDelta`
 - `impl PartialEq for ScrollDelta`
 - `impl StructuralPartialEq for ScrollDelta`
+
+<a id="enum.TouchPhase"></a>
+### Enum `TouchPhase`
+
+```rust
+#[non_exhaustive]
+pub enum TouchPhase {
+    Started,
+    Moved,
+    Ended,
+    Cancelled,
+}
+```
+
+Where a touch contact is in its life.
+
+Source: `crates/lune-ui-core/src/input.rs:127`
+
+**Variants**
+
+- <a id="variant.TouchPhase.Started"></a>`Started`
+
+  The contact went down.
+
+- <a id="variant.TouchPhase.Moved"></a>`Moved`
+
+  The contact moved while down.
+
+- <a id="variant.TouchPhase.Ended"></a>`Ended`
+
+  The contact lifted.
+
+- <a id="variant.TouchPhase.Cancelled"></a>`Cancelled`
+
+  The platform took the contact away (a system gesture, for example); it did not lift.
+
+**Trait implementations**
+
+- `impl Clone for TouchPhase`
+- `impl Copy for TouchPhase`
+- `impl Debug for TouchPhase`
+- `impl Eq for TouchPhase`
+- `impl PartialEq for TouchPhase`
+- `impl StructuralPartialEq for TouchPhase`
 
 <a id="enum.WindowCommand"></a>
 ### Enum `WindowCommand`
@@ -893,7 +1070,7 @@ pub enum WindowCommand {
 
 A window operation the app performs.
 
-Source: `crates/lune-ui-core/src/input.rs:321`
+Source: `crates/lune-ui-core/src/input.rs:404`
 
 **Variants**
 
@@ -956,7 +1133,7 @@ pub enum WordModifier {
 
 The modifier that turns arrow keys into word motion.
 
-Source: `crates/lune-ui-core/src/input.rs:203`
+Source: `crates/lune-ui-core/src/input.rs:286`
 
 **Variants**
 
@@ -985,7 +1162,7 @@ pub enum WordMotion {
 
 Where a word-right motion lands.
 
-Source: `crates/lune-ui-core/src/input.rs:210`
+Source: `crates/lune-ui-core/src/input.rs:293`
 
 **Variants**
 
@@ -1018,5 +1195,5 @@ pub fn printable(text: &str) -> Option<String>
 The text a key press types: `text` without control characters, or `None` when nothing is left.
 Adapters and fakes use this one rule to decide whether a press emits [`Event::Text`](input.md#variant.Event.Text).
 
-Source: `crates/lune-ui-core/src/input.rs:432`
+Source: `crates/lune-ui-core/src/input.rs:515`
 
