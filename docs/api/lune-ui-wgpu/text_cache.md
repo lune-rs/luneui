@@ -23,7 +23,7 @@ pub struct TextCache {
 The cosmic-text [`TextSystem`](../lune-ui-core/text.md#trait.TextSystem): shaped buffers keyed by [`TextKey`](../lune-ui-core/text.md#struct.TextKey), so the UI can be drawn
 immediate-mode. One cache serves any number of targets and scales.
 
-Source: `crates/lune-ui-wgpu/src/text_cache.rs:72`
+Source: `crates/lune-ui-wgpu/src/text_cache.rs:73`
 
 **Fields**
 
@@ -46,6 +46,17 @@ Source: `crates/lune-ui-wgpu/src/text_cache.rs:72`
   `font_data` is loaded in order; `ui_family` and `mono_family` are the family names
   that [`Font::Ui`](../lune-ui-core/text.md#variant.Font.Ui) and [`Font::Mono`](../lune-ui-core/text.md#variant.Font.Mono) resolve to. The caller supplies all of it; this
   crate embeds no fonts; with none, every text is an empty layout of zero size. The locale is `en-US`; see [`TextCache::with_locale`](text_cache.md#method.TextCache.with_locale).
+
+  Each face's bytes are copied into the cache, for bytes that do not live for the
+  program (read from a file at run time). For bundled fonts (`include_bytes!`) use
+  [`TextCache::new_static`](text_cache.md#method.TextCache.new_static), which keeps a reference instead.
+
+- <a id="method.TextCache.new_static"></a>`pub fn new_static(font_data: &[&'static [u8]], ui_family: &str, mono_family: &str) -> Self`
+
+  As [`TextCache::new`](text_cache.md#method.TextCache.new) for bytes that live for the program, the way to pass
+  `include_bytes!` fonts: the cache keeps a reference to each slice and copies nothing,
+  so a bundled face costs no heap. The faces, their order and every shaped layout are the
+  same as `new` gives for the same bytes.
 
 - <a id="method.TextCache.rasterize"></a>
 
@@ -75,7 +86,22 @@ Source: `crates/lune-ui-wgpu/src/text_cache.rs:72`
 
   As [`TextCache::new`](text_cache.md#method.TextCache.new), with the shaping locale given. No system font is loaded and the
   system locale is not read: the app supplies every font, so the result depends only on
-  its arguments.
+  its arguments. Each face's bytes are copied; see [`TextCache::with_locale_static`](text_cache.md#method.TextCache.with_locale_static) for
+  bytes that live for the program.
+
+- <a id="method.TextCache.with_locale_static"></a>
+
+  ```rust
+  pub fn with_locale_static(
+      font_data: &[&'static [u8]],
+      ui_family: &str,
+      mono_family: &str,
+      locale: &str,
+  ) -> Self
+  ```
+
+  As [`TextCache::with_locale`](text_cache.md#method.TextCache.with_locale) for bytes that live for the program: the cache keeps a
+  reference to each slice and copies nothing. See [`TextCache::new_static`](text_cache.md#method.TextCache.new_static).
 
 **Trait implementations**
 
@@ -96,7 +122,7 @@ pub struct TextRaster {
 A shaped text drawn into pixels by [`TextCache::rasterize`](text_cache.md#method.TextCache.rasterize): straight-alpha RGBA, row by row
 from the top left, with a margin of [`RASTER_MARGIN`](text_cache.md#constant.RASTER_MARGIN) px around the text's own box.
 
-Source: `crates/lune-ui-wgpu/src/text_cache.rs:22`
+Source: `crates/lune-ui-wgpu/src/text_cache.rs:23`
 
 **Fields**
 
@@ -126,5 +152,5 @@ pub const RASTER_MARGIN: u32 = 2;
 Transparent pixels around a rasterised text, so glyphs that overhang their advance box are
 not cut.
 
-Source: `crates/lune-ui-wgpu/src/text_cache.rs:30`
+Source: `crates/lune-ui-wgpu/src/text_cache.rs:31`
 

@@ -468,7 +468,7 @@ window.
 | Tray surface | `Ui::flyout_window` or `Ui::menu_window` in a window of its own, placed by `tray::place_surface`, opened and closed by `TrayToggle`; the macOS window is wrapped in `PopoverWindow` |
 | Docked panels | Borderless windows from `panel_attributes`, members built with `WindowGroup::member_attributes` and added to a `WindowGroup`; a `WindowShape` through `desktop::set_window_shape` (set again after a resize); a drag by `DockDrag` over `desktop::window_frame`s with `desktop::move_windows`; a menu in its own window by `popover_attributes` plus `owned_by` and `desktop::place_popup`; `apps/gallery/src/panels.rs` is the worked example |
 | App-specific drawing | `CustomDraw`, one implementation per slot passed to `FrameRenderer::draw_with`; the gallery's `apps/gallery/src/custom.rs` is the worked example. The terminal-grid renderer built on it stays in Luneterm (D8) |
-| Fonts | The app passes font bytes and family names to `TextCache::new` (or `with_locale`); the library bundles none and loads no system font (D5, D12, D78) |
+| Fonts | The app passes font bytes and family names to `TextCache::new_static` for bundled `include_bytes!` fonts (no copy; `with_locale_static` adds a locale) or `TextCache::new` (or `with_locale`) for bytes read at run time (copied); the library bundles none and loads no system font (D5, D12, D78, D409) |
 
 ## Gallery pages and bench
 

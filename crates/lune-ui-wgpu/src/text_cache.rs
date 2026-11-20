@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use cosmic_text::{
     Attrs, Buffer, Color, Cursor, Family, FontSystem, Metrics, PhysicalGlyph, Renderer, Shaping,
@@ -81,13 +82,18 @@ impl TextCache {
     /// `font_data` is loaded in order; `ui_family` and `mono_family` are the family names
     /// that [`Font::Ui`] and [`Font::Mono`] resolve to. The caller supplies all of it; this
     /// crate embeds no fonts; with none, every text is an empty layout of zero size. The locale is `en-US`; see [`TextCache::with_locale`].
+    ///
+    /// Each face's bytes are copied into the cache, for bytes that do not live for the
+    /// program (read from a file at run time). For bundled fonts (`include_bytes!`) use
+    /// [`TextCache::new_static`], which keeps a reference instead.
     pub fn new(font_data: &[&[u8]], ui_family: &str, mono_family: &str) -> Self {
         Self::with_locale(font_data, ui_family, mono_family, "en-US")
     }
 
     /// As [`TextCache::new`], with the shaping locale given. No system font is loaded and the
     /// system locale is not read: the app supplies every font, so the result depends only on
-    /// its arguments.
+    /// its arguments. Each face's bytes are copied; see [`TextCache::with_locale_static`] for
+    /// bytes that live for the program.
     pub fn with_locale(
         font_data: &[&[u8]],
         ui_family: &str,
@@ -98,6 +104,39 @@ impl TextCache {
         for data in font_data {
             db.load_font_data(data.to_vec());
         }
+        Self::from_db(db, ui_family, mono_family, locale)
+    }
+
+    /// As [`TextCache::new`] for bytes that live for the program, the way to pass
+    /// `include_bytes!` fonts: the cache keeps a reference to each slice and copies nothing,
+    /// so a bundled face costs no heap. The faces, their order and every shaped layout are the
+    /// same as `new` gives for the same bytes.
+    pub fn new_static(font_data: &[&'static [u8]], ui_family: &str, mono_family: &str) -> Self {
+        Self::with_locale_static(font_data, ui_family, mono_family, "en-US")
+    }
+
+    /// As [`TextCache::with_locale`] for bytes that live for the program: the cache keeps a
+    /// reference to each slice and copies nothing. See [`TextCache::new_static`].
+    pub fn with_locale_static(
+        font_data: &[&'static [u8]],
+        ui_family: &str,
+        mono_family: &str,
+        locale: &str,
+    ) -> Self {
+        let mut db = cosmic_text::fontdb::Database::new();
+        for data in font_data {
+            db.load_font_source(cosmic_text::fontdb::Source::Binary(Arc::new(*data)));
+        }
+        Self::from_db(db, ui_family, mono_family, locale)
+    }
+
+    /// The cache over a loaded font database: what every constructor shares.
+    fn from_db(
+        db: cosmic_text::fontdb::Database,
+        ui_family: &str,
+        mono_family: &str,
+        locale: &str,
+    ) -> Self {
         let fonts = FontSystem::new_with_locale_and_db(locale.to_owned(), db);
         Self {
             fonts,

@@ -58,7 +58,7 @@ environment. The app:
 - builds the event loop and the windows, and wires the adapters: `gpu::instance(Some(Box::new(
   event_loop.owned_display_handle())))`, `Gpu::new(instance, Some(&surface))`, a `WindowSurface` per
   window, a `FrameRenderer` per target, one `TextCache` for the fonts it supplies;
-- supplies fonts, time (`RawInput.time`), sizes, scale, the `Theme` (`lunegit_dark::THEME` or one
+- supplies fonts (`TextCache::new_static` for bundled `include_bytes!` faces, which keeps a reference and copies nothing, D409; `TextCache::new` copies bytes read at run time), time (`RawInput.time`), sizes, scale, the `Theme` (`lunegit_dark::THEME` or one
   loaded with `Theme::from_json`), the string table and the shortcut table, every frame;
 - turns `FrameOutput` into window and OS actions (`WindowCommand`, cursor icon, clipboard, repaint
   request, accessibility tree); the toolkit calls none of them;

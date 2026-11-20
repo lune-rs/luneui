@@ -350,7 +350,7 @@ const MONO_FONT: &str = "RobotoMono Nerd Font Mono";
 
 /// The gallery's fonts, loaded in a fixed order.
 fn text_cache() -> TextCache {
-    TextCache::new(
+    TextCache::new_static(
         &[
             include_bytes!("../assets/RobotoMonoNerdFontMono-Regular.ttf").as_slice(),
             include_bytes!("../assets/RznSans-Regular.ttf"),

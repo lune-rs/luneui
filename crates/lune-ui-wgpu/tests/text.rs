@@ -14,6 +14,94 @@ fn text_cache_with_fonts_meets_the_contract() {
     assert_eq!(text_system_contract(&mut text), Ok(()));
 }
 
+/// The gallery's bundled fonts, as `'static` slices (what `include_bytes!` gives).
+fn bundled() -> [&'static [u8]; 3] {
+    [
+        include_bytes!("../../../apps/gallery/assets/RobotoMonoNerdFontMono-Regular.ttf"),
+        include_bytes!("../../../apps/gallery/assets/RznSans-Regular.ttf"),
+        include_bytes!("../../../apps/gallery/assets/RznSans-Medium.ttf"),
+    ]
+}
+
+#[test]
+fn text_cache_new_static_with_fonts_meets_the_contract() {
+    let fonts = bundled();
+    let mut text = TextCache::new_static(&fonts, "RznSans", "RobotoMono Nerd Font Mono");
+    assert_eq!(text_system_contract(&mut text), Ok(()));
+}
+
+#[test]
+fn text_cache_new_static_without_fonts_meets_the_contract() {
+    let mut text = TextCache::new_static(&[], "sans-serif", "monospace");
+    assert_eq!(text_system_contract(&mut text), Ok(()));
+}
+
+/// Every face a cache loaded: its identity fields (not its source) and the address of its bytes.
+fn face_summary(text: &TextCache) -> Vec<(String, usize)> {
+    use cosmic_text::fontdb::Source;
+    text.fonts
+        .db()
+        .faces()
+        .map(|f| {
+            let ptr = match &f.source {
+                Source::Binary(a) => (**a).as_ref().as_ptr() as usize,
+                _ => 0,
+            };
+            let ident = format!(
+                "{:?} {} {:?} {} {:?} {:?} {:?} {:?}",
+                f.id,
+                f.index,
+                f.families,
+                f.post_script_name,
+                f.style,
+                f.weight,
+                f.stretch,
+                f.monospaced
+            );
+            (ident, ptr)
+        })
+        .collect()
+}
+
+#[test]
+fn new_static_keeps_the_bundled_bytes() {
+    let fonts = bundled();
+    let stat = TextCache::new_static(&fonts, "RznSans", "RobotoMono Nerd Font Mono");
+    let faces = face_summary(&stat);
+    assert_eq!(faces.len(), fonts.len());
+    for ((_, ptr), font) in faces.iter().zip(fonts.iter()) {
+        assert_eq!(*ptr, font.as_ptr() as usize, "a static face is not copied");
+    }
+    // Instrument check: the same read on an owned-copy cache finds other addresses, so a
+    // pointer match above is a real "no copy" and not an artefact of the reader.
+    let owned = TextCache::new(&fonts, "RznSans", "RobotoMono Nerd Font Mono");
+    let copies = face_summary(&owned);
+    assert_eq!(copies.len(), fonts.len());
+    for ((_, ptr), font) in copies.iter().zip(fonts.iter()) {
+        assert_ne!(*ptr, font.as_ptr() as usize, "`new` copies the bytes");
+        assert_ne!(*ptr, 0);
+    }
+}
+
+#[test]
+fn new_static_loads_the_faces_new_loads() {
+    use lune_ui_core::text::{Spec, Style, TextSystem};
+    let fonts = bundled();
+    let mut stat = TextCache::new_static(&fonts, "RznSans", "RobotoMono Nerd Font Mono");
+    let mut owned = TextCache::new(&fonts, "RznSans", "RobotoMono Nerd Font Mono");
+    let idents = |t: &TextCache| face_summary(t).into_iter().map(|f| f.0).collect::<Vec<_>>();
+    assert_eq!(idents(&stat), idents(&owned));
+    assert!(!idents(&stat).is_empty());
+    for spec in [
+        Spec::plain("Hello, world", Style::ui(13.0, [255; 4])),
+        Spec::plain("let x = 1;", Style::mono(13.0, 18.0, [255; 4])),
+    ] {
+        assert_eq!(stat.prepare(&spec, 2.0).1, owned.prepare(&spec, 2.0).1);
+        assert_eq!(stat.measure(&spec, 2.0), owned.measure(&spec, 2.0));
+        assert!(stat.measure(&spec, 2.0).0 > 0.0);
+    }
+}
+
 #[test]
 fn text_cache_without_fonts_meets_the_contract() {
     let mut text = TextCache::new(&[], "sans-serif", "monospace");
