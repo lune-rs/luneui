@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:58`
+Source: `crates/lune-ui-core/src/ui.rs:64`
 
 **Fields**
 
@@ -165,6 +165,59 @@ Source: `crates/lune-ui-core/src/ui/overlay.rs:13`
 - `impl Debug for OverlayOptions`
 - `impl PartialEq for OverlayOptions`
 - `impl StructuralPartialEq for OverlayOptions`
+
+<a id="struct.Pinch"></a>
+### Struct `Pinch`
+
+```rust
+#[non_exhaustive]
+pub struct Pinch {
+    pub center: (f32, f32),
+    pub start_center: (f32, f32),
+    pub scale: f32,
+    pub started: bool,
+    pub ended: bool,
+}
+```
+
+Two touches moving apart or together over the widget the first one pressed (D348), read through
+[`Ui::pinch`](ui.md#method.Ui.pinch).
+
+Nothing is cancelled by a second touch: the first keeps driving the pointer, so a widget that
+also senses drag sees both.
+
+Source: `crates/lune-ui-core/src/ui/touch.rs:34`
+
+**Fields**
+
+- <a id="structfield.Pinch.center"></a>`pub center: (f32, f32)`
+
+  The midpoint of the two touches now, in logical pixels.
+
+- <a id="structfield.Pinch.start_center"></a>`pub start_center: (f32, f32)`
+
+  The midpoint when the pinch began.
+
+- <a id="structfield.Pinch.scale"></a>`pub scale: f32`
+
+  The distance between the touches now over the distance when the pinch began (a start
+  distance under 1 px counts as 1 px): above 1 spread, below 1 pinched.
+
+- <a id="structfield.Pinch.started"></a>`pub started: bool`
+
+  This is the pinch's first frame.
+
+- <a id="structfield.Pinch.ended"></a>`pub ended: bool`
+
+  This is the pinch's last frame: a touch of the two ended, and the values are the last ones.
+
+**Trait implementations**
+
+- `impl Clone for Pinch`
+- `impl Copy for Pinch`
+- `impl Debug for Pinch`
+- `impl PartialEq for Pinch`
+- `impl StructuralPartialEq for Pinch`
 
 <a id="struct.Response"></a>
 ### Struct `Response`
@@ -381,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:121`
+Source: `crates/lune-ui-core/src/ui.rs:131`
 
 **Methods and associated items**
 
@@ -1594,6 +1647,11 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   nested under it. The scope stays live across frames, drawn or not, until
   [`Self::end_keep_alive`](ui.md#method.Ui.end_keep_alive); persistent state used inside survives while it is live (D6).
 
+- <a id="method.Ui.keyboard_inset"></a>`pub fn keyboard_inset(&self) -> Insets`
+
+  The part of the window an on-screen keyboard covers, in logical pixels: the last
+  [`Event::KeyboardInset`](input.md#variant.Event.KeyboardInset), [`Insets::ZERO`](layout.md#associatedconstant.Insets.ZERO) until one arrives or while it is hidden.
+
 - <a id="method.Ui.keymap"></a>`pub fn keymap(&self) -> Keymap`
 
   The platform's keyboard conventions for this frame.
@@ -1611,6 +1669,13 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   State of type `T` for `id` that also survives undrawn frames while a keep-alive scope open
   around its last use is live.
 
+- <a id="method.Ui.pinch"></a>`pub fn pinch(&self, id: WidgetId) -> Option<Pinch>`
+
+  The two-touch gesture over `id` this frame, while two touches are down and the first
+  pressed `id`: `None` for any other widget and when no pinch is live. It is a reading only:
+  the first touch still drives the pointer, so a widget that pinches and also senses drag
+  receives both.
+
 - <a id="method.Ui.pointer_in"></a>`pub fn pointer_in(&self, rect: Rect) -> bool`
 
   Whether the pointer is inside `rect`, given in the current drawing space (it goes through
@@ -1619,9 +1684,22 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   order [`Self::finish`](ui.md#method.Ui.finish) picks a press target by, so `Outside` is above every modal). Ignores `enabled` and `Sense`, so
   it reads true over a disabled anchor, and reads the previous frame's regions.
 
+- <a id="method.Ui.pointer_kind"></a>`pub fn pointer_kind(&self) -> PointerKind`
+
+  The kind of the current or last press: [`PointerKind::Touch`](input.md#variant.PointerKind.Touch) from the primary touch's
+  start until a mouse button press that is not a platform's copy of a touch, and
+  [`PointerKind::Mouse`](input.md#variant.PointerKind.Mouse) before any touch.
+
 - <a id="method.Ui.pointer_pos"></a>`pub fn pointer_pos(&self) -> Option<(f32, f32)>`
 
   The pointer's position in logical pixels, or `None` when it is outside the window.
+
+- <a id="method.Ui.release_velocity"></a>`pub fn release_velocity(&self, id: WidgetId) -> (f32, f32)`
+
+  The velocity, in logical pixels per second, the pointer left with when it ended a drag
+  that began on `id` (the frame `drag_stopped` is set for it) or a pan of the region `id`: a least-squares fit over the
+  last 100 ms of its path, clamped to 8000, zero when it had stopped moving. `(0.0, 0.0)` on
+  every other frame and for every other id.
 
 - <a id="method.Ui.request_busy_frame"></a>`pub fn request_busy_frame(&mut self, rect: Rect)`
 
@@ -1636,6 +1714,11 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
   Asks for a frame at app time `t`; the earliest request later than now wins. A request at
   or before the frame's time is due already and is ignored (it never hides a later one).
 
+- <a id="method.Ui.safe_area"></a>`pub fn safe_area(&self) -> Insets`
+
+  The window edges a system bar, notch or rounded corner covers, in logical pixels: the last
+  [`Event::SafeArea`](input.md#variant.Event.SafeArea), [`Insets::ZERO`](layout.md#associatedconstant.Insets.ZERO) until one arrives.
+
 - <a id="method.Ui.scope"></a>`pub fn scope<R>(&mut self, key: impl std::hash::Hash, f: impl FnOnce(&mut Self) -> R) -> R`
 
   Runs `f` with ids nested under `key`.
@@ -1647,6 +1730,15 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
 - <a id="method.Ui.set_cursor"></a>`pub fn set_cursor(&mut self, icon: CursorIcon)`
 
   The cursor icon this frame asks for; the last call wins. Default: [`CursorIcon::Default`](input.md#variant.CursorIcon.Default).
+
+- <a id="method.Ui.set_drag_axes"></a>`pub fn set_drag_axes(&mut self, id: WidgetId, horizontal: bool, vertical: bool)`
+
+  Which axes a touch drag on `id` is the widget's own, from the next frame on (D349): a
+  touch that starts on the widget and travels along an axis it claims drags the widget; along
+  one it does not, a scroll region under it with content on that axis takes the touch
+  instead and the widget's press is cancelled (no click, no drag stop). Call it in the frame
+  the widget registers; like a hit region it governs the next frame's events. A widget that
+  never calls it claims both axes, as before. A mouse press ignores it.
 
 - <a id="method.Ui.set_ime_area"></a>`pub fn set_ime_area(&mut self, area: Option<Rect>)`
 
@@ -1700,6 +1792,21 @@ Source: `crates/lune-ui-core/src/ui.rs:121`
 
   Runs `f` enabled or not. Disabled, every `interact` inside still registers (and blocks) but
   reports nothing, and the painter draws at opacity 0.4.
+
+- <a id="method.Ui.with_scroll_physics"></a>
+
+  ```rust
+  pub fn with_scroll_physics<R>(
+      &mut self,
+      physics: ScrollPhysics,
+      f: impl FnOnce(&mut Self) -> R,
+  ) -> R
+  ```
+
+  Runs `f` with `physics` for every scroll area called inside it: the fling's decay, the
+  overscroll at the ends and the spring that brings it back (D350). The default, outside any
+  scope, is [`ScrollPhysics::default`]. A fling keeps the physics it started with. The outer
+  value is back when `f` returns.
 
 `impl<'a> Ui<'a>`
 

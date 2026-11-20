@@ -26,10 +26,14 @@ Source: `crates/lune-ui/src/lib.rs:64`
 | `OutputPlan` | Struct | [`lune_ui_winit::input::OutputPlan`](../lune-ui-winit/input.md#struct.OutputPlan) |
 | `OutputState` | Struct | [`lune_ui_winit::input::OutputState`](../lune-ui-winit/input.md#struct.OutputState) |
 | `PointerButton` | Enum | [`lune_ui_core::input::PointerButton`](../lune-ui-core/input.md#enum.PointerButton) |
+| `PointerKind` | Enum | [`lune_ui_core::input::PointerKind`](../lune-ui-core/input.md#enum.PointerKind) |
 | `Primary` | Enum | [`lune_ui_core::input::Primary`](../lune-ui-core/input.md#enum.Primary) |
 | `RawInput` | Struct | [`lune_ui_core::input::RawInput`](../lune-ui-core/input.md#struct.RawInput) |
 | `Repaint` | Enum | [`lune_ui_core::input::Repaint`](../lune-ui-core/input.md#enum.Repaint) |
 | `ScrollDelta` | Enum | [`lune_ui_core::input::ScrollDelta`](../lune-ui-core/input.md#enum.ScrollDelta) |
+| `TouchEvent` | Struct | [`lune_ui_core::input::TouchEvent`](../lune-ui-core/input.md#struct.TouchEvent) |
+| `TouchId` | Struct | [`lune_ui_core::input::TouchId`](../lune-ui-core/input.md#struct.TouchId) |
+| `TouchPhase` | Enum | [`lune_ui_core::input::TouchPhase`](../lune-ui-core/input.md#enum.TouchPhase) |
 | `Translator` | Struct | [`lune_ui_winit::input::Translator`](../lune-ui-winit/input.md#struct.Translator) |
 | `WindowCommand` | Enum | [`lune_ui_core::input::WindowCommand`](../lune-ui-core/input.md#enum.WindowCommand) |
 | `WordModifier` | Enum | [`lune_ui_core::input::WordModifier`](../lune-ui-core/input.md#enum.WordModifier) |

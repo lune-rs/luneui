@@ -7,6 +7,9 @@
 //! `<lib>/all.html`, and `--out` must not exist or be empty. `scripts/gen-api-docs.sh` makes the
 //! inputs and decides what to do with the output.
 //!
+//! `api-docs compat ...` is the other mode: the API-break check of `scripts/check-compat.sh`
+//! (see `compat.rs`).
+//!
 //! Exit 0 when every page was written and the completeness checks held; exit 2 otherwise, with
 //! one line per finding on stderr and nothing written. The checks fail closed: a rustdoc JSON
 //! format this tool does not read, a public item that no page shows, a page for an item rustdoc's
@@ -15,6 +18,7 @@
 #![forbid(unsafe_code)]
 
 mod allhtml;
+mod compat;
 mod docs;
 mod plan;
 mod render;
@@ -133,6 +137,10 @@ fn exit_status(result: &Res<()>) -> u8 {
 }
 
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("compat") {
+        return compat::main(&args[1..]);
+    }
     ExitCode::from(exit_status(&run()))
 }
 

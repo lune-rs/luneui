@@ -10,9 +10,11 @@ license.workspace = true
 [dependencies]
 lune-ui-core = { path = "../lune-ui-core" }
 winit = "0.30"
-arboard = { version = "3.7", default-features = false }
 accesskit = { version = "0.25", optional = true }
 accesskit_winit = { version = "0.34", default-features = false, features = ["accesskit_unix", "async-io", "rwh_06"], optional = true }
+
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+arboard = { version = "3.7", default-features = false }
 
 [features]
 accesskit = ["dep:accesskit", "dep:accesskit_winit"]

@@ -280,6 +280,176 @@ fn control_flow_maps_each_repaint_without_reading_the_clock() {
     );
 }
 
+// --- Touch ----------------------------------------------------------------------------------
+
+mod touch {
+    use super::*;
+    use lune_ui_core::input::{Event, RawInput, TouchEvent, TouchId, TouchPhase as P};
+    use winit::event::{Force, Touch};
+
+    fn wtouch(id: u64, phase: TouchPhase, x: f64, y: f64, force: Option<Force>) -> WindowEvent {
+        WindowEvent::Touch(Touch {
+            device_id: DeviceId::dummy(),
+            phase,
+            location: PhysicalPosition::new(x, y),
+            force,
+            id,
+        })
+    }
+
+    /// Two fingers: id 1 taps and lifts, id 2 drags and is cancelled; the mouse is interleaved.
+    fn touch_sequence() -> Vec<WindowEvent> {
+        vec![
+            wtouch(1, TouchPhase::Started, 200.0, 100.0, None),
+            wtouch(2, TouchPhase::Started, 40.0, 60.0, None),
+            wtouch(2, TouchPhase::Moved, 44.0, 64.0, None),
+            wtouch(1, TouchPhase::Ended, 200.0, 100.0, None),
+            wtouch(2, TouchPhase::Cancelled, 48.0, 68.0, None),
+        ]
+    }
+
+    fn feed(t: &mut Translator, events: &[WindowEvent]) -> RawInput {
+        t.window_event(&WindowEvent::Resized(PhysicalSize::new(800, 600)));
+        for e in events {
+            t.window_event(e);
+        }
+        t.take(FRAME)
+    }
+
+    #[test]
+    fn a_touch_script_equals_the_translated_touch_events() {
+        let mut t = Translator::new(PhysicalSize::new(1, 1), 2.0);
+        t.set_touch_enabled(true);
+        let translated = feed(&mut t, &touch_sequence());
+        let mut s = ScriptedInput::new((400.0, 300.0), 2.0);
+        s.set_time(FRAME)
+            .touch_start(1, 100.0, 50.0)
+            .touch_start(2, 20.0, 30.0)
+            .touch_move(2, 22.0, 32.0)
+            .touch_end(1, 100.0, 50.0)
+            .touch_cancel(2, 24.0, 34.0);
+        assert_eq!(translated, s.end_frame());
+        assert_eq!(translated.events.len(), 5);
+    }
+
+    #[test]
+    fn with_the_switch_off_touch_is_dropped_and_the_mouse_is_unchanged() {
+        let mouse = |t: &mut Translator| {
+            t.window_event(&WindowEvent::CursorMoved {
+                device_id: DeviceId::dummy(),
+                position: PhysicalPosition::new(200.0, 100.0),
+            });
+            t.window_event(&WindowEvent::MouseInput {
+                device_id: DeviceId::dummy(),
+                state: Pressed,
+                button: MouseButton::Left,
+            });
+        };
+        let mut plain = Translator::new(PhysicalSize::new(800, 600), 2.0);
+        mouse(&mut plain);
+        let want = plain.take(FRAME);
+
+        let mut t = Translator::new(PhysicalSize::new(800, 600), 2.0);
+        assert!(!t.touch_enabled());
+        mouse(&mut t);
+        for e in touch_sequence() {
+            t.window_event(&e);
+        }
+        let got = t.take(FRAME);
+        assert_eq!(got, want);
+        assert_eq!(got.events.len(), 2);
+
+        // No touch events at all, and the same with the mouse after them.
+        let mut t = Translator::new(PhysicalSize::new(800, 600), 2.0);
+        for e in touch_sequence() {
+            t.window_event(&e);
+        }
+        mouse(&mut t);
+        assert_eq!(t.take(FRAME), want);
+    }
+
+    #[test]
+    fn force_is_normalised() {
+        let mut t = Translator::new(PhysicalSize::new(800, 600), 1.0);
+        t.set_touch_enabled(true);
+        let forces = [
+            Some(Force::Normalized(0.5)),
+            Some(Force::Calibrated {
+                force: 2.0,
+                max_possible_force: 4.0,
+                altitude_angle: None,
+            }),
+            None,
+        ];
+        for (i, f) in forces.into_iter().enumerate() {
+            t.window_event(&wtouch(i as u64, TouchPhase::Started, 1.0, 1.0, f));
+        }
+        let got: Vec<Option<f32>> = t
+            .take(FRAME)
+            .events
+            .into_iter()
+            .map(|e| match e {
+                Event::Touch(t) => t.force,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(got, [Some(0.5), Some(0.5), None]);
+    }
+
+    #[test]
+    fn switching_off_mid_touch_cancels_each_touch_once_and_then_drops_touch() {
+        let mut t = Translator::new(PhysicalSize::new(800, 600), 2.0);
+        t.set_touch_enabled(true);
+        t.window_event(&wtouch(1, TouchPhase::Started, 200.0, 100.0, None));
+        t.window_event(&wtouch(2, TouchPhase::Started, 40.0, 60.0, None));
+        t.window_event(&wtouch(2, TouchPhase::Moved, 44.0, 64.0, None));
+        t.window_event(&wtouch(1, TouchPhase::Ended, 200.0, 100.0, None));
+        let _ = t.take(FRAME);
+        // Id 1 ended; id 2 is down at its last position.
+        t.window_event(&wtouch(3, TouchPhase::Started, 10.0, 20.0, None));
+        let _ = t.take(FRAME);
+        t.set_touch_enabled(false);
+        assert!(!t.touch_enabled());
+        assert_eq!(
+            t.take(FRAME).events,
+            [
+                Event::Touch(TouchEvent::new(TouchId::new(2), P::Cancelled, (22.0, 32.0))),
+                Event::Touch(TouchEvent::new(TouchId::new(3), P::Cancelled, (5.0, 10.0))),
+            ]
+        );
+        // Later touch events, and a second switch-off, push nothing.
+        t.window_event(&wtouch(2, TouchPhase::Ended, 44.0, 64.0, None));
+        t.window_event(&wtouch(4, TouchPhase::Started, 1.0, 1.0, None));
+        t.set_touch_enabled(false);
+        assert!(t.take(FRAME).events.is_empty());
+    }
+
+    #[test]
+    fn the_switch_reads_back_and_touch_leaves_the_pointer_alone() {
+        let mut t = Translator::new(PhysicalSize::new(800, 600), 2.0);
+        assert!(!t.touch_enabled());
+        t.set_touch_enabled(true);
+        assert!(t.touch_enabled());
+        t.window_event(&WindowEvent::CursorMoved {
+            device_id: DeviceId::dummy(),
+            position: PhysicalPosition::new(200.0, 100.0),
+        });
+        t.window_event(&wtouch(1, TouchPhase::Started, 400.0, 400.0, None));
+        let _ = t.take(FRAME);
+        // A wheel event after the touch still sits at the cursor's position.
+        t.window_event(&WindowEvent::DroppedFile("/tmp/a".into()));
+        assert_eq!(
+            t.take(FRAME).events,
+            [Event::FileDrop {
+                pos: (100.0, 50.0),
+                path: "/tmp/a".into()
+            }]
+        );
+        t.set_touch_enabled(false);
+        assert!(!t.touch_enabled());
+    }
+}
+
 // --- File drop ------------------------------------------------------------------------------
 
 mod files {

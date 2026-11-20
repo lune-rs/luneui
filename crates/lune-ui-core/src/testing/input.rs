@@ -5,8 +5,10 @@ use std::time::Duration;
 
 use crate::access::AccessAction;
 use crate::input::{
-    Event, ImeEvent, Key, Modifiers, PointerButton, RawInput, ScrollDelta, printable,
+    Event, ImeEvent, Key, Modifiers, PointerButton, RawInput, ScrollDelta, TouchEvent, TouchId,
+    TouchPhase, printable,
 };
+use crate::layout::Insets;
 
 /// Builds a window's [`RawInput`] frames by hand. Size, scale, time, focus, pointer position and
 /// modifiers persist across frames; [`ScriptedInput::end_frame`] takes the events and keeps the
@@ -205,6 +207,68 @@ impl ScriptedInput {
         self
     }
 
+    /// A touch contact goes down at logical (`x`, `y`).
+    pub fn touch_start(&mut self, id: u64, x: f32, y: f32) -> &mut Self {
+        self.push_touch(id, TouchPhase::Started, x, y, None)
+    }
+
+    /// A touch contact moves to logical (`x`, `y`).
+    pub fn touch_move(&mut self, id: u64, x: f32, y: f32) -> &mut Self {
+        self.push_touch(id, TouchPhase::Moved, x, y, None)
+    }
+
+    /// A touch contact lifts at logical (`x`, `y`).
+    pub fn touch_end(&mut self, id: u64, x: f32, y: f32) -> &mut Self {
+        self.push_touch(id, TouchPhase::Ended, x, y, None)
+    }
+
+    /// The platform cancels a touch contact at logical (`x`, `y`).
+    pub fn touch_cancel(&mut self, id: u64, x: f32, y: f32) -> &mut Self {
+        self.push_touch(id, TouchPhase::Cancelled, x, y, None)
+    }
+
+    /// A touch contact changes phase at logical (`x`, `y`) with a pressure reading of `force`
+    /// (0 to 1).
+    pub fn touch_force(
+        &mut self,
+        id: u64,
+        x: f32,
+        y: f32,
+        phase: TouchPhase,
+        force: f32,
+    ) -> &mut Self {
+        self.push_touch(id, phase, x, y, Some(force))
+    }
+
+    fn push_touch(
+        &mut self,
+        id: u64,
+        phase: TouchPhase,
+        x: f32,
+        y: f32,
+        force: Option<f32>,
+    ) -> &mut Self {
+        let event = TouchEvent::new(TouchId::new(id), phase, (x, y));
+        let event = match force {
+            Some(force) => event.with_force(force),
+            None => event,
+        };
+        self.events.push(Event::Touch(event));
+        self
+    }
+
+    /// The window edges a system bar, notch or corner covers now (logical pixels).
+    pub fn safe_area(&mut self, insets: Insets) -> &mut Self {
+        self.events.push(Event::SafeArea(insets));
+        self
+    }
+
+    /// The part of the window an on-screen keyboard covers now (logical pixels).
+    pub fn keyboard_inset(&mut self, insets: Insets) -> &mut Self {
+        self.events.push(Event::KeyboardInset(insets));
+        self
+    }
+
     /// The window gains or loses focus.
     pub fn focus(&mut self, focused: bool) -> &mut Self {
         self.focused = focused;
@@ -236,7 +300,10 @@ impl ScriptedInput {
 /// - I4: a button or scroll event carries the pointer position and modifiers current at that
 ///   point of the script, not the ones at the end of the frame;
 /// - I5: a key press with printable text is followed by one `Text` event; control characters are
-///   dropped and a press with nothing left emits none.
+///   dropped and a press with nothing left emits none;
+/// - I6: touch and inset events come out once, in order, with their id, phase, position, force
+///   and insets as scripted, and a button event after them still carries the pointer position
+///   set by `pointer_to`, not a touch position.
 pub fn scripted_input_contract(
     take: &mut dyn FnMut(&mut ScriptedInput) -> RawInput,
 ) -> Result<(), String> {
@@ -366,6 +433,47 @@ pub fn scripted_input_contract(
     let want = vec![key(true), Event::Text("a".into()), key(true), key(true)];
     if f.events != want {
         return Err(format!("I5: key and text events came out {:?}", f.events));
+    }
+
+    // I6: touch and inset events, then a button that must keep the pointer set before them.
+    let touch = |id, phase, pos, force: Option<f32>| {
+        let t = TouchEvent::new(TouchId::new(id), phase, pos);
+        Event::Touch(match force {
+            Some(f) => t.with_force(f),
+            None => t,
+        })
+    };
+    let top = Insets::new(0.0, 24.0, 0.0, 0.0);
+    let keys = Insets::new(0.0, 0.0, 0.0, 300.0);
+    s.pointer_to(50.0, 60.0)
+        .touch_start(7, 1.0, 2.0)
+        .touch_force(7, 3.0, 4.0, TouchPhase::Moved, 0.5)
+        .touch_end(7, 3.0, 4.0)
+        .touch_cancel(8, 0.0, 0.0)
+        .safe_area(top)
+        .keyboard_inset(keys)
+        .press(PointerButton::Primary);
+    let want = vec![
+        Event::PointerMoved { pos: (50.0, 60.0) },
+        touch(7, TouchPhase::Started, (1.0, 2.0), None),
+        touch(7, TouchPhase::Moved, (3.0, 4.0), Some(0.5)),
+        touch(7, TouchPhase::Ended, (3.0, 4.0), None),
+        touch(8, TouchPhase::Cancelled, (0.0, 0.0), None),
+        Event::SafeArea(top),
+        Event::KeyboardInset(keys),
+        Event::PointerButton {
+            pos: (50.0, 60.0),
+            button: PointerButton::Primary,
+            pressed: true,
+            modifiers: shift,
+        },
+    ];
+    let f = take(&mut s);
+    if f.events != want {
+        return Err(format!(
+            "I6: touch or inset events came out {:?} (want the scripted ones, and the button at the pointer position)",
+            f.events
+        ));
     }
     Ok(())
 }

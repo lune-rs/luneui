@@ -81,6 +81,7 @@ mod toast_notifications;
 mod toggle;
 mod toolbar;
 mod tooltip;
+mod touch;
 mod tray;
 mod tree_view;
 mod ui;
@@ -120,6 +121,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &primitives::PAGE,
     &gradients::PAGE,
     &scroll_area::PAGE,
+    &touch::PAGE,
     &scrollbar::PAGE,
     &virtual_list::PAGE,
     &popover::PAGE,

@@ -6,11 +6,13 @@
 //! text is refused whole (a read answers `ClipboardUnavailable`, a write is dropped). Nothing is
 //! ever truncated. A failed write is silent. The OS backend is opened on first use,
 //! so a process that never copies or pastes opens nothing; a backend that cannot open answers
-//! `ClipboardUnavailable` to a read and drops a write.
+//! `ClipboardUnavailable` to a read and drops a write. iOS and Android have no OS clipboard yet: there
+//! every read answers `ClipboardUnavailable` and every write is dropped.
 
 use lune_ui_core::input::{ClipboardRequest, FrameOutput};
 
 use crate::input::Translator;
+use crate::platform::Os;
 
 /// The longest text the adapter reads from or writes to the OS clipboard, in bytes: 32 MiB, three
 /// times the 11 MB document the code view measured (D213). It bounds the adapter, not the widget: a
@@ -18,7 +20,7 @@ use crate::input::Translator;
 /// only the code view, which draws just the lines in view, takes what the adapter lets through.
 pub const MAX_PASTE_BYTES: usize = 33_554_432;
 
-/// What the adapter needs of an OS clipboard. The real one is `arboard`; tests give a fake. Not
+/// What the adapter needs of an OS clipboard. The real one is `arboard` (desktop; none on iOS and Android yet); tests give a fake. Not
 /// part of the API: it is public only so a test can name it.
 #[doc(hidden)]
 pub trait Backend {
@@ -28,32 +30,6 @@ pub trait Backend {
     /// Puts `text` on the clipboard, or `Err` when it cannot.
     #[allow(clippy::result_unit_err)]
     fn write(&mut self, text: &str) -> Result<(), ()>;
-}
-
-/// `arboard`, opened on first use.
-#[derive(Default)]
-struct Os {
-    inner: Option<arboard::Clipboard>,
-}
-
-impl Os {
-    fn open(&mut self) -> Result<&mut arboard::Clipboard, ()> {
-        if self.inner.is_none() {
-            self.inner = Some(arboard::Clipboard::new().map_err(|_| ())?);
-        }
-        self.inner.as_mut().ok_or(())
-    }
-}
-
-impl Backend for Os {
-    fn read(&mut self) -> Result<String, ()> {
-        // `ContentNotAvailable` (no text on it) and every other error are the same answer.
-        self.open()?.get_text().map_err(|_| ())
-    }
-
-    fn write(&mut self, text: &str) -> Result<(), ()> {
-        self.open()?.set_text(text).map_err(|_| ())
-    }
 }
 
 /// The app's clipboard service. See the module note.

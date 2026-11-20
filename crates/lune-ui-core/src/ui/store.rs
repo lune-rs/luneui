@@ -39,6 +39,12 @@ pub struct UiStore {
     /// The previous frame's registered rect per id (the last registration wins).
     pub(crate) prev_rects: BTreeMap<WidgetId, Rect>,
     pub(crate) pointer: PointerState,
+    /// The touches that are down and the mouse guard (D344).
+    pub(crate) touch: super::touch::TouchState,
+    /// The last [`crate::input::Event::SafeArea`], `Insets::ZERO` until one arrives.
+    pub(crate) safe_area: crate::layout::Insets,
+    /// The last [`crate::input::Event::KeyboardInset`], `Insets::ZERO` until one arrives.
+    pub(crate) keyboard_inset: crate::layout::Insets,
     pub(crate) transient: BTreeMap<(WidgetId, TypeId), Entry>,
     pub(crate) persistent: BTreeMap<(WidgetId, TypeId), Entry>,
     /// Keep-alive scopes the app opened and has not ended (D6).

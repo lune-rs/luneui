@@ -8,11 +8,15 @@
 //! - [`Token`], [`Kind`], [`Motion`], [`MotionTier`], [`MotionTokens`], [`MOTION`]: the
 //!   vocabulary and the tier rules (D12).
 //! - [`Cadence`]: how often a busy loop asks for its next frame (D298).
-//! - [`conformance`], [`conformance_of`]: the 60 Hz harness (D41).
+//! - [`conformance`], [`conformance_of`]: the 60 Hz harness (D41); [`conformance_at`],
+//!   [`conformance_of_at`]: the same at any rate.
+//! - [`Decay`], [`DampedSpring`], [`rubber_band`]: a finger's motion, a fling, a bounce and the
+//!   pull past an end (D347).
 
 mod cadence;
 mod conformance;
 mod easing;
+mod physics;
 mod tokens;
 mod transition;
 mod tween;
@@ -22,9 +26,10 @@ use std::time::Duration;
 pub use cadence::Cadence;
 pub use conformance::{
     Conformance, ConformanceError, FRAME, STEP_BOUND, STEP_BOUND_BACK_OUT, conformance,
-    conformance_of,
+    conformance_at, conformance_of, conformance_of_at,
 };
 pub use easing::{Easing, cubic_bezier};
+pub use physics::{DampedSpring, Decay, RUBBER_BAND, rubber_band, rubber_band_inverse};
 pub use tokens::{
     Kind, MOTION, Motion, MotionTier, MotionTokens, Reduce, ReducedMap, Resolved, Token,
 };

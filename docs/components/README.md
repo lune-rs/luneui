@@ -57,10 +57,10 @@ fills in and nothing enforces yet. Cells hold no `|`.
 | api-docs | `scripts/gen-api-docs.sh` is run after a public API or doc-comment change | D287 | by review | review |
 | touch-hit-area | a control answers a touch pointer within a 44 pt area, in hit testing only (the drawing stays) | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
 | no-hover-only | no action or hint exists only on hover | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
-| touch-drag-arbitration | a scrolling composite inside another decides per axis who takes a touch drag, like the wheel | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
-| long-press-context | a long press reports `context` through `secondary_clicked`, the same path as D292 | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
-| safe-area-and-keyboard | a screen draws inside `Ui::safe_area()` and lifts by `Ui::keyboard_inset()` | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
-| pointer-kind | behaviour that differs for touch reads `Ui::pointer_kind()` | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| touch-drag-arbitration | a scrolling composite inside another decides per axis who takes a touch drag, like the wheel; a drag widget claims the axes it uses with `Ui::set_drag_axes`, so a pan on the other axis reaches the scroll region | D349, D350 | `crates/lune-ui-core/src/ui/pan_tests.rs::nested_regions_split_a_pan_by_axis`, `crates/lune-ui-core/src/ui/pan_tests.rs::a_drag_widget_claiming_horizontal_only_yields_a_vertical_pan_and_keeps_a_horizontal_one` | test |
+| long-press-context | a long press reports `context` through `secondary_clicked`, the same path as D292 | D348, D292 | `crates/lune-ui-core/tests/ui_gestures.rs::a_long_press_on_a_tab_is_its_context` | test |
+| safe-area-and-keyboard | a screen draws inside `Ui::safe_area()` and lifts by `Ui::keyboard_inset()` (the latching is tested in `ui_touch.rs`, a screen's use of it is not) | D344, D345 | by review | review |
+| pointer-kind | behaviour that differs for touch reads `Ui::pointer_kind()` (the reading is tested in `ui_touch.rs::pointer_kind_follows_touch_and_the_mouse_press_after_the_window`, a widget's use of it is not) | D343, D344 | by review | review |
 | non-exhaustive-structs | a public options struct is `#[non_exhaustive]` so a field added later breaks no app | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
 <!-- checklist:end -->
 
@@ -68,7 +68,8 @@ To add a rule, add one row: a unique kebab-case `rule`, what it asks, its D-rows
 (`<file>.rs::<fn>` in backticks, or `by review`) and its kind. A row of kind `auto:<id>` also needs a
 check function of that id in the component check (`apps/gallery/src/catalogue.rs`); a test fails
 when the table and the checks disagree. The mobile program fills its `[mobile slot]` rows here, in
-this one table; each keeps its marker until a test or a check holds it.
+this one table; a row keeps its marker until the program has decided the rule, and then it is held
+like any other row, by a test, a check or a review (M3 decided four: two by test, two by review).
 
 ## Id rule
 

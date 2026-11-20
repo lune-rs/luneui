@@ -80,9 +80,10 @@ Go through every item. Each is a check, what to look at, and what fails.
 
 ### Touch and phone
 
-These are for the mobile program to fill; the lines stay as markers until it does.
+The mobile program has decided the first line (D344, D345); the others stay `[mobile slot]` until it
+decides them.
 
-- `[mobile slot]` The screen draws inside the safe area (`Ui::safe_area()`) and moves with the
+- The screen draws inside the safe area (`Ui::safe_area()`) and moves with the
   keyboard (`Ui::keyboard_inset()`); dump a phone window and look at the top, the bottom and
   the focused field. Fails: content under the notch or the home bar, a focused field behind the
   keyboard.
