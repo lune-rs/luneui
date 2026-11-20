@@ -1008,8 +1008,11 @@ mod tests {
     /// Nodes of overlays that centre themselves in the window, not in the stage (a modal dialog):
     /// the test cannot tell an overlay's node from a page's, so it names these `(page, name)`
     /// pairs, the name being a substring of the node's.
-    const OVERLAY_NODES: &[(&str, &str)] =
-        &[("locale", "Discard changes"), ("ui", "Discard changes")];
+    const OVERLAY_NODES: &[(&str, &str)] = &[
+        ("locale", "Discard changes"),
+        ("ui", "Discard changes"),
+        ("recipes", "Remove upstream"),
+    ];
 
     /// Pages whose scenes open a modal or a popup list that fills the window (a dialog, a palette,
     /// a dropdown's scrolled rows): their nodes are an overlay's, so only their shapes and text
