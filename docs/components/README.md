@@ -68,7 +68,8 @@ To add a rule, add one row: a unique kebab-case `rule`, what it asks, its D-rows
 (`<file>.rs::<fn>` in backticks, or `by review`) and its kind. A row of kind `auto:<id>` also needs a
 check function of that id in the component check (`apps/gallery/src/catalogue.rs`); a test fails
 when the table and the checks disagree. The mobile program fills its `[mobile slot]` rows here, in
-this one table; each keeps its marker until a test or a check holds it.
+this one table; a row keeps its marker until the program has decided the rule, and then it is held
+like any other row, by a test, a check or a review (M3 decided four: two by test, two by review).
 
 ## Id rule
 

@@ -156,17 +156,21 @@ once; stop calling it the next frame to close it.
 
 ## Phone layout
 
-All of this waits for the mobile program; each line is its slot, filled where the rules live
-(`docs/components/README.md`, the checklist table).
+The mobile program has decided some of this (the first two lines) and not the rest; a line still
+marked `[mobile slot]` is open, and the rules live in `docs/components/README.md`, the checklist
+table.
 
-- `[mobile slot]` Safe area and keyboard inset: a recipe's `area` is the window less `MARGIN`; on a
-  phone it is the safe area (`Ui::safe_area()`), and a form lifts by `Ui::keyboard_inset()`.
+- Safe area and keyboard inset (D344, D345; checklist row `safe-area-and-keyboard`, held by review):
+  a recipe's `area` is the window less `MARGIN`; on a phone it is the safe area
+  (`Ui::safe_area()`), and a form lifts by `Ui::keyboard_inset()`.
 - `[mobile slot]` Touch hit area: every control answers a 44 pt touch even where it draws 32 px;
   the recipes' 32 px rows and buttons are drawn size, not the touch target.
 - `[mobile slot]` No hover-only affordance: the list's hover highlight is not the only sign a row
   is pressable.
-- `[mobile slot]` Touch drag arbitration: a scrolling list or table inside a page that also
-  scrolls decides per axis who takes the drag (as the wheel does, D178).
+- Touch drag arbitration (D349, D350; checklist row `touch-drag-arbitration`, held by test): a
+  scrolling list or table inside a page that also scrolls decides per axis who takes the drag (as
+  the wheel does, D178); a drag widget claims the axes it uses with `Ui::set_drag_axes`, and the
+  scroll area takes the other pan, so do not write a mechanism of your own.
 
 Where the dumps at 402x874 at 3x show a limit today it is named under the recipe: the sidebar
 (208 px column) and the dialog (448 px card).

@@ -122,8 +122,9 @@ to an existing component's drawing (D254); a new component has no earlier look t
 
 ## 10. Touch and phone
 
-The mobile program has not set its rules yet. The checklist's `[mobile slot]` rows are their
-places; each states what is wanted and says its D-rows are pending. While they are pending:
+The mobile program has set some of its rules and not the rest. A checklist row of kind `test` or
+`review` is set: hold it like any other row. A row still marked `[mobile slot]` is an open place;
+it states what is wanted and says its D-rows are pending. While one is pending:
 
 - lay the component out from the rect it is given, so the dump at `402x874` in step 5 is a fair
   look at it;
