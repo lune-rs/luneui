@@ -6,7 +6,7 @@ status: done
 consumers: any
 source: crates/lune-ui-core/src/motion/transition.rs
 owner: —
-summary: Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a 60 Hz conformance harness
+summary: Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a conformance harness at 60 Hz or any rate, and the physics of a finger's motion (Decay, DampedSpring, rubber_band)
 ---
 
 ## What it is
@@ -25,6 +25,7 @@ target, token)`, which reports `Repaint::Now` while any transition is in flight.
 - Time comes from the app; no clock read (R-nfr-1).
 - The moved menu curves become two of the seven easings, bit-identical (R-motion-1).
 - Every transition is checked at 60 Hz in `cargo test`; settled pages go Idle (R-motion-3).
+- A finger's motion (a fling, a bounce, a pull past an end) is closed-form physics that gives the same value at 60 Hz and 120 Hz, checked by the harness at both rates (R-motion-4).
 
 ## Existing code
 
@@ -59,6 +60,8 @@ the toolkit evaluates closed-form values of `Time` instead, so a frame is reprod
 - `ui.animate_f32(id, target, token)`, `ui.animate_color(id, target, token)`: look up the `Transition` retained under `id`, retarget when `target` changed, return the current value; the id's state follows `core.ui` lifetimes; reports `Repaint::Now` while in flight and nothing once settled, `At(t)` for a known single end time [core.ui].
 - Tier handling: Off returns `target` at once; Reduced applies the per-kind rule (`keep`, `fade`, `snap`) and the mapped duration [motion].
 - `motion::conformance(transition, tier)`: samples at 60 Hz (16.667 ms steps) from the start; passes when no step jumps more than its bound (an argument of the harness; M4 sets it per kind), the end value is exact, it settles within duration plus one frame, and no sample is NaN or infinite [D41], [derived: C4 names the checks and leaves the bound to M4].
+- `motion::conformance_at(rate, ..)`, `conformance_of_at(rate, ..)`: the same checks on a grid of `rate` Hz, with one frame of that rate allowed after the end; `conformance` and `conformance_of` are these at 60 [D347].
+- Physics, closed forms of the time since a release, in `motion/physics.rs` [D347] (R-motion-4): `Decay { rate }` (`NORMAL` 0.998 and `FAST` 0.99 per millisecond; `offset`, `velocity`, `duration` to 5 px/s, `time_to`), `DampedSpring { response, damping }` (`BOUNCE` 0.4 s, 1.0; `sample` under, critically and over damped; `duration` from the parameters), `rubber_band(overshoot, extent)` with `RUBBER_BAND` 0.55 and `rubber_band_inverse`. They ignore the motion tier, as the finger's own motion does (`docs/motion.md`, "Scroll physics").
 - Indicators (`spin`) are not transitions: one revolution per 1200 ms, `angle = 360 x frac(t / 1200 ms)` from the app's `Time`, so no per-frame accumulation [L src/Lunegit.Desktop/Controls/SpinBehavior.cs:17,45-53], [D40].
 
 ### States
@@ -107,6 +110,7 @@ None: no user-visible text.
 - `Spring` known answer: `d0 = 1, v0 = 0, w = 1` gives `x(1) - target = 2 / e = 0.7357589`; no overshoot for any `d0`, `v0` of the same sign; settles toward target monotonically [derived: closed form above].
 - Conformance (60 Hz): all 15 kinds under Full, Reduced and Off: no jump above the bound, exact end, settled within duration plus one frame, no NaN [D41].
 - `ui.animate_*` reports `Repaint::Now` while in flight and `Idle` once every id settled; an unused transient id is gone after one frame; an exit-retained id completes then reports Idle [core.ui].
+- Physics (`crates/lune-ui-core/tests/motion_physics.rs`): `a_decay_covers_the_documented_distance` (within 1% of `-v0 / k`), `a_decay_knows_when_it_reaches_a_distance` (`time_to` agrees with `offset` to 0.01 px), `a_damped_spring_starts_where_told_and_ends_exactly` (damping 0.5, 1 and 2, value and velocity at 0, exact end), `a_damped_spring_velocity_is_the_derivative_of_its_value`, `the_rubber_band_is_odd_monotonic_bounded_and_starts_at_its_slope`, `the_rubber_band_inverse_undoes_it` (0.01 px to two extents), `every_kind_and_tier_conforms_at_120_hz_as_at_60`, `a_fling_and_a_bounce_conform_at_60_and_120`, `physics_is_a_pure_function_of_time` (bit-identical at the shared instants of the 60 and 120 Hz grids).
 - Determinism: two runs with the same input script yield identical frames (no clock read; boundary script rule 4 stays green).
 - Tests, bullet by bullet (`crates/lune-ui-core/tests/motion.rs` unless named). Easings: `easing_known_answers`, `easings_clamp_progress_and_hit_their_ends`, `cubic_out_and_ease_in_are_the_moved_menu_curves_bit_for_bit`. Tween and retarget: `tween_holds_from_before_start_and_to_exactly_at_the_end`, `an_in_flight_retarget_keeps_position_and_velocity` (first sample after within 1e-4 of the last before, and the velocity), `an_in_flight_retarget_is_continuous_for_every_easing_pair`. Spring: `spring_known_answer` (2 / e), `spring_never_crosses_its_target_when_moving_away_or_at_rest`. Conformance: `every_kind_conforms_under_every_tier` (15 kinds, three tiers) and the instrument's own checks `the_instrument_catches_a_jump`, `_an_inexact_end`, `_a_nan`, `_a_late_restart`. Repaint: `ui_core.rs::repaint_follows_the_animation`, `repaint_at_the_earliest_future_request`, `an_unused_transient_id_is_gone_after_one_frame`, `ui_overlays.rs::an_overlay_the_app_stops_calling_keeps_drawing_until_its_close_ends`. Determinism: `conformance_is_deterministic`, `ui_core.rs::a_script_run_in_two_fresh_stores_gives_identical_frames`, `c4.rs::the_script_is_deterministic`.
 

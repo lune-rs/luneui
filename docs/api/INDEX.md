@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1111 items. Left out and counted: 3415 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4921 items of the omitted impls, 1324 items of the trait impls shown as one line, 2286 synthetic impls.
+94 modules, 1118 items. Left out and counted: 3433 blanket impls, 1 intra-doc links left unlinked (private or unresolvable target), 4947 items of the omitted impls, 1330 items of the trait impls shown as one line, 2298 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -31,7 +31,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::input`](lune-ui-core/input.md) | 23 |
 | [`lune_ui_core::json`](lune-ui-core/json.md) | 11 |
 | [`lune_ui_core::layout`](lune-ui-core/layout.md) | 11 |
-| [`lune_ui_core::motion`](lune-ui-core/motion.md) | 27 |
+| [`lune_ui_core::motion`](lune-ui-core/motion.md) | 34 |
 | [`lune_ui_core::paint`](lune-ui-core/paint.md) | 7 |
 | [`lune_ui_core::scene`](lune-ui-core/scene.md) | 18 |
 | [`lune_ui_core::shortcuts`](lune-ui-core/shortcuts.md) | 6 |
@@ -388,7 +388,9 @@ Every top-level item of the four owning crates, by name.
 - [`COMPACT_PAD`](lune-ui-core/widgets/stat.md#constant.COMPACT_PAD) - constant, `lune_ui_core::widgets::stat`
 - [`Conformance`](lune-ui-core/motion.md#struct.Conformance) - struct, `lune_ui_core::motion`
 - [`conformance`](lune-ui-core/motion.md#fn.conformance) - function, `lune_ui_core::motion`
+- [`conformance_at`](lune-ui-core/motion.md#fn.conformance_at) - function, `lune_ui_core::motion`
 - [`conformance_of`](lune-ui-core/motion.md#fn.conformance_of) - function, `lune_ui_core::motion`
+- [`conformance_of_at`](lune-ui-core/motion.md#fn.conformance_of_at) - function, `lune_ui_core::motion`
 - [`ConformanceError`](lune-ui-core/motion.md#enum.ConformanceError) - enum, `lune_ui_core::motion`
 - [`content_rect`](lune-ui-core/widgets/side_panel.md#fn.content_rect) - function, `lune_ui_core::widgets::side_panel`
 - [`CONTENT_SWAP`](lune-ui-core/widgets/tab_strip.md#constant.CONTENT_SWAP) - constant, `lune_ui_core::widgets::tab_strip`
@@ -407,8 +409,10 @@ Every top-level item of the four owning crates, by name.
 - [`CustomDraw`](lune-ui-wgpu/custom.md#trait.CustomDraw) - trait, `lune_ui_wgpu::custom`
 - [`CustomFrame`](lune-ui-wgpu/custom.md#struct.CustomFrame) - struct, `lune_ui_wgpu::custom`
 - [`CustomItem`](lune-ui-core/scene.md#struct.CustomItem) - struct, `lune_ui_core::scene`
+- [`DampedSpring`](lune-ui-core/motion.md#struct.DampedSpring) - struct, `lune_ui_core::motion`
 - [`DARK`](lune-ui-core/theme.md#constant.DARK) - constant, `lune_ui_core::theme`
 - [`DASH`](lune-ui-core/widgets/search_picker.md#constant.DASH) - constant, `lune_ui_core::widgets::search_picker`
+- [`Decay`](lune-ui-core/motion.md#struct.Decay) - struct, `lune_ui_core::motion`
 - [`DEFAULT_PAGE_ROWS`](lune-ui-core/text_edit.md#constant.DEFAULT_PAGE_ROWS) - constant, `lune_ui_core::text_edit`
 - [`default_text`](lune-ui-core/strings.md#fn.default_text) - function, `lune_ui_core::strings`
 - [`DEFAULTS`](lune-ui-core/strings.md#constant.DEFAULTS) - constant, `lune_ui_core::strings`
@@ -1065,6 +1069,9 @@ Every top-level item of the four owning crates, by name.
 - [`RowHeights`](lune-ui-core/widgets/virtual_list.md#struct.RowHeights) - struct, `lune_ui_core::widgets::virtual_list`
 - [`RowKey`](lune-ui-core/widgets/virtual_list.md#struct.RowKey) - struct, `lune_ui_core::widgets::virtual_list`
 - [`RowLook`](lune-ui-core/widgets/menu.md#struct.RowLook) - struct, `lune_ui_core::widgets::menu`
+- [`RUBBER_BAND`](lune-ui-core/motion.md#constant.RUBBER_BAND) - constant, `lune_ui_core::motion`
+- [`rubber_band`](lune-ui-core/motion.md#fn.rubber_band) - function, `lune_ui_core::motion`
+- [`rubber_band_inverse`](lune-ui-core/motion.md#fn.rubber_band_inverse) - function, `lune_ui_core::motion`
 - [`Sampling`](lune-ui-core/image.md#enum.Sampling) - enum, `lune_ui_core::image`
 - [`Scene`](lune-ui-core/scene.md#struct.Scene) - struct, `lune_ui_core::scene`
 - [`SCENE_LAYERS`](lune-ui-core/scene.md#constant.SCENE_LAYERS) - constant, `lune_ui_core::scene`

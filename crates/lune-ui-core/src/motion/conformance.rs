@@ -1,5 +1,6 @@
 //! The 60 Hz conformance harness (D41): every transition is sampled on a 60 Hz grid from its
-//! start and checked for jumps, an exact end, a timely settle and finite values.
+//! start and checked for jumps, an exact end, a timely settle and finite values. The `_at` pair
+//! runs the same checks on a grid of any rate (D347), so a 120 Hz display is proven the same way.
 
 use std::fmt;
 use std::time::Duration;
@@ -16,9 +17,10 @@ pub const STEP_BOUND_BACK_OUT: f32 = 0.45;
 /// Settled samples checked after the first settled one.
 const TAIL_FRAMES: u64 = 2;
 
-/// Time of frame `k`: `k / 60` s, computed exactly in nanoseconds (no accumulated drift).
-fn frame_time(k: u64) -> Time {
-    Duration::from_nanos(k.saturating_mul(1_000_000_000) / 60)
+/// Time of frame `k` at `rate` Hz: `k / rate` s, computed exactly in nanoseconds (no accumulated
+/// drift).
+fn frame_time(k: u64, rate: u32) -> Time {
+    Duration::from_nanos(k.saturating_mul(1_000_000_000) / u64::from(rate))
 }
 
 /// A passing run.
@@ -32,7 +34,8 @@ pub struct Conformance {
     pub max_step: f32,
 }
 
-/// Why a run failed; each names the frame (index on the 60 Hz grid) and its time.
+/// Why a run failed; each names the frame (index on the grid, 60 Hz unless the `_at` pair was
+/// asked for another rate) and its time.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConformanceError {
     /// A step moved further than the bound.
@@ -94,6 +97,20 @@ pub fn conformance<T: Lerp>(
     from: T,
     to: T,
 ) -> Result<Conformance, ConformanceError> {
+    conformance_at(60, motion, tokens, tier, from, to)
+}
+
+/// [`conformance`] on a grid of `rate` Hz (60 gives the same run). The step bound is the same
+/// fraction of the distance per frame, which a faster grid meets more easily. A `rate` of 0 is
+/// `NotFinite` at frame 0.
+pub fn conformance_at<T: Lerp>(
+    rate: u32,
+    motion: &Motion,
+    tokens: &MotionTokens,
+    tier: MotionTier,
+    from: T,
+    to: T,
+) -> Result<Conformance, ConformanceError> {
     let resolved = tokens.resolve(motion, tier);
     let mut tr = Transition::settled(from);
     let end = match resolved {
@@ -111,7 +128,13 @@ pub fn conformance<T: Lerp>(
     } else {
         STEP_BOUND
     };
-    conformance_of(|t| tr.sample(t), end, to, fraction * from.distance(to))
+    conformance_of_at(
+        rate,
+        |t| tr.sample(t),
+        end,
+        to,
+        fraction * from.distance(to),
+    )
 }
 
 /// Checks any sampler `t -> (value, in_flight)` on the 60 Hz grid from time 0: no step between
@@ -120,18 +143,38 @@ pub fn conformance<T: Lerp>(
 /// settle reports), and no sample in flight again after the first settled one (`Late`). Sampling stops two frames after
 /// the first settled sample.
 pub fn conformance_of<T: Lerp>(
+    sampler: impl FnMut(Time) -> (T, bool),
+    end: Time,
+    target: T,
+    bound: f32,
+) -> Result<Conformance, ConformanceError> {
+    conformance_of_at(60, sampler, end, target, bound)
+}
+
+/// [`conformance_of`] on a grid of `rate` Hz: samples at `k / rate` s, and allows one frame of that
+/// rate (`1 / rate` s) after `end` to settle. A `rate` of 0 is `NotFinite` at frame 0 (the grid has
+/// no sample).
+pub fn conformance_of_at<T: Lerp>(
+    rate: u32,
     mut sampler: impl FnMut(Time) -> (T, bool),
     end: Time,
     target: T,
     bound: f32,
 ) -> Result<Conformance, ConformanceError> {
-    let limit = end.saturating_add(FRAME);
+    if rate == 0 {
+        return Err(ConformanceError::NotFinite {
+            frame: 0,
+            at: Time::ZERO,
+        });
+    }
+    let frame = Duration::from_nanos(1_000_000_000 / u64::from(rate));
+    let limit = end.saturating_add(frame);
     let mut prev: Option<T> = None;
     let mut settled: Option<(u64, Time)> = None;
     let mut max_step = 0.0f32;
     let mut k = 0u64;
     loop {
-        let at = frame_time(k);
+        let at = frame_time(k, rate);
         let (x, moving) = sampler(at);
         if !x.is_finite() {
             return Err(ConformanceError::NotFinite { frame: k, at });

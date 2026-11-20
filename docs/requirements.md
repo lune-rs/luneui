@@ -165,6 +165,10 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-motion-3 [new] The motion system and the 60 fps contract: closed-form values of the app's time, a
   60 Hz conformance harness for every transition, a bench budget at milestone acceptance and Idle
   when settled (D41).
+- R-motion-4 [new] A finger's motion: a fling's exponential decay, a damped spring for the bounce back,
+  and a rubber band for the pull past an end, each a closed form of the app's time that gives the
+  same value at 60 Hz and 120 Hz, with the conformance harness run at any rate (D347;
+  `motion.transitions`, `docs/motion.md`, "Scroll physics").
 
 ### Infrastructure
 

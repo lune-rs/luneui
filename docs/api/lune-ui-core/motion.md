@@ -14,7 +14,10 @@ clock, so a frame is reproducible.
 - [`Token`](motion.md#enum.Token), [`Kind`](motion.md#enum.Kind), [`Motion`](motion.md#struct.Motion), [`MotionTier`](motion.md#enum.MotionTier), [`MotionTokens`](motion.md#struct.MotionTokens), [`MOTION`](motion.md#constant.MOTION): the
   vocabulary and the tier rules (D12).
 - [`Cadence`](motion.md#enum.Cadence): how often a busy loop asks for its next frame (D298).
-- [`conformance`](motion.md#fn.conformance), [`conformance_of`](motion.md#fn.conformance_of): the 60 Hz harness (D41).
+- [`conformance`](motion.md#fn.conformance), [`conformance_of`](motion.md#fn.conformance_of): the 60 Hz harness (D41); [`conformance_at`](motion.md#fn.conformance_at),
+  [`conformance_of_at`](motion.md#fn.conformance_of_at): the same at any rate.
+- [`Decay`](motion.md#struct.Decay), [`DampedSpring`](motion.md#struct.DampedSpring), [`rubber_band`](motion.md#fn.rubber_band): a finger's motion, a fling, a bounce and the
+  pull past an end (D347).
 
 Source: `crates/lune-ui-core/src/motion.rs:1`
 
@@ -33,7 +36,7 @@ pub struct Conformance {
 
 A passing run.
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:26`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:28`
 
 **Fields**
 
@@ -56,6 +59,146 @@ Source: `crates/lune-ui-core/src/motion/conformance.rs:26`
 - `impl Debug for Conformance`
 - `impl PartialEq for Conformance`
 - `impl StructuralPartialEq for Conformance`
+
+<a id="struct.DampedSpring"></a>
+### Struct `DampedSpring`
+
+```rust
+#[non_exhaustive]
+pub struct DampedSpring {
+    pub response: Time,
+    pub damping: f32,
+}
+```
+
+A damped spring from one value to another, for the bounce back from an overscroll: a
+second-order system of natural period `response` and damping ratio `damping`, evaluated in
+closed form (under, critically and over damped). Unlike [`Spring`](motion.md#struct.Spring), it takes the
+damping and so can overshoot. `response` zero or `damping` not positive and finite makes it hold
+its target: [`DampedSpring::sample`](motion.md#method.DampedSpring.sample) gives `(to, 0.0)` at every time.
+
+Source: `crates/lune-ui-core/src/motion/physics.rs:189`
+
+**Fields**
+
+- <a id="structfield.DampedSpring.response"></a>`pub response: Time`
+
+  The undamped period: the natural angular rate is `2 pi / response`.
+
+- <a id="structfield.DampedSpring.damping"></a>`pub damping: f32`
+
+  The damping ratio: under 1 overshoots, 1 is critical, over 1 creeps.
+
+**Methods and associated items**
+
+`impl DampedSpring`
+
+- <a id="associatedconstant.DampedSpring.BOUNCE"></a>`const BOUNCE: DampedSpring = _;`
+
+  The scroll area's bounce back from an overscroll: 0.4 s, critically damped.
+
+- <a id="associatedconstant.DampedSpring.REST"></a>`const REST: f32 = 0.5;`
+
+  The distance, in px, within which a spring is at rest.
+
+- <a id="associatedconstant.DampedSpring.REST_VELOCITY"></a>`const REST_VELOCITY: f32 = 5.0;`
+
+  The speed, in px/s, under which a spring is at rest.
+
+- <a id="method.DampedSpring.duration"></a>`pub fn duration(&self, from: f32, to: f32, v0: f32) -> Time`
+
+  The time after which the motion stays within [`DampedSpring::REST`](motion.md#associatedconstant.DampedSpring.REST) of `to` and slower than
+  [`DampedSpring::REST_VELOCITY`](motion.md#associatedconstant.DampedSpring.REST_VELOCITY), from the parameters alone: the first time an upper bound
+  of the motion's envelope falls under both limits (so it is never early, and late by a small
+  fraction), at most 60 s.
+
+- <a id="method.DampedSpring.new"></a>`pub const fn new(response: Time, damping: f32) -> Self`
+
+  A spring of `response` and `damping`.
+
+- <a id="method.DampedSpring.sample"></a>`pub fn sample(&self, from: f32, to: f32, v0: f32, t: Time) -> (f32, f32)`
+
+  The value and the velocity `t` after the start, moving from `from` to `to` with the speed
+  `v0` (px/s) at the start. Both are exactly `(to, 0.0)` from [`DampedSpring::duration`](motion.md#method.DampedSpring.duration) on,
+  and at every time for a spring that holds its target.
+
+**Trait implementations**
+
+- `impl Clone for DampedSpring`
+- `impl Copy for DampedSpring`
+- `impl Debug for DampedSpring`
+- `impl PartialEq for DampedSpring`
+- `impl StructuralPartialEq for DampedSpring`
+
+<a id="struct.Decay"></a>
+### Struct `Decay`
+
+```rust
+#[non_exhaustive]
+pub struct Decay {
+    pub rate: f32,
+}
+```
+
+A fling's exponential decay: the velocity falls by the same fraction every millisecond, so the
+distance covered is a closed form of the time since the release. `rate` is the fraction of the
+velocity kept per millisecond. A `rate` outside (0, 1), or not finite, ends at once (duration 0,
+offset 0, velocity 0).
+
+Source: `crates/lune-ui-core/src/motion/physics.rs:97`
+
+**Fields**
+
+- <a id="structfield.Decay.rate"></a>`pub rate: f32`
+
+  The fraction of the velocity kept per millisecond.
+
+**Methods and associated items**
+
+`impl Decay`
+
+- <a id="associatedconstant.Decay.FAST"></a>`const FAST: Decay = _;`
+
+  A fling that stops sooner: 0.99 per millisecond.
+
+- <a id="associatedconstant.Decay.NORMAL"></a>`const NORMAL: Decay = _;`
+
+  A fling that coasts: 0.998 per millisecond (a list that runs a few screens from a hard flick).
+
+- <a id="associatedconstant.Decay.REST"></a>`const REST: f32 = 5.0;`
+
+  The speed, in px/s, under which a fling is at rest.
+
+- <a id="method.Decay.duration"></a>`pub fn duration(&self, v0: f32) -> Time`
+
+  The time until the speed is [`Decay::REST`](motion.md#associatedconstant.Decay.REST): zero when `v0` (px/s) is already that slow.
+
+- <a id="method.Decay.new"></a>`pub const fn new(rate: f32) -> Self`
+
+  A decay of `rate` per millisecond.
+
+- <a id="method.Decay.offset"></a>`pub fn offset(&self, v0: f32, t: Time) -> f32`
+
+  The distance covered `t` after a release at `v0` px/s: `v0 (e^{k t} - 1) / k`. From
+  [`Decay::duration`](motion.md#method.Decay.duration) on it is the distance at that time exactly.
+
+- <a id="method.Decay.time_to"></a>`pub fn time_to(&self, v0: f32, distance: f32) -> Option<Time>`
+
+  When the offset first reaches `distance` (the sign of `v0`), or `None` when the fling
+  ends before it, `distance` has the other sign, or the decay is invalid. A `distance` of 0
+  is reached at once.
+
+- <a id="method.Decay.velocity"></a>`pub fn velocity(&self, v0: f32, t: Time) -> f32`
+
+  The velocity `t` after a release at `v0`: `v0 e^{k t}`, and 0 from [`Decay::duration`](motion.md#method.Decay.duration) on.
+
+**Trait implementations**
+
+- `impl Clone for Decay`
+- `impl Copy for Decay`
+- `impl Debug for Decay`
+- `impl PartialEq for Decay`
+- `impl StructuralPartialEq for Decay`
 
 <a id="struct.Keyframes"></a>
 ### Struct `Keyframes`
@@ -515,9 +658,10 @@ pub enum ConformanceError {
 }
 ```
 
-Why a run failed; each names the frame (index on the 60 Hz grid) and its time.
+Why a run failed; each names the frame (index on the grid, 60 Hz unless the `_at` pair was
+asked for another rate) and its time.
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:37`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:40`
 
 **Variants**
 
@@ -889,7 +1033,7 @@ pub type Time = std::time::Duration;
 Time since the app's origin, as the app supplies it in `RawInput`. The toolkit never reads a
 clock itself.
 
-Source: `crates/lune-ui-core/src/motion.rs:36`
+Source: `crates/lune-ui-core/src/motion.rs:41`
 
 ## Functions
 
@@ -911,7 +1055,27 @@ Runs `motion` from `from` to `to` under `tier` with `tokens`: a [`Transition`](m
 [`conformance_of`](motion.md#fn.conformance_of) with a step bound of [`STEP_BOUND`](motion.md#constant.STEP_BOUND) (or [`STEP_BOUND_BACK_OUT`](motion.md#constant.STEP_BOUND_BACK_OUT)) times
 `from.distance(to)`.
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:90`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:93`
+
+<a id="fn.conformance_at"></a>
+### Function `conformance_at`
+
+```rust
+pub fn conformance_at<T: Lerp>(
+    rate: u32,
+    motion: &Motion,
+    tokens: &MotionTokens,
+    tier: MotionTier,
+    from: T,
+    to: T,
+) -> Result<Conformance, ConformanceError>
+```
+
+[`conformance`](motion.md#fn.conformance) on a grid of `rate` Hz (60 gives the same run). The step bound is the same
+fraction of the distance per frame, which a faster grid meets more easily. A `rate` of 0 is
+`NotFinite` at frame 0.
+
+Source: `crates/lune-ui-core/src/motion/conformance.rs:106`
 
 <a id="fn.conformance_of"></a>
 ### Function `conformance_of`
@@ -931,7 +1095,26 @@ sample at or after `end` exactly `target` and settled (`End`, which is also how 
 settle reports), and no sample in flight again after the first settled one (`Late`). Sampling stops two frames after
 the first settled sample.
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:122`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:145`
+
+<a id="fn.conformance_of_at"></a>
+### Function `conformance_of_at`
+
+```rust
+pub fn conformance_of_at<T: Lerp>(
+    rate: u32,
+    sampler: impl FnMut(Time) -> (T, bool),
+    end: Time,
+    target: T,
+    bound: f32,
+) -> Result<Conformance, ConformanceError>
+```
+
+[`conformance_of`](motion.md#fn.conformance_of) on a grid of `rate` Hz: samples at `k / rate` s, and allows one frame of that
+rate (`1 / rate` s) after `end` to settle. A `rate` of 0 is `NotFinite` at frame 0 (the grid has
+no sample).
+
+Source: `crates/lune-ui-core/src/motion/conformance.rs:157`
 
 <a id="fn.cubic_bezier"></a>
 ### Function `cubic_bezier`
@@ -944,6 +1127,33 @@ CSS `cubic-bezier(x1, y1, x2, y2)` at time `t`.
 
 Source: `crates/lune-ui-core/src/motion/easing.rs:13`
 
+<a id="fn.rubber_band"></a>
+### Function `rubber_band`
+
+```rust
+pub fn rubber_band(overshoot: f32, extent: f32) -> f32
+```
+
+The distance a pull of `overshoot` px past an end shows as, for a viewport `extent` px long:
+`sign(x) (1 - 1 / (|x| c / d + 1)) d` with `c` = [`RUBBER_BAND`](motion.md#constant.RUBBER_BAND) and `d` = `extent`. It is 0 at 0,
+odd, monotonic, has slope [`RUBBER_BAND`](motion.md#constant.RUBBER_BAND) at 0, and stays below `extent`. An `extent` that is not
+positive and finite, or a non-finite `overshoot`, gives 0.
+
+Source: `crates/lune-ui-core/src/motion/physics.rs:25`
+
+<a id="fn.rubber_band_inverse"></a>
+### Function `rubber_band_inverse`
+
+```rust
+pub fn rubber_band_inverse(shown: f32, extent: f32) -> f32
+```
+
+The pull that shows as `shown` px: the inverse of [`rubber_band`](motion.md#fn.rubber_band) on `(-extent, extent)`, with
+`shown` held just inside that range. An `extent` that is not positive and finite, or a
+non-finite `shown`, gives 0.
+
+Source: `crates/lune-ui-core/src/motion/physics.rs:38`
+
 <a id="fn.spin_angle"></a>
 ### Function `spin_angle`
 
@@ -955,7 +1165,7 @@ Spinner angle in degrees at `t`: `360 · frac(t / 1200 ms)`, from the app's time
 accumulate per frame. This is the raw phase, whatever the tier: the spinner widget decides by
 tier (a turning glyph under Full, a static one at angle 0 under Reduced and Off, D117).
 
-Source: `crates/lune-ui-core/src/motion.rs:44`
+Source: `crates/lune-ui-core/src/motion.rs:49`
 
 ## Constants
 
@@ -968,7 +1178,7 @@ pub const FRAME: std::time::Duration;
 
 One 60 Hz frame, rounded down to the nanosecond.
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:10`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:11`
 
 <a id="constant.MOTION"></a>
 ### Constant `MOTION`
@@ -983,6 +1193,18 @@ slow→base).
 
 Source: `crates/lune-ui-core/src/motion/tokens.rs:192`
 
+<a id="constant.RUBBER_BAND"></a>
+### Constant `RUBBER_BAND`
+
+```rust
+pub const RUBBER_BAND: f32 = 0.55;
+```
+
+The rubber band's resistance at the start of a pull: the slope of [`rubber_band`](motion.md#fn.rubber_band) at 0 (iOS's
+0.55).
+
+Source: `crates/lune-ui-core/src/motion/physics.rs:13`
+
 <a id="constant.SPIN_PERIOD"></a>
 ### Constant `SPIN_PERIOD`
 
@@ -992,7 +1214,7 @@ pub const SPIN_PERIOD: std::time::Duration;
 
 One spinner revolution.
 
-Source: `crates/lune-ui-core/src/motion.rs:39`
+Source: `crates/lune-ui-core/src/motion.rs:44`
 
 <a id="constant.STEP_BOUND"></a>
 ### Constant `STEP_BOUND`
@@ -1003,7 +1225,7 @@ pub const STEP_BOUND: f32 = 0.35;
 
 Largest step per frame, as a fraction of the run's distance (0.45 for `BackOut`).
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:13`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:14`
 
 <a id="constant.STEP_BOUND_BACK_OUT"></a>
 ### Constant `STEP_BOUND_BACK_OUT`
@@ -1012,5 +1234,5 @@ Source: `crates/lune-ui-core/src/motion/conformance.rs:13`
 pub const STEP_BOUND_BACK_OUT: f32 = 0.45;
 ```
 
-Source: `crates/lune-ui-core/src/motion/conformance.rs:14`
+Source: `crates/lune-ui-core/src/motion/conformance.rs:15`
 

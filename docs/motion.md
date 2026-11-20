@@ -201,8 +201,8 @@ From Lunegit's rules plus D40's performance rules:
   view (M9): they change what the document is, not how it is shown [D186, D191].
 - Layout properties on large or virtualized surfaces; prefer transforms
   [L .claude/docs/animation-rules.md:149].
-- Anything longer than `slow` (500 ms), except the flash cue and the indicator loops
-  [L .claude/docs/animation-rules.md:150].
+- Anything longer than `slow` (500 ms), except the flash cue, the indicator loops
+  [L .claude/docs/animation-rules.md:150] and a finger's fling and bounce ("Scroll physics", below).
 - A determinate progress bar: its fill follows the value directly, however often the value changes.
   Only the indeterminate loop above moves, because nothing is known [D118]
   [L .claude/docs/animation-rules.md:148].
@@ -220,6 +220,31 @@ switch, never loops, never delays input (the active tab, focus and the notch sna
 up), and a second switch supersedes the fade instead of queuing
 [L .claude/docs/animation-rules.md:45-65]. Off is a hard cut. It is not a licence to
 transition any other self-painting surface [L .claude/docs/animation-rules.md:73-74].
+
+## Scroll physics
+
+A finger's own motion is not a transition and has no token (D347, D350). After a release, a scroll
+area flings on an exponential decay and, at an end, rubber-bands and bounces back; a pinched or
+dragged thing follows the finger 1:1. These are the one exception to "nothing longer than `slow`":
+a fling lasts seconds, as it does on every native platform, and it ignores the motion tier, like
+the drag ghost of `settle` that "tracks the pointer 1:1 and never transitions". Snapping a fling
+under `Off` is rejected: a list that stops dead on release reads as broken, and no native platform
+does it under its reduce-motion setting. An app that wants none switches the ends to a clamp
+(`Overscroll::Clamp`) and picks a quicker `Decay`.
+
+The values are closed forms of the app's time since the release, like every other motion, so a
+frame is reproducible and 60 Hz and 120 Hz agree at every instant they share [D41]:
+
+| item | form | starting value |
+|---|---|---|
+| `Decay` | offset `v0 (e^{k t} - 1) / k`, velocity `v0 e^{k t}`, `k = 1000 ln rate` per second; at rest under 5 px/s | rate 0.998 per millisecond (`Decay::NORMAL`), 0.99 (`FAST`) |
+| `rubber_band` | `sign(x) (1 - 1 / (|x| c / d + 1)) d`, the pull `x` past an end shown as less than the viewport `d` | `c` = 0.55 (`RUBBER_BAND`) |
+| `DampedSpring` | the second-order system of period `response` and damping ratio `damping`, under, critically and over damped; rest within 0.5 px and 5 px/s | 0.4 s, damping 1.0 (`BOUNCE`) |
+
+Every constant is the toolkit's own starting value, not a native measurement; "feels native" is
+unverified until a finger drives it (`docs/STATE.md`). The conformance harness runs at any rate
+(`conformance_at`, `conformance_of_at`): every kind and tier is swept at 120 Hz as at 60, and the
+decay and the spring pass `conformance_of_at` at both.
 
 ## 60 fps contract
 

@@ -156,7 +156,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | --- | --- | --- | --- | --- |
 | [motion.animation-tiers](motion/animation-tiers.md) | Animation tiers and reduced motion | done | any | Full, Reduced and Off motion tiers passed in by the app, with the per-token Reduced duration map |
 | [motion.curves](motion/curves.md) | Easing curves and menu motion | done | luneterm | cubic_bezier easing and the menu open and close values; becomes the cubic-out and ease-in tokens |
-| [motion.transitions](motion/transitions.md) | Motion system and transitions | done | any | Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a 60 Hz conformance harness |
+| [motion.transitions](motion/transitions.md) | Motion system and transitions | done | any | Time, Easing, Tween, Spring, Keyframes and Transition evaluated in closed form, tier-aware, with a conformance harness at 60 Hz or any rate, and the physics of a finger's motion (Decay, DampedSpring, rubber_band) |
 
 ## infra
 
