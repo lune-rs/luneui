@@ -38,6 +38,29 @@ const UNCITED: &[(&str, &str)] = &[
     ("R-nfr-7", "a non-functional rule about the whole repo"),
 ];
 
+/// Widget modules no catalogue entry claims in its `source:`: routines shared by several widgets
+/// (or by one entry's body), each with its reason. A module here that an entry also claims, or
+/// that is not in `widgets/`, fails `every_widget_module_is_claimed_by_an_entry`.
+const SHARED_WIDGET_HELPERS: &[(&str, &str)] = &[
+    (
+        "input_box.rs",
+        "the private chrome shared by the combo box, the stepper and the field",
+    ),
+    (
+        "selectable.rs",
+        "the key-value list's selectable value text, named in data.kv-list",
+    ),
+    (
+        "selection.rs",
+        "the one selection drawing every text view uses (R18)",
+    ),
+    ("shine.rs", "the tab strip's moving band (R3)"),
+    (
+        "text_lines.rs",
+        "the shared plumbing of the text views (D6)",
+    ),
+];
+
 /// One catalogue file, split.
 #[derive(Debug, Clone)]
 pub(crate) struct Entry {
@@ -445,6 +468,47 @@ pub(crate) fn missing_from_scene(entries: &[Entry], scene: &str, names: &[&str])
         .collect()
 }
 
+/// Widget files (`name.rs` under `widgets/`, `mod.rs` aside) that no entry's `source:` names and
+/// no helper covers, plus every helper that is claimed after all or is not a widget file.
+pub(crate) fn widget_module_complaints(
+    files: &[String],
+    entries: &[Entry],
+    helpers: &[(&str, &str)],
+) -> Vec<String> {
+    const DIR: &str = "crates/lune-ui-core/src/widgets/";
+    let claimed: BTreeSet<&str> = entries
+        .iter()
+        .flat_map(|e| e.source.split(','))
+        .map(|s| s.trim().trim_matches('`'))
+        .collect();
+    let mut out = Vec::new();
+    for f in files.iter().filter(|f| *f != "mod.rs") {
+        let listed = helpers.iter().any(|(h, _)| h == f);
+        let claimed = claimed.contains(format!("{DIR}{f}").as_str());
+        if !listed && !claimed {
+            out.push(format!(
+                "{DIR}{f}: in no entry's `source:` and not in SHARED_WIDGET_HELPERS"
+            ));
+        }
+        if listed && claimed {
+            out.push(format!(
+                "{f}: in SHARED_WIDGET_HELPERS but an entry claims it"
+            ));
+        }
+    }
+    for (h, why) in helpers {
+        if !files.iter().any(|f| f == h) {
+            out.push(format!(
+                "{h}: in SHARED_WIDGET_HELPERS but not a widget file"
+            ));
+        }
+        if why.trim().is_empty() {
+            out.push(format!("{h}: in SHARED_WIDGET_HELPERS with no reason"));
+        }
+    }
+    out
+}
+
 // ---- the real catalogue ---------------------------------------------------------------------
 
 #[cfg(test)]
@@ -738,6 +802,60 @@ mod tests {
                 .flat_map(|e| done_complaints(e, &root))
                 .collect(),
         );
+    }
+
+    #[test]
+    fn every_widget_module_is_claimed_by_an_entry() {
+        let (entries, _) = all();
+        let dir = root().join("crates/lune-ui-core/src/widgets");
+        let mut files: Vec<String> = std::fs::read_dir(&dir)
+            .expect("widgets dir")
+            .map(|e| {
+                e.expect("dir entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .filter(|n| n.ends_with(".rs"))
+            .collect();
+        files.sort();
+        // The instrument: the directory read found the widgets and a known one.
+        assert!(
+            files.len() > 50 && files.iter().any(|f| f == "menu.rs"),
+            "{files:?}"
+        );
+        none(widget_module_complaints(
+            &files,
+            &entries,
+            SHARED_WIDGET_HELPERS,
+        ));
+    }
+
+    #[test]
+    fn an_unclaimed_unlisted_widget_a_double_claim_and_a_stale_helper_are_reported() {
+        let e = entry(
+            "done",
+            "—",
+            "crates/lune-ui-core/src/widgets/button.rs, crates/lune-ui-core/src/widgets/both.rs",
+            "",
+        );
+        let files: Vec<String> = ["mod.rs", "button.rs", "orphan.rs", "both.rs", "helper.rs"]
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
+        let helpers = [
+            ("helper.rs", "shared"),
+            ("both.rs", "shared"),
+            ("gone.rs", "x"),
+        ];
+        let bad = widget_module_complaints(&files, &[e], &helpers);
+        assert_eq!(bad.len(), 3, "{bad:?}");
+        assert!(bad.iter().any(|b| b.contains("orphan.rs")));
+        assert!(
+            bad.iter()
+                .any(|b| b.contains("both.rs") && b.contains("claims"))
+        );
+        assert!(bad.iter().any(|b| b.contains("gone.rs")));
     }
 
     #[test]
