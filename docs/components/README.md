@@ -23,6 +23,49 @@ writes it and the gate runs its `--check`.
 Parallel agents only ever create or edit their own component files; the one shared file is the
 generated `INDEX.md`, and a merge conflict there is resolved by re-running the generator.
 
+## New widget checklist
+
+What a new widget must hold, one row per rule. The table is the one source: the scaffold and the
+component check read it, so a rule lives here and nowhere else. `kind` says how it is held:
+`auto:<id>` is checked by a function of that id, `test` by a test that runs in the gate, `review`
+by a reviewer reading the diff (no test fails on it), `[mobile slot]` is a rule the mobile program
+fills in and nothing enforces yet. Cells hold no `|`.
+
+<!-- checklist:begin -->
+| rule | what | D-rows | enforced by | kind |
+| --- | --- | --- | --- | --- |
+| theme-colours | every colour comes from `ui.theme()` or the widget's options, never a literal or the preset; add the widget to `m10` of `c4.rs` | CLAUDE.md architecture rules | `crates/lune-ui-core/tests/c4.rs::no_fill_or_text_holds_a_preset_colour_under_a_theme_of_distinct_colours` | test |
+| roving-focus | a composite with one tab stop uses `Sense.skip_tab`, `Ui::rove_stop`, `rove_keys`, `rove_focus` (the helper is tested in `ui_focus.rs`, its use by your widget is not) | D113 | by review | review |
+| elide | text that must fit a width goes through `text::elide` or `Painter::elide`, not wrap or cut (the painter's elide is tested in `elide.rs`, its use by your widget is not) | D114 | by review | review |
+| disabled-keys | a widget consumes its keys before it gates on `enabled`; check a subtree with `testing::disabled_violations` | D140, D159 | `crates/lune-ui-core/tests/widget_tab_strip.rs::a_disabled_strip_keeps_the_arrows_home_and_end_from_the_shortcuts` | test |
+| selection-paint | a text selection is drawn by `widgets::selection::paint`, never filled by the widget | D272 | `apps/gallery/src/page.rs::no_widget_fills_a_selection_itself` | test |
+| overlay-layers | a widget never names `LayerId::Raised` or `LayerId::Outside`; `Ui::overlay` picks the layer | D137, D255 to D265 | `crates/lune-ui-core/tests/widget_rules.rs::no_widget_names_the_raised_or_outside_layer`, `crates/lune-ui-core/tests/ui_overlays.rs::a_menu_opened_from_the_scope_stays_on_outside_above_it_even_under_a_modal` | test |
+| wheel-per-axis | a composite with nothing to scroll on an axis disables that axis (`Bars::unless_fits`) so the wheel reaches the area around it | D176, D178 | `crates/lune-ui-core/tests/widget_kanban_board.rs::a_board_whose_columns_fit_leaves_the_wheel_to_the_page_around_it`, `crates/lune-ui-core/tests/widget_markdown.rs::the_wheel_over_a_document_that_fits_goes_to_the_page_and_one_that_overflows_keeps_it` | test |
+| context-not-menu | a widget reports a secondary click and the show-menu action as `context` on its response; the app opens the menu with `Ui::menu` | D292 | `crates/lune-ui-core/tests/widget_rules.rs::no_widget_opens_a_menu`, `crates/lune-ui-core/tests/widget_tab_strip.rs::a_secondary_click_reports_the_tab_and_its_rect_and_opens_no_menu` | test |
+| drag-ghost | a drag ghost draws one layer group above its source, out of any `record` (`Ui::drag_ghost`) | D168 | `crates/lune-ui-core/tests/widget_kanban_board.rs::the_ghost_is_above_the_board_cut_by_no_clip_and_hits_nothing` | test |
+| access-node | every widget registers its accessibility node through `Ui::node`, which marks it disabled inside `with_enabled(false, ..)` | D140 | `crates/lune-ui-core/tests/ui_access.rs::a_node_in_a_disabled_scope_is_disabled_whatever_it_asked_for` | test |
+| lints-and-docs | every public item has a doc comment and the workspace lints (`unreachable_pub`, `missing_debug_implementations`, no `unwrap`) are clean; the gate runs clippy with `-D warnings` and `scripts/gen-api-docs.sh --check` | hard rule 9, D242 | by review | review |
+| catalogue-file | the widget has one catalogue file `docs/components/<area>/<id>.md` and its module is in some entry's `source:` | hard rule 10 | `apps/gallery/src/catalogue.rs::every_widget_module_is_claimed_by_an_entry` | auto:catalogue-file |
+| gallery-scene | the entry lists at least one gallery scene the gallery has, or says n/a with a reason | D47 | `apps/gallery/src/catalogue.rs::every_scene_in_the_gallery_is_claimed_by_an_entry`, `apps/gallery/src/catalogue.rs::every_scene_an_entry_claims_is_in_the_gallery` | auto:gallery-scene |
+| decision-row | the design choice has a row in `docs/DECISIONS.md` that the entry cites, and `scripts/gen-decisions-index.sh` is run | D400 | by review | auto:decision-row |
+| test-cited | a `done` entry cites at least one existing test as `<file>.rs::<fn>` on its Build line | D47 | `apps/gallery/src/catalogue.rs::every_done_entry_holds_its_evidence` | auto:test-cited |
+| pixel-gate | a change to an existing component's drawing passes `scripts/pixel-gate.sh` with every changed scene named and a DECISIONS row | hard rule 8, D254 | by review | review |
+| api-docs | `scripts/gen-api-docs.sh` is run after a public API or doc-comment change | D287 | by review | review |
+| touch-hit-area | a control answers a touch pointer within a 44 pt area, in hit testing only (the drawing stays) | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| no-hover-only | no action or hint exists only on hover | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| touch-drag-arbitration | a scrolling composite inside another decides per axis who takes a touch drag, like the wheel | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| long-press-context | a long press reports `context` through `secondary_clicked`, the same path as D292 | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| safe-area-and-keyboard | a screen draws inside `Ui::safe_area()` and lifts by `Ui::keyboard_inset()` | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| pointer-kind | behaviour that differs for touch reads `Ui::pointer_kind()` | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| non-exhaustive-structs | a public options struct is `#[non_exhaustive]` so a field added later breaks no app | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+<!-- checklist:end -->
+
+To add a rule, add one row: a unique kebab-case `rule`, what it asks, its D-rows, what enforces it
+(`<file>.rs::<fn>` in backticks, or `by review`) and its kind. A row of kind `auto:<id>` also needs a
+check function of that id in the component check (`apps/gallery/src/catalogue.rs`); a test fails
+when the table and the checks disagree. The mobile program fills its `[mobile slot]` rows here, in
+this one table; each keeps its marker until a test or a check holds it.
+
 ## Id rule
 
 Id = `<area>.<slug>`: lowercase letters and digits, single hyphens inside the slug, unique. The file
@@ -66,7 +109,7 @@ Between two `---` lines, one `key: value` per line, no nesting, every key presen
 ## Status
 
 - `in-luneterm`: the code exists today in Luneterm's `lune-ui` (`source:` points at it) and moves in the extraction
-- `planned`: a consumer has named the need; no code anywhere
+- `planned`: a consumer has named the need; no code anywhere, or scaffolded by `scripts/new-component.sh` and not `done` yet
 - `stub`: rough placeholder, not analysed; a planner must look before anyone builds (none left since M3: an analysed stub becomes `planned`, DECISIONS D49)
 - `in-progress`: someone owns it (`owner:`)
 - `done`: lives in this repo and holds the done standard (DECISIONS D47) by something that runs here. Its

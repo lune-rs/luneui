@@ -89,6 +89,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 scripts/check-boundaries.sh                             # app-agnostic, no clock or env, unsafe placement
 scripts/gen-component-index.sh                          # regenerate docs/components/INDEX.md
+scripts/gen-decisions-index.sh                          # regenerate docs/DECISIONS-INDEX.md (--check in the gate)
 scripts/pixel-gate.sh                                   # render every scene before and after, compare
 ```
 
@@ -108,6 +109,9 @@ Read these in this order, and only as far as the task needs:
    `docs/components/<area>/<id>.md` giving its API, look values with their sources, states, tests
    and what is unverified.
 6. `docs/consuming.md`: how an app takes the toolkit in, plus the migration maps of API changes.
+7. `apps/starter/src/screen.rs`: the smallest app on the toolkit (`cargo run -p starter`), a 60-line
+   screen to copy; `docs/design-recipes.md` and `docs/screen-review.md` then say how to build and
+   judge a bigger one.
 
 Rules that catch newcomers:
 
