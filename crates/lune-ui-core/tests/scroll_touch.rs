@@ -664,6 +664,85 @@ fn a_scroll_to_mid_fling_stops_it_and_goes_to_its_own_target() {
     );
 }
 
+/// The offset a `flinging` area shows one frame on, and the one it lands at.
+fn shown_and_landing() -> (f64, f64) {
+    let (mut h, t, _) = flinging();
+    let step = 1_000_000 / 60;
+    let shown = plain(&mut h, t + step, None, |_| {}).0;
+    let mut landing = shown;
+    for i in 2..300 {
+        landing = plain(&mut h, t + step * i, None, |_| {}).0;
+    }
+    (shown, landing)
+}
+
+/// A reveal during a fling is judged against the offset on screen, not the landing: a span in view
+/// now keeps the area where it is, and a span only in view at the landing still stops the fling.
+#[test]
+fn a_reveal_mid_fling_is_judged_against_the_shown_offset_not_the_landing() {
+    use lune_ui_core::widgets::scroll_area::{Reveal, Target};
+    let (shown, landing) = shown_and_landing();
+    assert!(
+        landing - shown > 700.0,
+        "the fling has far to go: {shown} to {landing}"
+    );
+    let step = 1_000_000 / 60;
+    let run = |y: f64| {
+        let (mut h, t, _) = flinging();
+        let mut off = 0.0;
+        for i in 1..200 {
+            off = plain(&mut h, t + step * i, None, |ui| {
+                if i == 1 {
+                    ui.scroll_to("a", Target::span_y(y, 40.0), Reveal::Nearest);
+                }
+            })
+            .0;
+            if i == 1 {
+                assert!(
+                    (off - shown).abs() < 1e-6,
+                    "the first frame shows {off}, not {shown}"
+                );
+            }
+        }
+        off
+    };
+    // (A) in view now, above the landing's top: the area stays where it showed.
+    assert_eq!(
+        run(shown + 100.0),
+        shown,
+        "a span in view moves nothing and the fling stops"
+    );
+    // (B) out of view now, in view at the landing: the reveal runs from the shown offset.
+    let to = run(landing + 100.0);
+    assert!(
+        to > shown && to < landing - 1.0,
+        "the reveal took the area to {to}, not on to {landing}"
+    );
+}
+
+/// Under `Clamp` a pull past an end leaves no dead zone: the finger reversing moves the content
+/// at once.
+#[test]
+fn clamp_physics_leaves_no_dead_zone_after_an_overpull() {
+    let clamp = ScrollPhysics::default().with_overscroll(Overscroll::Clamp);
+    let mut r = Rig::with(60, Some(clamp));
+    wheel_to(&mut r, 50.0);
+    r.h.input.touch_start(1, 200.0, 100.0);
+    r.tick();
+    r.h.input.touch_move(1, 200.0, 300.0);
+    let pulled = r.tick();
+    assert_eq!((pulled.off, pulled.over), (0.0, 0.0));
+    // 100 px back up the window: the content is 100 px on from the top at once.
+    r.h.input.touch_move(1, 200.0, 200.0);
+    let back = r.tick();
+    near(
+        back.off,
+        100.0,
+        0.01,
+        "the content follows the reversed finger",
+    );
+}
+
 #[test]
 fn a_new_identity_mid_fling_starts_over_at_the_top_and_goes_idle() {
     let (mut h, t, _) = flinging();

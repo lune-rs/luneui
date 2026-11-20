@@ -560,6 +560,13 @@ impl AxisState {
         };
         let u = u - f64::from(d);
         let c = clamp_offset(u, ext, vp);
+        // Under `Clamp` nothing shows past an end, so the coordinate stays on it: the finger
+        // reversing moves the content at once.
+        let u = if physics.overscroll == Overscroll::Clamp {
+            c
+        } else {
+            u
+        };
         self.wanted = c;
         self.base = c;
         self.rel = Transition::settled(0.0);
@@ -1117,13 +1124,17 @@ impl Ui<'_> {
         for (target, how) in reveals {
             for ax in 0..2 {
                 let a = &mut st.a[ax];
-                let cur = clamp_offset(a.wanted, ext[ax], vp[ax]);
                 let span = [target.x, target.y][ax];
-                let Some(to) = reveal_axis(span, cur, ext[ax], vp[ax], how).filter(|_| live[ax])
-                else {
+                if span.is_none() || !live[ax] {
+                    continue;
+                }
+                // A motion in flight stops where it is drawn first: `wanted` is its landing, and
+                // the reveal is judged against what shows.
+                a.halt(now, ext[ax], vp[ax], &physics);
+                let cur = clamp_offset(a.wanted, ext[ax], vp[ax]);
+                let Some(to) = reveal_axis(span, cur, ext[ax], vp[ax], how) else {
                     continue;
                 };
-                a.halt(now, ext[ax], vp[ax], &physics);
                 if (to - cur).abs() > SNAP_DISTANCE * vp[ax] {
                     a.jump(to);
                 } else {
