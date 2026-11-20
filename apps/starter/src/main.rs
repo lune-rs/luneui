@@ -109,12 +109,12 @@ enum Mode {
     },
 }
 
-const USAGE: &str = "usage: starter [--dump <file.png> [--window <W>x<H>] [--scale <S>]]\n  W and H 1..=4096, S 0.5..=4.0 (default 800x600 at 2)";
+const USAGE: &str = "usage: starter [--dump <file.png> [--window <W>x<H>] [--scale <S>]]\n  W and H 1..=4096, S 0.5..=4.0, W*S and H*S at most 8192 (default 800x600 at 2)";
 
-/// `<W>x<H>`: digits only, each side 1 to 4096.
 /// The longest physical side a dump may have (what the gallery's dump allows).
 const MAX_PHYSICAL: u32 = 8192;
 
+/// `<W>x<H>`: digits only, each side 1 to 4096.
 fn parse_window(v: &str) -> Option<(u32, u32)> {
     let (w, h) = v.split_once('x')?;
     let side = |t: &str| {
