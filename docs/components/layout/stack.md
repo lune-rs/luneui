@@ -25,7 +25,7 @@ Avalonia's `StackPanel`, `Grid` and `DockPanel`; Wane specifies gaps on a 4 px g
 
 ## Existing code
 
-Built in M5 (D108): `crates/lune-ui-core/src/layout.rs`, pure `stack`, `row`, `column` and `grid` over `Size`, `Align`, `Insets` and `Track`; widgets still take rects computed by the caller.
+Built in M5 ([D108]): `crates/lune-ui-core/src/layout.rs`, pure `stack`, `row`, `column` and `grid` over `Size`, `Align`, `Insets` and `Track`; widgets still take rects computed by the caller.
 Design sources: Lunegit `StackPanel` (`Spacing` on 444 `<StackPanel` elements in `src/Lunegit.Desktop`), `Grid`
 (165 `<Grid` elements) and `DockPanel` (`Controls/FilterBar.axaml:9`); Wane `docs/ui/mocks/css/tokens.css:131-143`.
 

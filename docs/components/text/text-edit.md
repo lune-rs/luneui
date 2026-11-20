@@ -4,7 +4,7 @@ title: Text editing engine
 area: text
 status: done
 consumers: any
-source: crates/lune-ui-core/src/text_edit.rs
+source: crates/lune-ui-core/src/text_edit.rs, crates/lune-ui-core/src/widgets/text_area.rs
 owner: —
 summary: Caret, selection, word and line navigation, undo and redo, clipboard through FrameOutput and preedit for single- and multi-line text
 ---

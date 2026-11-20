@@ -106,6 +106,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "pie-chart",
             "kanban-board",
             "lane-graph",
+            "recipes",
         ],
     },
     Group {
