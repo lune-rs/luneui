@@ -29,7 +29,6 @@
 //! place of the scene's own (`off` is the look before font smoothing, what the pixel gate proves).
 
 mod bench;
-#[cfg(test)]
 mod catalogue;
 mod custom;
 mod own_chrome;
@@ -59,7 +58,7 @@ use page::{
 use pages::PAGES;
 use scenes::{H, LegacyScene, W};
 
-const USAGE: &str = "usage: gallery [--dump <dir> [--only <name> [--window <W>x<H>] [--scale <S>]] | --list | --bench [--runs N] [--frames N] [--size WxH] | --smoke-platform | --smoke-panels | --pace-probe]\n  --only <name> dumps the scene(s) a listed name or a bare id names (`gallery --list` prints them); --window and --scale (Ui scenes only; W and H 1..=4096, S 0.5..=4.0) run the scene in another logical window and scale and write <id>@<S>x-<W>x<H>.png\n  --smoke-platform needs a logged-in GUI session (it puts an item in the tray for about 2 s); exit 2 without one\n  --smoke-panels needs a logged-in GUI session (three panel windows and a menu open for about 10 s; it never moves the cursor); exit 0 held, 1 failed, 2 no session\n  --pace-probe needs a logged-in GUI session; a window opens for about 15 s, leave it visible and untouched; exit 0 held, 1 did not hold, 2 could not measure";
+const USAGE: &str = "usage: gallery [--dump <dir> [--only <name> [--window <W>x<H>] [--scale <S>]] | --list | --bench [--runs N] [--frames N] [--size WxH] | --check-components [<id>...] | --smoke-platform | --smoke-panels | --pace-probe]\n  --check-components [<id>...] checks the component catalogue against docs/components/README.md's checklist: with ids, every check on each named entry whatever its status; with none, every done entry (known gaps are printed as known); it reads the source tree this gallery was built from; exit 0 all pass, 1 a failure, 2 usage or an unknown id\n  --only <name> dumps the scene(s) a listed name or a bare id names (`gallery --list` prints them); --window and --scale (Ui scenes only; W and H 1..=4096, S 0.5..=4.0) run the scene in another logical window and scale and write <id>@<S>x-<W>x<H>.png\n  --smoke-platform needs a logged-in GUI session (it puts an item in the tray for about 2 s); exit 2 without one\n  --smoke-panels needs a logged-in GUI session (three panel windows and a menu open for about 10 s; it never moves the cursor); exit 0 held, 1 failed, 2 no session\n  --pace-probe needs a logged-in GUI session; a window opens for about 15 s, leave it visible and untouched; exit 0 held, 1 did not hold, 2 could not measure";
 
 enum Command {
     Window,
@@ -69,6 +68,8 @@ enum Command {
     SmokePlatform,
     SmokePanels,
     PaceProbe,
+    /// `--check-components [<id>...]`: the component check (`catalogue::run_cli`).
+    CheckComponents(Vec<String>),
 }
 
 fn parse(args: &[String]) -> Result<Command, String> {
@@ -78,6 +79,12 @@ fn parse(args: &[String]) -> Result<Command, String> {
         [a] if a == "--smoke-platform" => Ok(Command::SmokePlatform),
         [a] if a == "--smoke-panels" => Ok(Command::SmokePanels),
         [a] if a == "--pace-probe" => Ok(Command::PaceProbe),
+        [a, ids @ ..] if a == "--check-components" => {
+            match ids.iter().find(|id| id.starts_with("--")) {
+                Some(flag) => Err(format!("unknown argument `{flag}`\n{USAGE}")),
+                None => Ok(Command::CheckComponents(ids.to_vec())),
+            }
+        }
         [a, dir, rest @ ..] if a == "--dump" => parse_dump(dir, rest).map(Command::Dump),
         [a, rest @ ..] if a == "--bench" => bench::Options::parse(rest).map(Command::Bench),
         _ => Err(USAGE.to_owned()),
@@ -313,6 +320,7 @@ fn main() -> ExitCode {
         Command::SmokePlatform => smoke::run(),
         Command::SmokePanels => smoke_panels::run(),
         Command::PaceProbe => pace::run(),
+        Command::CheckComponents(ids) => catalogue::run_cli(&ids),
         Command::Window => window::run(),
     }
 }
@@ -567,6 +575,26 @@ mod tests {
     /// `--dump <dir>` and the flags after it, as the parser reads them.
     fn dump(rest: &[&str]) -> Result<DumpArgs, String> {
         parse_dump("out", &args(rest))
+    }
+
+    #[test]
+    fn check_components_takes_ids_and_refuses_a_flag() {
+        let Ok(Command::CheckComponents(ids)) = parse(&args(&["--check-components"])) else {
+            panic!("--check-components alone checks every done entry");
+        };
+        assert!(ids.is_empty());
+        let Ok(Command::CheckComponents(ids)) = parse(&args(&[
+            "--check-components",
+            "widget.button",
+            "layout.stack",
+        ])) else {
+            panic!("ids parse");
+        };
+        assert_eq!(ids, ["widget.button", "layout.stack"]);
+        let Err(e) = parse(&args(&["--check-components", "--all"])) else {
+            panic!("a flag is a usage error");
+        };
+        assert!(e.contains("--all"), "{e}");
     }
 
     #[test]

@@ -114,5 +114,5 @@ All answered in M8:
 
 ## Notes for the planner
 
-Built in M8 (D164, D166). API: `Ui::pie_chart(key, rect, &PieOptions)` drawn at 160 px from the rect's top left, `pie_chart::sweeps(&[f32])`, `HIGHLIGHT`. The highlight is one `sector` from -π over π, drawn after the slices and only when a slice shows. A total that overflows f64 draws nothing. The page's button retargets the data; the bench presses it.
+Built in M8 ([D164], [D166]). API: `Ui::pie_chart(key, rect, &PieOptions)` drawn at 160 px from the rect's top left, `pie_chart::sweeps(&[f32])`, `HIGHLIGHT`. The highlight is one `sector` from -π over π, drawn after the slices and only when a slice shows. A total that overflows f64 draws nothing. The page's button retargets the data; the bench presses it.
 
