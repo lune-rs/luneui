@@ -11,7 +11,7 @@ summary: Translator turns winit events into RawInput; OutputState applies FrameO
 
 ## What it is
 
-`Translator` (one per window: `window_event` or the per-event methods, then `take(time)` to get a `RawInput`) divides physical positions by the scale factor and ignores touch, gestures, file drops, theme and occlusion. `OutputState` (one per window) applies a `FrameOutput` and touches the cursor and the IME only when they changed; `apply` returns true when the frame asked to close. `cursor_icon` maps the core `CursorIcon` to winit's. The app owns the event loop and calls these from it.
+`Translator` (one per window: `window_event` or the per-event methods, then `take(time)` to get a `RawInput`) divides physical positions by the scale factor and ignores gestures, file drops, theme and occlusion. `OutputState` (one per window) applies a `FrameOutput` and touches the cursor and the IME only when they changed; `apply` returns true when the frame asked to close. `cursor_icon` maps the core `CursorIcon` to winit's. The app owns the event loop and calls these from it.
 
 ## Needs
 
@@ -39,7 +39,7 @@ No consumer in the repo calls `Translator` or `OutputState` yet: the gallery han
 
 Moved, today (`crates/lune-ui-winit/src/input.rs`):
 - `Translator` (one per window) keeps the window state between frames: physical size, scale, pointer, modifiers, focus and the event list [R crates/lune-ui-winit/src/input.rs:26-33].
-- `window_event` dispatches resize, scale-factor, cursor move and leave, mouse button, wheel, keyboard, modifiers, IME and focus; every other `WindowEvent` (touch, gestures, file drops, theme, occlusion, axis motion) is ignored [R crates/lune-ui-winit/src/input.rs:53-74].
+- `window_event` dispatches resize, scale-factor, cursor move and leave, mouse button, wheel, keyboard, modifiers, IME and focus; every other `WindowEvent` (touch until `set_touch_enabled(true)`, gestures, theme, occlusion, axis motion) is ignored [R crates/lune-ui-winit/src/input.rs:53-74].
 - Positions and wheel pixels are divided by the latest scale factor; an event before the first pointer move carries (0, 0) [R crates/lune-ui-winit/src/input.rs:19-24,48-51,87-91,108-122].
 - `key` pushes `Event::Key`, then `Event::Text` when the press typed something `printable` returns [R crates/lune-ui-winit/src/input.rs:125-137]; `map_key` maps 27 named keys, passes characters through and turns everything else into `Key::Unidentified` [R crates/lune-ui-winit/src/input.rs:194-232].
 - `take(time)` builds the `RawInput` (logical size, scale, the app's time, focus, the drained events) and leaves the window state in place [R crates/lune-ui-winit/src/input.rs:171-181].
@@ -49,6 +49,7 @@ Moved, today (`crates/lune-ui-winit/src/input.rs`):
 Additions:
 - M10, platform keymap: `lune_ui_winit::input::keymap()` (re-exported as `lune_ui::input::keymap`) answers `Keymap::MAC` on macOS and `Keymap::PC` elsewhere, through `platform/{macos,windows,other}.rs`; the gallery no longer branches on the OS (D212).
 - M10, file drop: `WindowEvent::HoveredFile`, `HoveredFileCancelled` and `DroppedFile` become the core file-drop events, stamped with the translator's last pointer position (winit gives none) [D43], [derived: winit 0.30.13 `src/event.rs:180-192`], [core.input].
+- M2 (mobile), touch: `Translator::set_touch_enabled(true)` (off at start; `touch_enabled()` reads it back) turns `WindowEvent::Touch` into `Event::Touch` at its logical position, with `Force::normalized` as the force, and leaves the translator's pointer alone; off, the event is dropped as at 0.7.0; turning it off while forwarded touches are down pushes a `Cancelled` for each [D346], [core.input]. Tests (`crates/lune-ui-winit/tests/input.rs`, module `touch`): `a_touch_script_equals_the_translated_touch_events`, `with_the_switch_off_touch_is_dropped_and_the_mouse_is_unchanged`, `force_is_normalised`, `switching_off_mid_touch_cancels_each_touch_once_and_then_drops_touch`, `the_switch_reads_back_and_touch_leaves_the_pointer_alone`.
 - M10, accessibility bridge: `lune_ui_winit::access`, behind the feature `accesskit` (`lune_ui::access` through the facade's feature of that name), takes the `FrameOutput` tree and focused id and feeds an AccessKit adapter, and turns AccessKit action requests into `Translator`-queued `Event::Access` [D46], [D2], [D216], [infra.accessibility].
 - M10, clipboard: `OutputState::apply` executes the frame's clipboard requests through the clipboard entry; paste text re-enters as an event [platform.clipboard].
 - M4, the new `FrameOutput` fields (`repaint`, `tree`, `focused`) are ignored by `apply` except `repaint`, which the app's event loop reads to schedule the next frame; the adapter never starts a loop [R crates/lune-ui-winit/src/input.rs:289-293], [D3], [core.ui].

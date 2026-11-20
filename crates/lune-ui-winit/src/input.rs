@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, Ime, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{
+    ElementState, Ime, MouseButton, MouseScrollDelta, Touch, TouchPhase as WTouchPhase, WindowEvent,
+};
 use winit::event_loop::ControlFlow;
 use winit::keyboard::{Key as WKey, ModifiersState, NamedKey as WNamed};
 use winit::window::{CursorIcon as WCursor, Window, WindowLevel};
@@ -13,7 +15,7 @@ use winit::window::{CursorIcon as WCursor, Window, WindowLevel};
 use lune_ui_core::access::AccessAction;
 use lune_ui_core::input::{
     CursorIcon, Event, FrameOutput, ImeEvent, Key, Keymap, Modifiers, NamedKey, PointerButton,
-    RawInput, Repaint, ScrollDelta, WindowCommand, printable,
+    RawInput, Repaint, ScrollDelta, TouchEvent, TouchId, TouchPhase, WindowCommand, printable,
 };
 use lune_ui_core::paint::Rect;
 
@@ -25,8 +27,11 @@ use crate::window::resize_direction;
 /// Positions and sizes are divided by the latest scale factor. Events that arrive before the
 /// first pointer move carry the position (0, 0). The window starts unfocused until winit says
 /// otherwise. A hovered, cancelled or dropped file becomes a file event (one per file) at the last
-/// pointer position, in logical pixels: winit gives none. Touch, gestures, theme, moved, occluded,
-/// axis motion and touchpad pressure events are ignored.
+/// pointer position, in logical pixels: winit gives none. Touch is ignored until
+/// [`set_touch_enabled`](Self::set_touch_enabled) turns it on (it is off at start, so an app that
+/// does not ask sees no touch, as at 0.7.0); then each `WindowEvent::Touch` becomes an
+/// [`Event::Touch`] at its logical position and does not move the pointer. Gestures, theme, moved,
+/// occluded, axis motion and touchpad pressure events are ignored.
 #[derive(Debug)]
 pub struct Translator {
     size: PhysicalSize<u32>,
@@ -35,6 +40,9 @@ pub struct Translator {
     modifiers: Modifiers,
     focused: bool,
     events: Vec<Event>,
+    touch: bool,
+    /// The touches forwarded and not yet ended: id and last logical position, in arrival order.
+    touches_down: Vec<(TouchId, (f32, f32))>,
 }
 
 impl Translator {
@@ -47,7 +55,31 @@ impl Translator {
             modifiers: Modifiers::default(),
             focused: false,
             events: Vec::new(),
+            touch: false,
+            touches_down: Vec::new(),
         }
+    }
+
+    /// Turns touch on or off (off at start). While on, `WindowEvent::Touch` becomes
+    /// [`Event::Touch`]; while off it is dropped. Turning it off while forwarded touches are down
+    /// pushes a `Cancelled` for each, at its last position, so the core never holds a touch that
+    /// will not end.
+    pub fn set_touch_enabled(&mut self, on: bool) {
+        if !on && self.touch {
+            for (id, pos) in std::mem::take(&mut self.touches_down) {
+                self.events.push(Event::Touch(TouchEvent::new(
+                    id,
+                    TouchPhase::Cancelled,
+                    pos,
+                )));
+            }
+        }
+        self.touch = on;
+    }
+
+    /// Whether touch is forwarded (off by default).
+    pub fn touch_enabled(&self) -> bool {
+        self.touch
     }
 
     fn logical(&self, x: f64, y: f64) -> (f32, f32) {
@@ -77,8 +109,33 @@ impl Translator {
             WindowEvent::HoveredFile(path) => self.file_hovered(path.clone()),
             WindowEvent::HoveredFileCancelled => self.file_hover_cancelled(),
             WindowEvent::DroppedFile(path) => self.file_dropped(path.clone()),
+            WindowEvent::Touch(t) if self.touch => self.touch_event(t),
             _ => {}
         }
+    }
+
+    /// A touch contact changed: pushed as [`Event::Touch`], and tracked until it ends.
+    fn touch_event(&mut self, t: &Touch) {
+        let id = TouchId::new(t.id);
+        let pos = self.logical(t.location.x, t.location.y);
+        let phase = match t.phase {
+            WTouchPhase::Started => TouchPhase::Started,
+            WTouchPhase::Moved => TouchPhase::Moved,
+            WTouchPhase::Ended => TouchPhase::Ended,
+            WTouchPhase::Cancelled => TouchPhase::Cancelled,
+        };
+        match phase {
+            TouchPhase::Ended | TouchPhase::Cancelled => self.touches_down.retain(|d| d.0 != id),
+            _ => match self.touches_down.iter_mut().find(|d| d.0 == id) {
+                Some(d) => d.1 = pos,
+                None => self.touches_down.push((id, pos)),
+            },
+        }
+        let mut e = TouchEvent::new(id, phase, pos);
+        if let Some(f) = t.force {
+            e = e.with_force(f.normalized() as f32);
+        }
+        self.events.push(Event::Touch(e));
     }
 
     /// The window was resized to `size` physical pixels.

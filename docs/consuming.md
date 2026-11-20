@@ -293,6 +293,26 @@ Measured: the format table and the resolver (unit tests with Metal's, DX12's and
 
 The gallery's release build (`cargo build --release -p gallery`, the repo's profile, macOS) is **10,433,424 bytes** at 0.7.0, against **10,416,752 bytes** at a5f6237 (0.6.2, built from a clean archive of that commit): +16,672 bytes (+0.16 %), which is the resolver, the deep-format readers, the display read and the gallery's two new pages, not a new dependency. The facade gains no dependency (D332), and the only crate feature added is `objc2-app-kit`'s `objc2-core-foundation` on macOS, already in the lock.
 
+## Touch (on the branch; ships in 0.7.1)
+
+Touch is an opt-in. Nothing to migrate: an app that does not ask gets what 0.7.0 gave it, on a touchscreen too, because the winit `Translator` drops `WindowEvent::Touch` until it is switched on. To take touch, once per window:
+
+```rust
+translator.set_touch_enabled(true); // off at start; `touch_enabled()` reads it back
+```
+
+Each finger then arrives as `Event::Touch(TouchEvent)` in `RawInput::events`, and the core reduces the first finger to the pointer path every widget already reads: a tap clicks, a drag drags, nothing stays hovered after the lift, and a second finger never touches the pointer. `Ui::pointer_kind()` says whether the last press was a `Mouse` or a `Touch`. The mouse copy that Windows makes of a touch is dropped for 500 ms of app time after the last lift. Turning the switch off while fingers are down cancels each one.
+
+The window insets are two more events the app pushes after `take`, from whatever its platform reports (logical pixels); the core latches the last of each, and `ui.safe_area()` and `ui.keyboard_inset()` read them (`Insets::ZERO` until one arrives):
+
+```rust
+let mut raw = translator.take(time);
+raw.events.push(Event::SafeArea(Insets::new(left, top, right, bottom)));
+raw.events.push(Event::KeyboardInset(Insets::new(0.0, 0.0, 0.0, keyboard_height)));
+```
+
+`Ui::input()` still returns the raw `RawInput`: a widget of the app's own that reads pointer events from `ui.input().events` sees `Event::Touch`, not the synthesized pointer events. No toolkit widget does. Unverified here: the order in which Windows delivers a touch and its promoted mouse messages (read from source, not seen); a desktop touchscreen is checked in M3.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
