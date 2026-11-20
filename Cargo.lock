@@ -1571,6 +1571,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "new-component"
+version = "0.7.0"
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

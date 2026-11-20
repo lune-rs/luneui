@@ -1235,9 +1235,11 @@ mod tests {
     }
 
     #[test]
-    fn the_catalogue_loads_108_entries_of_which_four_are_external() {
+    fn the_catalogue_loads_at_least_108_entries_of_which_four_are_external() {
+        // At least: a new component adds an entry (scripts/new-component.sh), and that must not
+        // need an edit here. The floor still catches a directory the loader stopped reading.
         let (entries, _) = all();
-        assert_eq!(entries.len(), 108);
+        assert!(entries.len() >= 108, "{}", entries.len());
         assert_eq!(entries.iter().filter(|e| e.status == "external").count(), 4);
     }
 
