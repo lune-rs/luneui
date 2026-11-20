@@ -90,6 +90,8 @@ cargo fmt --all
 scripts/check-boundaries.sh                             # app-agnostic, no clock or env, unsafe placement
 scripts/gen-component-index.sh                          # regenerate docs/components/INDEX.md
 scripts/gen-decisions-index.sh                          # regenerate docs/DECISIONS-INDEX.md (--check in the gate)
+scripts/new-component.sh widget my-chip                  # scaffold a component (docs/components/adding.md)
+scripts/check-component.sh widget.my-chip               # check it against the checklist (--all: every done entry)
 scripts/pixel-gate.sh                                   # render every scene before and after, compare
 ```
 

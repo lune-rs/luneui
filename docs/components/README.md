@@ -15,6 +15,10 @@ writes it and the gate runs its `--check`.
 
 ## Add a component
 
+Start at [`adding.md`](adding.md): the whole path, from `scripts/new-component.sh` (it scaffolds a
+component of the areas widget, overlay, layout and data and wires it into the build) to the check.
+For another area, or to do it by hand:
+
 1. Copy `_template.md` to `docs/components/<area>/<slug>.md`.
 2. Fill the front matter and the body sections.
 3. Run `scripts/gen-component-index.sh`.
