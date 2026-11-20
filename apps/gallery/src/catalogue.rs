@@ -36,6 +36,10 @@ const UNCITED: &[(&str, &str)] = &[
     ("R-nfr-2", "a non-functional rule about the whole repo"),
     ("R-nfr-4", "a non-functional rule about the whole repo"),
     ("R-nfr-7", "a non-functional rule about the whole repo"),
+    (
+        "R-infra-7",
+        "a compatibility rule about the whole API, held by scripts/check-compat.sh",
+    ),
 ];
 
 /// One catalogue file, split.

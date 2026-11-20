@@ -15,7 +15,7 @@ and none is `[open]`. The catalogue holds 97 entries: 91 `done` (the done standa
 holds for each by something that runs here, `docs/components/README.md` "Status"), 2 `in-progress` by
 their own text (`platform.material` and `render.surface`: what they name needs a real OS run, D234)
 and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, said on the id
-(R-nfr-2, R-nfr-4, R-nfr-7, R-ext-3, R-ext-5). What only a real OS shows is listed in
+(R-nfr-2, R-nfr-4, R-nfr-7, R-ext-3, R-ext-5, and later R-infra-7). What only a real OS shows is listed in
 `docs/STATE.md`, "Unverified here"; none of it is ticked.
 
 ## Consumers
@@ -176,6 +176,13 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   cards and the split diff in Lunegit. OS-level drag and drop is R-platform-5.
 - R-infra-6 [new] A small bounded JSON reader in core (input size, depth and string-length limits,
   fail-closed errors, no panics) behind theme and locale loading (`infra.json`, D44).
+- R-infra-7 [new] A release since `v0.7.0` keeps an app written against that release compiling,
+  passing its tests and drawing the same: every public item of the five library crates stays (an
+  addition is allowed, a removal, a moved path, a changed signature, a new required trait method or
+  a lost trait impl is not), an exhaustive type gains no field or variant, and `rust-version` and
+  the `winit` and `wgpu` requirements do not move. `scripts/check-compat.sh` holds it from
+  rustdoc JSON, from the base's own gallery and integration tests built on the new libraries, and
+  from the base's gallery dump compared with no allow list (D342).
 
 ## Non-functional
 

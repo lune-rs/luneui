@@ -9,13 +9,15 @@
 #   3 pixels   <rev>'s gallery dumped against <rev>'s own libraries and against the tree's, compared
 #              with dump-compare, no --allow.
 #
-#   scripts/check-compat.sh [--base <rev>] [--tree <dir>] [--api-only] [--self-test [<case>...]]
+#   scripts/check-compat.sh [--base <rev>] [--tree <dir>] [--api-only | --only-part <2|3>] [--self-test [<case>...]]
 #
 #   --base       revision to compare against (default v0.7.0), resolved with
 #                `git rev-parse --verify <rev>^{commit}`; unknown is exit 2.
 #   --tree       the candidate directory (default the repo root's working tree, uncommitted files
 #                included).
 #   --api-only   part 1 only (warm, a few seconds; this is the part that is in the gate).
+#   --only-part  part 2 or part 3 alone, without part 1 (the deliberate-break proofs of D342 use it, as
+#                a full run costs about 40 minutes; with no flag all three parts run, as always).
 #   --self-test  part 1's proof on known breaks: each of 11 edits (B1-B11) must exit 1 and name the
 #                item, each of 4 (A1-A4) must exit 0. Runs nothing else and needs no base. Case ids
 #                after it limit the run (a debugging aid; the full run is the proof).
@@ -38,6 +40,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 REV="v0.7.0"
 TREE=""
 API_ONLY=0
+ONLY_PART=""
 SELF=0
 CASES=""
 
@@ -51,6 +54,11 @@ while [ "$#" -gt 0 ]; do
     --base) [ "$#" -ge 2 ] || die "--base needs a value"; REV="$2"; shift 2 ;;
     --tree) [ "$#" -ge 2 ] || die "--tree needs a value"; TREE="$2"; shift 2 ;;
     --api-only) API_ONLY=1; shift ;;
+    --only-part)
+      [ "$#" -ge 2 ] || die "--only-part needs 2 or 3"
+      case "$2" in 2 | 3) ONLY_PART="$2" ;; *) die "--only-part needs 2 or 3" ;; esac
+      shift 2
+      ;;
     --self-test)
       SELF=1
       shift
@@ -81,6 +89,7 @@ else
   TREE="$(cd "$TREE" 2> /dev/null && pwd -P)" || die "--tree: not a directory"
 fi
 [ -f "$TREE/Cargo.toml" ] || die "$TREE has no Cargo.toml"
+[ "$API_ONLY" = 1 ] && [ -n "$ONLY_PART" ] && die "--api-only and --only-part exclude each other"
 
 for tool in cargo git tar cksum; do
   command -v "$tool" > /dev/null 2>&1 || die "'$tool' is not installed"
@@ -366,29 +375,31 @@ COMPAT_OUT=""
 BREAKS=0
 
 # --- part 1: API ----------------------------------------------------------------------------------
-echo "check-compat: part 1 (API) against $REV ($SHORT)"
-if [ ! -f "$BASE_JSON/meta.json" ]; then
-  prepare_base
-  echo "check-compat: building the base's rustdoc JSON (cached in ${BASE_JSON#"$ROOT"/})"
-  doc_json "$BASE_SRC" "$BASE_TARGET" --offline $PACKAGES
-  rm -rf "$BASE_JSON.tmp"
-  mkdir -p "$BASE_JSON.tmp"
-  for lib in $LIBS; do cp "$BASE_TARGET/$DOC_TARGET/doc/$lib.json" "$BASE_JSON.tmp/"; done
-  metadata "$BASE_SRC" "$BASE_JSON.tmp/meta.json" "--offline --locked"
-  rm -rf "$BASE_JSON"
-  mv "$BASE_JSON.tmp" "$BASE_JSON"
-fi
-if [ "$TREE" = "$ROOT" ]; then
-  HEAD_TARGET="$ROOT/target/api-docs"
-else
-  HEAD_TARGET="$S/head-target"
-fi
-doc_json "$TREE" "$HEAD_TARGET" "" $PACKAGES
-metadata "$TREE" "$S/head-meta.json" "--offline --locked"
-api_compat "$BASE_JSON" "$HEAD_TARGET/$DOC_TARGET/doc" "$BASE_JSON/meta.json" "$S/head-meta.json"
-printf '%s\n' "$COMPAT_OUT"
-if [ "$COMPAT_RC" != 0 ]; then
-  BREAKS=$((BREAKS + 1))
+if [ -z "$ONLY_PART" ]; then
+  echo "check-compat: part 1 (API) against $REV ($SHORT)"
+  if [ ! -f "$BASE_JSON/meta.json" ]; then
+    prepare_base
+    echo "check-compat: building the base's rustdoc JSON (cached in ${BASE_JSON#"$ROOT"/})"
+    doc_json "$BASE_SRC" "$BASE_TARGET" --offline $PACKAGES
+    rm -rf "$BASE_JSON.tmp"
+    mkdir -p "$BASE_JSON.tmp"
+    for lib in $LIBS; do cp "$BASE_TARGET/$DOC_TARGET/doc/$lib.json" "$BASE_JSON.tmp/"; done
+    metadata "$BASE_SRC" "$BASE_JSON.tmp/meta.json" "--offline --locked"
+    rm -rf "$BASE_JSON"
+    mv "$BASE_JSON.tmp" "$BASE_JSON"
+  fi
+  if [ "$TREE" = "$ROOT" ]; then
+    HEAD_TARGET="$ROOT/target/api-docs"
+  else
+    HEAD_TARGET="$S/head-target"
+  fi
+  doc_json "$TREE" "$HEAD_TARGET" "" $PACKAGES
+  metadata "$TREE" "$S/head-meta.json" "--offline --locked"
+  api_compat "$BASE_JSON" "$HEAD_TARGET/$DOC_TARGET/doc" "$BASE_JSON/meta.json" "$S/head-meta.json"
+  printf '%s\n' "$COMPAT_OUT"
+  if [ "$COMPAT_RC" != 0 ]; then
+    BREAKS=$((BREAKS + 1))
+  fi
 fi
 
 if [ "$API_ONLY" = 1 ]; then
@@ -399,7 +410,7 @@ fi
 
 # --- part 2: the base's consumers against the tree's libraries --------------------------------------
 prepare_base
-echo "check-compat: part 2 (consumers): the base's gallery and tests on the tree's libraries"
+echo "check-compat: the hybrid tree: the base's gallery and tests on the tree's libraries"
 rm -rf "$HYBRID"
 copy_tree "$TREE" "$HYBRID"
 rm -rf "$HYBRID/apps/gallery"
@@ -449,35 +460,40 @@ hybrid_run() {
     BREAKS=$((BREAKS + 1))
   fi
 }
-hybrid_run workspace test --offline --workspace ${EXCLUDE[@]+"${EXCLUDE[@]}"} --test '*' ${TAIL[@]+"${TAIL[@]}"}
-hybrid_run winit test --offline -p lune-ui-winit --test '*' ${TAIL[@]+"${TAIL[@]}"}
-hybrid_run gallery test --offline -p gallery ${TAIL[@]+"${TAIL[@]}"}
+if [ -z "$ONLY_PART" ] || [ "$ONLY_PART" = 2 ]; then
+  echo "check-compat: part 2 (consumers)"
+  hybrid_run workspace test --offline --workspace ${EXCLUDE[@]+"${EXCLUDE[@]}"} --test '*' ${TAIL[@]+"${TAIL[@]}"}
+  hybrid_run winit test --offline -p lune-ui-winit --test '*' ${TAIL[@]+"${TAIL[@]}"}
+  hybrid_run gallery test --offline -p gallery ${TAIL[@]+"${TAIL[@]}"}
+fi
 
 # --- part 3: pixels -----------------------------------------------------------------------------------
-echo "check-compat: part 3 (pixels): the base's gallery on the base's and on the tree's libraries"
-DUMP_BASE="$S/dump-base"
-DUMP_HYBRID="$S/dump-hybrid"
-rm -rf "$DUMP_BASE" "$DUMP_HYBRID"
-mkdir -p "$DUMP_BASE" "$DUMP_HYBRID"
-(cd "$BASE_SRC" && env -u LUNEUI_GALLERY_TEXT cargo run -q --offline --locked --target-dir "$BASE_TARGET" -p gallery -- --dump "$DUMP_BASE") \
-  || die "the base's gallery failed to build or dump"
-dumped="$(find "$DUMP_BASE" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')"
-[ "$dumped" -gt 0 ] || die "the base's dump holds no PNGs"
-rc=0
-(cd "$HYBRID" && env -u LUNEUI_GALLERY_TEXT CARGO_TARGET_DIR="$HYBRID_TARGET" cargo run -q --offline -p gallery -- --dump "$DUMP_HYBRID") \
-  > "$S/part3-dump.log" 2>&1 || rc=$?
-if [ "$rc" != 0 ]; then
-  tail -n 40 "$S/part3-dump.log" >&2
-  echo "break: part 3: the base's gallery failed to dump against the tree's libraries (exit $rc)"
-  BREAKS=$((BREAKS + 1))
-else
+if [ -z "$ONLY_PART" ] || [ "$ONLY_PART" = 3 ]; then
+  echo "check-compat: part 3 (pixels): the base's gallery on the base's and on the tree's libraries"
+  DUMP_BASE="$S/dump-base"
+  DUMP_HYBRID="$S/dump-hybrid"
+  rm -rf "$DUMP_BASE" "$DUMP_HYBRID"
+  mkdir -p "$DUMP_BASE" "$DUMP_HYBRID"
+  (cd "$BASE_SRC" && env -u LUNEUI_GALLERY_TEXT cargo run -q --offline --locked --target-dir "$BASE_TARGET" -p gallery -- --dump "$DUMP_BASE") \
+    || die "the base's gallery failed to build or dump"
+  dumped="$(find "$DUMP_BASE" -maxdepth 1 -type f -name '*.png' | wc -l | tr -d ' ')"
+  [ "$dumped" -gt 0 ] || die "the base's dump holds no PNGs"
   rc=0
-  out="$(cd "$ROOT" && cargo run -q --locked -p dump-compare -- "$DUMP_BASE" "$DUMP_HYBRID" 2>&1)" || rc=$?
-  printf '%s\n' "$out" | tail -n 3
-  printf '%s\n' "$out" | tail -n 1 | grep -q -E '^[0-9]+ files, ' || die "dump-compare printed no summary (exit $rc)"
+  (cd "$HYBRID" && env -u LUNEUI_GALLERY_TEXT CARGO_TARGET_DIR="$HYBRID_TARGET" cargo run -q --offline -p gallery -- --dump "$DUMP_HYBRID") \
+    > "$S/part3-dump.log" 2>&1 || rc=$?
   if [ "$rc" != 0 ]; then
-    printf '%s\n' "$out" | grep -v ': identical' | head -n 20 | sed 's/^/break: part 3: /'
+    tail -n 40 "$S/part3-dump.log" >&2
+    echo "break: part 3: the base's gallery failed to dump against the tree's libraries (exit $rc)"
     BREAKS=$((BREAKS + 1))
+  else
+    rc=0
+    out="$(cd "$ROOT" && cargo run -q --locked -p dump-compare -- "$DUMP_BASE" "$DUMP_HYBRID" 2>&1)" || rc=$?
+    printf '%s\n' "$out" | tail -n 3
+    printf '%s\n' "$out" | tail -n 1 | grep -q -E '^[0-9]+ files, ' || die "dump-compare printed no summary (exit $rc)"
+    if [ "$rc" != 0 ]; then
+      printf '%s\n' "$out" | grep -v ': identical' | head -n 20 | sed 's/^/break: part 3: /'
+      BREAKS=$((BREAKS + 1))
+    fi
   fi
 fi
 

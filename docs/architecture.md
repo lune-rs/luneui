@@ -844,6 +844,14 @@ smoothing off is 0.3.0's look at the final commit. That is zero delta on N of M 
 against that base is a record of what the new look moved, not a gate. `tests/text_rendering.rs` R6 is the machine check that the setting does not reach drawing that has no text.
 The vendoring of glyphon's renderer (D294) was gated at zero delta against `2c0e25c` before any look changed (439 of 439 identical).
 
+Compatibility with a released version is a separate check, `scripts/check-compat.sh [--base <rev>]` (default `v0.7.0`, D342), because a drawing gate cannot see a removed function or a new
+required trait method. Part 1 compares the public API of the five library crates at the base and in the tree from rustdoc JSON (`api-docs compat`, in `tools/api-docs`, which reuses its
+pinned `rustdoc-types` and its walk of the public tree; types are compared through each crate's `paths`, never by an id or an as-written path), plus `rust-version` and the `winit` and `wgpu`
+requirements; an item kind it does not handle fails as "cannot classify", never as a pass. Part 2 builds the base's gallery and `crates/*/tests`, unmodified, in a hybrid tree against the tree's
+libraries and runs them. Part 3 dumps the base's gallery against the base's libraries and against the tree's, and `dump-compare` runs with no `--allow`. Part 1 (`--api-only`) is in the gate;
+parts 2 and 3 are not (they build and dump the gallery twice) and run before a merge and in the done-when of a step that changes public API. `--self-test` feeds part 1 eleven known breaks, each of
+which must exit 1, and four known additions, each of which must exit 0. Like the pixel gate it writes only under `target/` and the base source under `$TMPDIR`.
+
 Re-baselining: a deliberate look change passes the gate with `--allow <id>` for the scenes it
 moves, and records the reason in `docs/DECISIONS.md` in the same commit (hard rule 8). Dumps are not
 committed (D11).
