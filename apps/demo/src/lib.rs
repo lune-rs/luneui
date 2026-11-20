@@ -46,12 +46,83 @@ const BLUR_SATURATION: f32 = 1.8;
 pub struct Options {
     /// How many presented frames print a `presented <n> <width>x<height>` line, then none.
     pub log_frames: u32,
+    /// Print `probe <key> <value>` lines for what the platform reports: at window creation and on
+    /// every resize, scale change and life-cycle callback (never per frame).
+    pub probe: bool,
+    /// Exit the event loop after this many presented frames. Desktop only: on iOS and Android the
+    /// loop cannot return, so it is ignored there.
+    pub frames: Option<u32>,
 }
 
 impl Default for Options {
     fn default() -> Self {
-        Self { log_frames: 3 }
+        Self {
+            log_frames: 3,
+            probe: false,
+            frames: None,
+        }
     }
+}
+
+/// Whether this platform's event loop can return, so `Options::frames` applies.
+const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android")));
+
+/// Prints one `probe <key> <value>` line.
+fn probe_line(key: &str, value: impl std::fmt::Display) {
+    println!("probe {key} {value}");
+}
+
+/// `Ok(position)` or the error, as one token run.
+fn position_text<E: std::fmt::Display>(p: Result<winit::dpi::PhysicalPosition<i32>, E>) -> String {
+    match p {
+        Ok(p) => format!("{},{}", p.x, p.y),
+        Err(e) => format!("error({e})"),
+    }
+}
+
+/// What the window reports now, one `probe` line per fact, under a `probe event <why>` marker.
+fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
+    probe_line("event", why);
+    let inner = window.inner_size();
+    let outer = window.outer_size();
+    let scale = window.scale_factor();
+    probe_line("inner_size", format!("{}x{}", inner.width, inner.height));
+    probe_line("outer_size", format!("{}x{}", outer.width, outer.height));
+    let inner_pos = window.inner_position();
+    let outer_pos = window.outer_position();
+    probe_line("inner_position", position_text(inner_pos.clone()));
+    probe_line("outer_position", position_text(outer_pos.clone()));
+    probe_line("scale_factor", scale);
+    match (inner_pos, outer_pos) {
+        (Ok(i), Ok(o)) => {
+            let left = i.x - o.x;
+            let top = i.y - o.y;
+            let right = outer.width as i32 - inner.width as i32 - left;
+            let bottom = outer.height as i32 - inner.height as i32 - top;
+            let l = |v: i32| f64::from(v) / scale;
+            probe_line(
+                "safe_area_logical",
+                format!(
+                    "left={:.2} top={:.2} right={:.2} bottom={:.2}",
+                    l(left),
+                    l(top),
+                    l(right),
+                    l(bottom)
+                ),
+            );
+        }
+        _ => probe_line("safe_area_logical", "n/a"),
+    }
+    let rate = window
+        .current_monitor()
+        .and_then(|m| m.refresh_rate_millihertz());
+    probe_line(
+        "refresh_mhz",
+        rate.map_or_else(|| "none".to_owned(), |r| r.to_string()),
+    );
+    let (sw, sh) = surface.size();
+    probe_line("surface_size", format!("{sw}x{sh}"));
+    probe_line("surface_format", format!("{:?}", surface.format()));
 }
 
 /// The demo's fonts: the gallery's own files, loaded in a fixed order.
@@ -91,7 +162,7 @@ struct App {
 }
 
 /// Opens the window, the GPU and the surface.
-fn setup(event_loop: &ActiveEventLoop) -> Result<Shown, String> {
+fn setup(event_loop: &ActiveEventLoop, probe: bool) -> Result<Shown, String> {
     let attrs = Window::default_attributes()
         .with_title("luneui demo")
         .with_inner_size(LogicalSize::new(PHONE.0, PHONE.1));
@@ -113,6 +184,15 @@ fn setup(event_loop: &ActiveEventLoop) -> Result<Shown, String> {
     let surface = WindowSurface::with_options(&gpu, surface, (size.width, size.height), options)?;
     let frame = FrameRenderer::for_surface(&mut gpu, &surface);
     let translator = Translator::new(size, window.scale_factor());
+    if probe {
+        let info = gpu.adapter.get_info();
+        probe_window("created", &window, &surface);
+        probe_line("adapter_name", &info.name);
+        probe_line("adapter_backend", format!("{:?}", info.backend));
+        probe_line("adapter_type", format!("{:?}", info.device_type));
+        probe_line("adapter_driver", &info.driver);
+        probe_line("alpha_mode", format!("{:?}", surface.alpha_mode()));
+    }
     Ok(Shown {
         window,
         surface,
@@ -188,6 +268,13 @@ impl App {
             println!("presented {} {}x{}", self.presented, size.0, size.1);
             window.request_redraw();
         }
+        if LOOP_RETURNS && let Some(n) = self.options.frames {
+            if self.presented >= n {
+                event_loop.exit();
+                return Ok(());
+            }
+            window.request_redraw();
+        }
         let (flow, redraw) = control_flow(out.repaint, self.start);
         event_loop.set_control_flow(flow);
         if redraw {
@@ -249,10 +336,17 @@ fn draw(ui: &mut Ui<'_>, w: f32, h: f32, taps: &mut u32) {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.shown.is_some() {
+        if self.options.probe {
+            probe_line("lifecycle", "resumed");
+        }
+        if let Some(shown) = &self.shown {
+            if self.options.probe {
+                probe_window("resumed", &shown.window, &shown.surface);
+            }
+            shown.window.request_redraw();
             return;
         }
-        match setup(event_loop) {
+        match setup(event_loop, self.options.probe) {
             Ok(shown) => {
                 shown.window.request_redraw();
                 self.shown = Some(shown);
@@ -261,6 +355,21 @@ impl ApplicationHandler for App {
                 self.error = Some(e);
                 event_loop.exit();
             }
+        }
+    }
+
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        if self.options.probe {
+            probe_line("lifecycle", "suspended");
+            if let Some(shown) = &self.shown {
+                probe_window("suspended", &shown.window, &shown.surface);
+            }
+        }
+    }
+
+    fn memory_warning(&mut self, _event_loop: &ActiveEventLoop) {
+        if self.options.probe {
+            probe_line("lifecycle", "memory_warning");
         }
     }
 
@@ -280,6 +389,20 @@ impl ApplicationHandler for App {
                 {
                     shown.surface.resize(&shown.gpu, size.width, size.height);
                     shown.window.request_redraw();
+                }
+                if self.options.probe {
+                    probe_line("resized_payload", format!("{}x{}", size.width, size.height));
+                    if let Some(shown) = &self.shown {
+                        probe_window("resized", &shown.window, &shown.surface);
+                    }
+                }
+            }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                if self.options.probe {
+                    probe_line("scale_factor_changed", scale_factor);
+                    if let Some(shown) = &self.shown {
+                        probe_window("scale_factor_changed", &shown.window, &shown.surface);
+                    }
                 }
             }
             WindowEvent::RedrawRequested => {

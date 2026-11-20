@@ -8,7 +8,27 @@ use std::process::ExitCode;
 use demo::Options;
 use winit::event_loop::EventLoop;
 
+const USAGE: &str = "usage: demo [--probe] [--frames <n>]";
+
+/// The options the command line asks for, or `None` for an argument that is not understood.
+fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
+    let mut options = Options::default();
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--probe" => options.probe = true,
+            "--frames" => options.frames = Some(args.next()?.parse().ok()?),
+            _ => return None,
+        }
+    }
+    Some(options)
+}
+
 fn main() -> ExitCode {
+    let Some(options) = parse_args(std::env::args().skip(1)) else {
+        eprintln!("{USAGE}");
+        return ExitCode::from(2);
+    };
     let event_loop = match EventLoop::new() {
         Ok(l) => l,
         Err(e) => {
@@ -16,7 +36,7 @@ fn main() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    match demo::run(event_loop, Options::default()) {
+    match demo::run(event_loop, options) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("{e}");

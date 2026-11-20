@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # Builds apps/demo for the iOS simulator, runs it on one simulator device of its own and checks that
-# a frame was presented. Usage: scripts/ios-sim.sh [--keep-booted | --delete-device]
+# a frame was presented. Usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]
 #   (default)       build, assemble target/ios-sim/Demo.app (ad-hoc signed), boot the device, install,
 #                   launch, wait up to 60 s for `presented 1` in target/ios-sim/stdout.log, take one
 #                   screenshot (target/ios-sim/shot-1.png), terminate, shut the device down.
+#   --probe         launch the demo with --probe (it prints `probe <key> <value>` lines), take shot-1.png
+#                   2 s after `presented 1`, send the demo to the background by launching the Settings app
+#                   (simctl launch only, never the UI), bring it back with a second launch without
+#                   --terminate-running-process, take shot-2.png (two screenshots in all), and write the
+#                   `probe` lines of both launches to target/ios-sim/probe.txt.
 #   --keep-booted   leave the device booted at the end.
 #   --delete-device shut down and delete the device named below, then exit.
 # The device is named luneui-demo-iphone (type iPhone-16-Pro, runtime iOS-18-0; override with
@@ -28,11 +33,13 @@ APP="$OUT/Demo.app"
 
 keep=0
 delete=0
+probe=0
 for arg in "$@"; do
   case "$arg" in
+    --probe) probe=1 ;;
     --keep-booted) keep=1 ;;
     --delete-device) delete=1 ;;
-    *) echo "usage: scripts/ios-sim.sh [--keep-booted | --delete-device]" >&2; exit 2 ;;
+    *) echo "usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]" >&2; exit 2 ;;
   esac
 done
 
@@ -115,11 +122,16 @@ booted_by_us=1
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || fail "bootstatus"
 
 xcrun simctl install "$UDID" "$APP" || fail "install"
-rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/shot-1.png"
+rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/stdout-2.log" "$OUT/stderr-2.log" \
+  "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
 : > "$OUT/stdout.log"
 : > "$OUT/stderr.log"
+app_args=()
+if [ "$probe" -eq 1 ]; then
+  app_args=(--probe)
+fi
 xcrun simctl launch --terminate-running-process \
-  --stdout="$OUT/stdout.log" --stderr="$OUT/stderr.log" "$UDID" "$BUNDLE_ID" || fail "launch"
+  --stdout="$OUT/stdout.log" --stderr="$OUT/stderr.log" "$UDID" "$BUNDLE_ID" ${app_args[@]+"${app_args[@]}"} || fail "launch"
 
 seen=0
 for _ in $(seq 1 120); do
@@ -134,12 +146,38 @@ if [ "$seen" -ne 1 ]; then
   tail -n 20 "$OUT/stderr.log" >&2 || true
   fail "no 'presented 1' within 60 s"
 fi
-head -n 3 "$OUT/stdout.log"
+grep "^presented " "$OUT/stdout.log" | head -n 3 || true
 
-sleep 1
+if [ "$probe" -eq 1 ]; then
+  grep -q "^probe inner_size " "$OUT/stdout.log" || fail "no 'probe inner_size' line"
+  sleep 2
+else
+  sleep 1
+fi
 xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-1.png" >/dev/null 2>&1 || fail "screenshot"
 [ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
 sips -g pixelWidth -g pixelHeight "$OUT/shot-1.png" | tail -n 2
+
+if [ "$probe" -eq 1 ]; then
+  # Background the demo by launching the Settings app, then foreground it with a plain launch.
+  xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null || fail "launch Settings"
+  sleep 3
+  : > "$OUT/stdout-2.log"
+  : > "$OUT/stderr-2.log"
+  xcrun simctl launch --stdout="$OUT/stdout-2.log" --stderr="$OUT/stderr-2.log" \
+    "$UDID" "$BUNDLE_ID" --probe || fail "second launch"
+  sleep 3
+  xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
+  [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
+  sips -g pixelWidth -g pixelHeight "$OUT/shot-2.png" | tail -n 2
+  {
+    echo "# launch 1 (stdout.log, to the end of the run)"
+    grep "^probe \|^presented " "$OUT/stdout.log" || true
+    echo "# launch 2 (stdout-2.log)"
+    grep "^probe \|^presented " "$OUT/stdout-2.log" || true
+  } > "$OUT/probe.txt"
+  echo "ios-sim: probe lines in $OUT/probe.txt ($(grep -c '^probe ' "$OUT/probe.txt") lines)"
+fi
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
 echo "ios-sim: passed"
