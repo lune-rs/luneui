@@ -19,7 +19,7 @@ Lunegit's icon rail: a narrow column of 40 px icon buttons. Five sit at the top 
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Views/IconRailView.axaml`
 
 ## Spec

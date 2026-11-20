@@ -20,7 +20,7 @@ One row of a lane graph, drawn in three passes: connection curves between lanes 
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Controls/GraphRowControl.cs`
 
 ## Spec

@@ -22,7 +22,7 @@ Lunegit's scratchpad kanban board: a horizontal scroll of glass-panel columns (t
 
 Built in M8 (D167 to D169): `crates/lune-ui-core/src/widgets/kanban_board.rs` (`Ui::kanban_board`, `BoardOptions`, `KanbanColumn`, `KanbanCard`, `BoardError`, `BoardResponse`, `CardMove`, `landed_index`, `paint_card`, `card_height`); the gesture is `FreeDrag` in `drag.rs`. Page `kanban-board`, tests `crates/lune-ui-core/tests/widget_kanban_board.rs`.
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Views/Scratchpad/ScratchpadBoardView.axaml`
 - `src/Lunegit.Desktop/Views/Scratchpad/ScratchpadBoardView.axaml.cs`
 - `src/Lunegit.Application/Services/Scratchpad/KanbanOperations.cs` (the move index)

@@ -20,7 +20,7 @@ The side-panel host: an acrylic column of nine panels, one shown at a time by th
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Views/SidePanelView.axaml`
 - `src/Lunegit.Desktop/Views/SidePanels/RepositoryPanelView.axaml`
 - `src/Lunegit.Desktop/Views/SidePanels/BranchesPanelView.axaml`

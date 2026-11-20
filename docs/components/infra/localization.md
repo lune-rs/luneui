@@ -28,7 +28,7 @@ a flat key to string map, an English baseline under every language, the key as t
 
 ## Existing code
 
-`crates/lune-ui-core/src/strings.rs` (`StringTable`, `format_template`, and since M10 `Catalog`, `StringTable::overlay` and `iter`, `audit_template`); tests `crates/lune-ui-core/tests/strings.rs`, `tests/catalog.rs`, `apps/gallery/tests/lunegit_files.rs`. Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, 33a1dd41), paths relative to its root:
+`crates/lune-ui-core/src/strings.rs` (`StringTable`, `format_template`, and since M10 `Catalog`, `StringTable::overlay` and `iter`, `audit_template`); tests `crates/lune-ui-core/tests/strings.rs`, `tests/catalog.rs`, `apps/gallery/tests/lunegit_files.rs`. Lunegit (the Lunegit repo, 33a1dd41), paths relative to its root:
 - `src/Lunegit.Infrastructure/Localization/en.json` (1019 strings, the baseline)
 - `src/Lunegit.Infrastructure/Localization/LocalizationService.cs` (`Get`, `Format`, `SetLanguage`)
 - `src/Lunegit.Infrastructure/Localization/JsonLanguageRegistry.cs` (scans the languages folder, validates files)

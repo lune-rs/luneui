@@ -20,12 +20,12 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 
 ## Consumers
 
-- **Luneterm** (this author's terminal, `~/Projects/Luneterm`): its milestones M9 to M11
+- **Luneterm** (this author's terminal): its milestones M9 to M11
   (the app end to end, tabs and settings, finish) consume the toolkit. M8 (the C ABI) does not.
   Today only the `glass-ui` spike exercises the painter, frame and window APIs.
 - **A possible Rust rebuild of Lunegit** (the Avalonia git client): about 75 views, custom controls
   and AvaloniaEdit-based editors. Not a commitment; its needs are rough stubs in the catalogue.
-- **Wane** (this author's LLM gateway desktop app, `~/Projects/wane`): its window and tray UI. Its
+- **Wane** (this author's LLM gateway desktop app): its window and tray UI. Its
   HTML mocks and component spec (`docs/ui/components.md`, 35 components, P0-P2 build order) name what it
   needs; 20 of them are new here (2026-11-04).
 - **Others**: any app that wants the same glass look. The toolkit stays app-agnostic.

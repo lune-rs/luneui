@@ -28,7 +28,7 @@ screen is app-side.
 
 Built in M5 (D92, D93): `crates/lune-ui-core/src/shortcuts.rs` (`Shortcuts`, `Binding`, `Chord`, `Scope`, `CommandId`; `FrameConfig.shortcuts`, `FrameOutput.fired`). Before it, the moved menu drew a shortcut hint as app text (`crates/lune-ui-core/src/widgets/menu.rs:10-16`; the
 gallery menu shows "Cmd+N", "Cmd+C", "Cmd+," at `apps/gallery/src/scenes.rs:379-383`). Lunegit
-(`~/Projects/AvaloniaApps/Project Lunegit`, 33a1dd41), relative to its root:
+(the Lunegit repo, 33a1dd41), relative to its root:
 - `src/Lunegit.Desktop/MainWindow.axaml.cs:30,91-113` (window tunnel handler: Escape, Ctrl or Cmd+K)
 - `src/Lunegit.Desktop/Views/TerminalPanelView.axaml:17-19` (Meta+T), `.axaml.cs:334-341` (Esc cancels a drag)
 - `src/Lunegit.Desktop/Views/UnifiedDiffView.axaml.cs:52-56`, `SplitDiffView.axaml.cs:52-56` (Cmd+C)
