@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 101 |
+| done | 102 |
 | external | 4 |
-| **total** | **107** |
+| **total** | **108** |
 
 ## core
 
@@ -115,6 +115,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [layout.icon-rail](layout/icon-rail.md) | Icon rail | done | lunegit | Narrow icon column of 40 px toolbar buttons that switch the side panels and toggle the terminal, with a notification badge |
 | [layout.page](layout/page.md) | Page card (header, scroll body, footer) | done | wane | The card that holds a screen: header with title and actions, scrolling body, optional pinned footer |
 | [layout.panel](layout/panel.md) | Panel (group box) | done | wane | Outline-only group box with title, meta, body and action footer |
+| [layout.recipes](layout/recipes.md) | Screen design recipes | done | any | Seven screens (list, table, panel, page, sidebar, form, dialog) built from the composites and the layout functions, each a function to copy and a scene to dump at any window size |
 | [layout.scroll-area](layout/scroll-area.md) | Scroll area | done | any | Scrolling region: per-id offset, wheel and trackpad scrolling, scroll-into-view, follow-tail, offset kept across content replacement |
 | [layout.settings-page](layout/settings-page.md) | Settings page layout | done | luneterm | Settings page shell: a 20 px content host for the current section, a restart banner that reveals on demand, and the rows and sections built from toolkit widgets |
 | [layout.side-panel](layout/side-panel.md) | Side panel host and panels | done | lunegit | Side panel host that shows one of nine panels by key, with a fade and 6 px slide on show |

@@ -53,6 +53,7 @@ mod popover;
 mod primitives;
 mod progress;
 mod radio_group;
+mod recipes;
 pub(crate) mod reference;
 mod row;
 mod scroll_area;
@@ -182,6 +183,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &crate::showcase::labs::json::PAGE,
     &crate::showcase::labs::depth::PAGE,
     &crate::showcase::labs::banding::PAGE,
+    &recipes::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a
