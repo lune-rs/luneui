@@ -259,6 +259,11 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 required_features: wanted & adapter.features(),
+                // The default limits ask for more than some adapters offer (the iOS simulator's
+                // Metal offers 15 inter-stage variables, the default asks 16): take the worse
+                // of each limit and the adapter's, so a desktop adapter that meets the defaults
+                // gets exactly the defaults (D337).
+                required_limits: wgpu::Limits::default().or_worse_values_from(&adapter.limits()),
                 ..Default::default()
             })
             .await

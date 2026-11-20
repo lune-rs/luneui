@@ -12,7 +12,8 @@ Pasted text comes from outside the process, so it is capped at [`MAX_PASTE_BYTES
 text is refused whole (a read answers `ClipboardUnavailable`, a write is dropped). Nothing is
 ever truncated. A failed write is silent. The OS backend is opened on first use,
 so a process that never copies or pastes opens nothing; a backend that cannot open answers
-`ClipboardUnavailable` to a read and drops a write.
+`ClipboardUnavailable` to a read and drops a write. iOS and Android have no OS clipboard yet: there
+every read answers `ClipboardUnavailable` and every write is dropped.
 
 Source: `crates/lune-ui-winit/src/clipboard.rs:1`
 
@@ -29,7 +30,7 @@ pub struct Clipboard {
 
 The app's clipboard service. See the module note.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:60`
+Source: `crates/lune-ui-winit/src/clipboard.rs:36`
 
 **Methods and associated items**
 
@@ -65,5 +66,5 @@ times the 11 MB document the code view measured (D213). It bounds the adapter, n
 text field and the text area refuse any insert over 1 MiB themselves (`text_edit::MAX_SHAPED_INSERT`, D232, D233);
 only the code view, which draws just the lines in view, takes what the adapter lets through.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:19`
+Source: `crates/lune-ui-winit/src/clipboard.rs:21`
 
