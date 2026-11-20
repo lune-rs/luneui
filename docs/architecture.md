@@ -308,7 +308,7 @@ a dialog with a blurred scrim frosts the dialog; D257). A request replaces its r
 alpha)` by an erase and an add, so nothing sharp stays in a translucent window (D258). Every request stands. Requests of one layer share a blur per
 distinct sigma, and each has its own uniforms. Up to the last stop, and at least to `Scene::floor` (the fixed layer
 `SCENE_LAYERS`, 2), the frame renders into the offscreen scene; a request below the floor stops at the floor. A frame
-with no request, or with one stop, runs the two passes and one blur it always ran. Consequences a widget author meets: text draws above every fill
+with no request draws straight into the target in one pass: no offscreen scene, no blit, and the offscreen targets are not made until the first frame with a request and are freed by `FrameRenderer::release_offscreen` (D408). A frame with one stop runs the two passes and one blur it always ran. Consequences a widget author meets: text draws above every fill
 of its layer (a label shows through a fill drawn "over" it on the same layer), and a rounded clip
 (`push_clip_rounded`) cuts shapes, strokes, fills and images but gives text and custom items only its
 bounding rect.

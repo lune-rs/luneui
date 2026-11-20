@@ -364,8 +364,13 @@ impl Blur {
         }
     }
 
-    /// The texture the scene pass draws into, which the blur reads; `None` before the first size is
-    /// set.
+    /// Drops the offscreen targets; the next [`Self::prepare`] makes them again.
+    pub(crate) fn release(&mut self) {
+        self.targets = None;
+    }
+
+    /// The texture the scene pass draws into, which the blur reads; `None` before the first frame
+    /// with a backdrop request and after [`FrameRenderer::release_offscreen`](crate::frame::FrameRenderer::release_offscreen).
     pub fn scene_view(&self) -> Option<&wgpu::TextureView> {
         self.targets.as_ref().map(|t| &t.scene)
     }

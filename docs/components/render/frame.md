@@ -11,7 +11,7 @@ summary: FrameRenderer: one target's scene, blur, target pass sequence over the 
 
 ## What it is
 
-`FrameRenderer` (`new`, `format`, `blur`, `draw`, `draw_with`) draws a core `Scene` into one target; `FrameParams` is a core type re-exported here; its `noise_opacity` and `blur: BlurLimits` (kernel cap in texels, default 48, at most 128; divisor 2, 4 or 8, default 8) are values of the frame, and a bad one draws as the default (D264). Each renderer owns what a draw writes (globals, viewport, text renderers, blur textures), so several targets share one `Gpu` without ordering hazards.
+`FrameRenderer` (`new`, `format`, `blur`, `draw`, `draw_with`, `release_offscreen`) draws a core `Scene` into one target; `FrameParams` is a core type re-exported here; its `noise_opacity` and `blur: BlurLimits` (kernel cap in texels, default 48, at most 128; divisor 2, 4 or 8, default 8) are values of the frame, and a bad one draws as the default (D264). Each renderer owns what a draw writes (globals, viewport, text renderers, blur textures), so several targets share one `Gpu` without ordering hazards.
 
 ## Needs
 
@@ -31,7 +31,8 @@ Conflicts: none.
 ### Anatomy
 
 - One renderer per target: uniforms, viewport, text renderers and blur textures [R crates/lune-ui-wgpu/src/frame.rs:1-2].
-- The pass sequence: scene, blur, target [R crates/lune-ui-wgpu/src/frame.rs:1-2].
+- The pass sequence: a frame with no backdrop request draws straight into the target in one pass; a frame with one runs scene, blur, target through offscreen textures made on the first such frame [R crates/lune-ui-wgpu/src/frame.rs:1-3] [D408].
+- `release_offscreen()` frees the offscreen scene and blur textures (about 4 bytes per target pixel plus a third as much again); the next frame with a request makes them again. The app calls it between frames, for example while the window is hidden; the library reads no clock, so it cannot time an idle period (hard rule 2) [D408].
 - Renders into any target view at an explicit size and scale: a window surface or an offscreen texture [R crates/lune-ui-wgpu/src/frame.rs:5-7].
 - Shares one `Gpu` with other renderers; owns its draw writes, except the glyph atlas per format and the rasteriser cache [R crates/lune-ui-wgpu/src/frame.rs:7-9].
 
@@ -49,7 +50,7 @@ n/a — no input.
 
 ### Retained state
 
-- Persistent: the renderer's targets and buffers, per format and target.
+- Persistent: the renderer's buffers, per format and target; the offscreen scene and blur textures after the first frame with a backdrop request, until `release_offscreen` (D408).
 - Transient: none per frame beyond the scene.
 - App-owned: the `Scene` and `FrameParams` passed to `draw`.
 
@@ -74,6 +75,7 @@ n/a — the renderer consumes the scene; it adds no primitive.
 
 - Tests (`crates/lune-ui-wgpu/tests/targets.rs`): `two_targets_on_one_gpu_match_each_alone`, `second_format_on_one_gpu_matches_a_fresh_gpu`, `one_renderer_across_two_sizes_matches_a_fresh_renderer_at_each`. The hook: `custom_draw.rs::every_slot_is_prepared_once_and_rendered_once_per_item`. A draw on a lost device never reports success (wgpu may panic, so the doc says to ask `Gpu::is_lost` first) and a rebuilt renderer on a new `Gpu` draws: `device_lost.rs::a_destroyed_device_is_lost_a_draw_on_it_never_succeeds_and_a_rebuild_draws`. The fake is `RecordingRenderer` (`core.testing`), the draw order `records_the_documented_draw_order`.
 - The 1.5x scene: `apps/gallery/src/pages/ui.rs::the_controls_scene_at_1_5_is_named_sized_and_runs` (name `ui-controls@1.5x`, 1560 by 990 physical px, draws the controls); the gate dumps it through this renderer.
+- Tests (`crates/lune-ui-wgpu/src/frame.rs`, D408): `a_frame_without_backdrops_makes_no_offscreen_targets`, `the_direct_path_matches_the_offscreen_path` (byte-identical to the offscreen path in `Bgra8Unorm`, `Rgba8Unorm`, `Rgb10a2Unorm`, `Rgba16Float`, `Rgba16Unorm`, `Bgra8UnormSrgb`, `Rgba8UnormSrgb`), `release_then_a_stop_frame_draws_as_a_fresh_renderer`.
 - The pixel gate through this renderer: every scene identical against 55cfaaf (the orchestrator's gate; M11's pre-audit run held 413 of 413).
 
 ### Build

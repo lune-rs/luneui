@@ -31,8 +31,8 @@ Source: `crates/lune-ui-wgpu/src/blur.rs:239`
 
 - <a id="method.Blur.scene_view"></a>`pub fn scene_view(&self) -> Option<&wgpu::TextureView>`
 
-  The texture the scene pass draws into, which the blur reads; `None` before the first size is
-  set.
+  The texture the scene pass draws into, which the blur reads; `None` before the first frame
+  with a backdrop request and after [`FrameRenderer::release_offscreen`](frame.md#method.FrameRenderer.release_offscreen).
 
 `impl Blur`
 

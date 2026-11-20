@@ -5,7 +5,8 @@
 [API reference](../INDEX.md) / parent [`lune_ui_wgpu`](index.md)
 
 The frame renderer of one target: its uniforms, viewport, text renderers and blur textures,
-and the scene → blur → target pass sequence.
+and the pass sequence: a frame with no backdrop request draws straight into the target; a frame
+with one goes scene → blur → target through offscreen textures made on the first such frame.
 
 The app paints into a [`Painter`](../lune-ui-core/paint.md#struct.Painter) and hands the finished [`Scene`](../lune-ui-core/scene.md#struct.Scene) to
 [`FrameRenderer::draw`](frame.md#method.FrameRenderer.draw), which renders it in the [`scene`](../lune-ui-core/scene.md) module's draw order
@@ -29,7 +30,7 @@ pub struct FrameRenderer {
 
 Draws scenes into targets of one colour format. Use it only with the [`Gpu`](gpu.md#struct.Gpu) that made it.
 
-Source: `crates/lune-ui-wgpu/src/frame.rs:24`
+Source: `crates/lune-ui-wgpu/src/frame.rs:25`
 
 **Methods and associated items**
 
@@ -37,7 +38,8 @@ Source: `crates/lune-ui-wgpu/src/frame.rs:24`
 
 - <a id="method.FrameRenderer.blur"></a>`pub fn blur(&self) -> &Blur`
 
-  The blur stage, for debug dumps of its intermediate textures.
+  The blur stage, for debug dumps of its intermediate textures. Its textures exist only after
+  a frame with a backdrop request (and not after [`release_offscreen`](frame.md#method.FrameRenderer.release_offscreen)).
 
 - <a id="method.FrameRenderer.draw"></a>
 
@@ -54,8 +56,10 @@ Source: `crates/lune-ui-wgpu/src/frame.rs:24`
 
   Draws one painted `scene` into `target`, in [`Scene::in_order`](../lune-ui-core/scene.md#method.Scene.in_order)'s order. Each layer with
   backdrop requests is a stop: what is drawn so far is blurred, the requests draw and the
-  layer follows. Up to the last stop, and at least to [`Scene::floor`](../lune-ui-core/scene.md#method.Scene.floor), the frame renders
-  offscreen; that is blitted to `target` and the rest draws over it.
+  layer follows. A frame with no stop draws straight into `target` in one pass. A frame with
+  stops renders up to the last stop, and at least to [`Scene::floor`](../lune-ui-core/scene.md#method.Scene.floor), offscreen; that is
+  blitted to `target` and the rest draws over it. The offscreen textures are made on the first
+  frame with a stop and kept ([`release_offscreen`](frame.md#method.FrameRenderer.release_offscreen) frees them).
 
 - <a id="method.FrameRenderer.draw_with"></a>
 
@@ -100,7 +104,7 @@ Source: `crates/lune-ui-wgpu/src/frame.rs:24`
   Nothing is done (and `false` returned) when its shared state already is the one for that
   format and dither amplitude. Otherwise its text renderers move to the new state's glyph
   atlas, and when the format differs its blur stage is made again (its textures are made
-  again on the next draw); returns `true` when the format differs. The state a switch leaves
+  again on the next frame with a backdrop request); returns `true` when the format differs. The state a switch leaves
   behind stays in the [`Gpu`](gpu.md#struct.Gpu) (no eviction), so switching back builds nothing.
 
 - <a id="method.FrameRenderer.for_surface"></a>`pub fn for_surface(gpu: &mut Gpu, surface: &WindowSurface) -> Self`
@@ -117,6 +121,16 @@ Source: `crates/lune-ui-wgpu/src/frame.rs:24`
   A renderer for targets of `format` shown on a display of unknown depth; creates the
   format's shared pipelines and glyph atlas in `gpu` on first use. Same as
   [`with_display`](frame.md#method.FrameRenderer.with_display) with `None`.
+
+- <a id="method.FrameRenderer.release_offscreen"></a>`pub fn release_offscreen(&mut self)`
+
+  Frees the offscreen scene and the blur textures (about four bytes per target pixel and a
+  third as much again for the blur levels), which the first frame with a backdrop request
+  made and every later frame kept. The next frame with a backdrop request makes them again, a
+  one-time cost on that frame. Nothing else changes: frames without a backdrop request never
+  use them. Call it between frames, for example while the window is hidden; the toolkit reads
+  no clock, so it cannot tell by itself when the window has been idle. Calling it with no
+  textures made is a no-op.
 
 - <a id="method.FrameRenderer.with_display"></a>`pub fn with_display(gpu: &mut Gpu, format: wgpu::TextureFormat, display_bits: Option<u8>) -> Self`
 

@@ -32,8 +32,8 @@ Conflicts: none. The menu glass in Wane is `blur(30px) saturate(1.8)` [W docs/ui
 ### Anatomy
 
 - Offscreen scene texture, then three downsampling copies, then per blur a horizontal and a vertical pass into that blur's own result, each with its own parameter buffers: a buffer write lands before the frame's submit, so a shared one would hold the last value for every blur [D257] [R crates/lune-ui-wgpu/src/blur.rs].
-- The scene texture view is exposed for the frame pass [R crates/lune-ui-wgpu/src/blur.rs:315].
-- Backdrop request: a rect and a radius [R crates/lune-ui-core/src/paint.rs:189], plus (M7, [D138]) its own `sigma` and its own `saturation` (0 means the frame's `FrameParams` values), set by `Painter::backdrop_with`. The frame renders offscreen up to its last stop, and at least to `Scene::floor()`, the fixed layer `SCENE_LAYERS`: a request below the floor stops there, so it blurs those layers and draws over them. Each stop before the last draws its requests and the layers up to the next stop back into the scene; the last copies the scene to the target, draws its requests, and the layers after it follow. A frame with no request, or one stop, runs the passes it ran with one blur.
+- The scene texture view is exposed for the frame pass; it is `None` before the first frame with a backdrop request and after `release_offscreen` [R crates/lune-ui-wgpu/src/blur.rs, `Blur::scene_view`].
+- Backdrop request: a rect and a radius [R crates/lune-ui-core/src/paint.rs:189], plus (M7, [D138]) its own `sigma` and its own `saturation` (0 means the frame's `FrameParams` values), set by `Painter::backdrop_with`. A frame with no request draws straight into the target (D408). Otherwise the frame renders offscreen up to its last stop, and at least to `Scene::floor()`, the fixed layer `SCENE_LAYERS`: a request below the floor stops there, so it blurs those layers and draws over them. Each stop before the last draws its requests and the layers up to the next stop back into the scene; the last copies the scene to the target, draws its requests, and the layers after it follow. A frame with no request draws in one pass into the target (D408); a frame with one stop runs the passes it ran with one blur.
 - A blur per request, at its layer [D257]: a request lives on the layer it was asked on (`Layer::backdrops`), and every one stands. A layer with requests is a stop: what is drawn so far is blurred, the requests draw, the layer follows. Requests of one layer share a blur per distinct sigma; each has its own uniforms. A request that shows nothing (alpha 0, no area) records nothing.
 
 ### States
@@ -50,7 +50,7 @@ n/a — no input.
 
 ### Retained state
 
-- Transient: the offscreen scene and blur textures, rebuilt on a size change.
+- Transient: the offscreen scene and blur textures, made on the first frame with a backdrop request, rebuilt on a size change, and freed by `FrameRenderer::release_offscreen` (D408); a renderer that has drawn only frames without a request holds none.
 - Persistent: the per-target `Blur` value (textures, buffers, bind groups) [R crates/lune-ui-wgpu/src/blur.rs:187-190].
 - App-owned: none.
 
