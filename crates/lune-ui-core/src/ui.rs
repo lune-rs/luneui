@@ -54,7 +54,7 @@ use crate::widgets::scroll_area::ScrollPhysics;
 use access::Routed;
 use keys::KeyPress;
 use overlay::Dismissal as D;
-use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost};
+use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost, touch_target};
 
 /// The opacity of a disabled subtree.
 pub(crate) const DISABLED_ALPHA: f32 = 0.4;
@@ -218,6 +218,30 @@ fn loses_focus(opts: &OverlayOptions, tag: u32, hits: &[HitRecord], to: Option<W
         && !to.is_some_and(|id| hits.iter().any(|h| h.id == id && h.tag >= tag))
 }
 
+/// What a touch press settles by the frame's events so far (D361): focus on the widget it armed
+/// when its tap, long press or drag start came, and, when a long-pressed touch began to drag, the
+/// dismissal of the top overlay that dismisses on an outside press and opened after the press
+/// (the menu its long press opened), unless the dragged widget is in it.
+fn touch_effects(
+    store: &mut UiStore,
+    pointer: &mut PointerFrame,
+    hits: &[HitRecord],
+    top_press: Option<Active>,
+    dismissed: &mut BTreeMap<WidgetId, Dismissal>,
+) {
+    if let Some(id) = pointer.touch_focus.take() {
+        store.focus.focused = Some(id);
+    }
+    if let Some((dragged, floor)) = pointer.spent_drag.take()
+        && let Some(t) = top_press
+        && t.opts.dismiss_on_outside_press
+        && t.tag > floor
+        && !hits.iter().any(|h| h.id == dragged && h.tag == t.tag)
+    {
+        dismissed.entry(t.id).or_insert(D::OutsidePress);
+    }
+}
+
 /// Dismisses, for focus loss, every active overlay that asks for it and does not hold `to`.
 fn focus_loss(
     active: &[Active],
@@ -329,6 +353,7 @@ impl<'a> Ui<'a> {
                 kind: PointerKind::Mouse,
             };
             store.pointer.tick(&cx, &mut pointer);
+            touch_effects(store, &mut pointer, &hits, top_press, &mut dismissed);
             let steps = store.touch.reduce(&input.events, input.time);
             for step in &steps {
                 let ev = match step {
@@ -354,7 +379,11 @@ impl<'a> Ui<'a> {
                         pressed: true,
                         modifiers,
                     } => {
-                        let target = topmost(&hits, *pos, &eligible);
+                        let target = if cx.kind == PointerKind::Touch {
+                            touch_target(&hits, *pos, &eligible)
+                        } else {
+                            topmost(&hits, *pos, &eligible)
+                        };
                         store.focus.visible = false;
                         store.focus.keyboard = false;
                         // A press on a toast is never outside: the toast layer belongs to no
@@ -383,7 +412,15 @@ impl<'a> Ui<'a> {
                         if let Some(h) = target.filter(|h| {
                             h.enabled && h.sense.focusable && h.layer != LayerId::Toast as usize
                         }) {
-                            store.focus.focused = Some(h.id);
+                            if cx.kind == PointerKind::Touch && store.pointer.held() == Some(h.id) {
+                                // D361: a touch focuses at its tap, long press or drag start, not
+                                // on the press, so a pan over a form focuses nothing.
+                                store.pointer.arm_touch(Some(h.id), store.next_tag);
+                            } else {
+                                store.focus.focused = Some(h.id);
+                            }
+                        } else if cx.kind == PointerKind::Touch {
+                            store.pointer.arm_touch(None, store.next_tag);
                         }
                     }
                     Event::PointerButton {
@@ -559,6 +596,7 @@ impl<'a> Ui<'a> {
                     }
                     _ => {}
                 }
+                touch_effects(store, &mut pointer, &hits, top_press, &mut dismissed);
             }
             store.pointer.settle(&cx, &mut pointer);
         }
@@ -714,8 +752,12 @@ impl<'a> Ui<'a> {
         }
         let mut hits = Vec::with_capacity(painter.hits.len());
         let mut rects = BTreeMap::new();
-        for (i, (&(rect, id), &(layer, tag))) in
-            painter.hits.iter().zip(painter.hit_meta()).enumerate()
+        for (i, ((&(rect, id), &(layer, tag)), &clip)) in painter
+            .hits
+            .iter()
+            .zip(painter.hit_meta())
+            .zip(painter.hit_clips())
+            .enumerate()
         {
             if tag == SUPPRESSED {
                 continue;
@@ -751,6 +793,7 @@ impl<'a> Ui<'a> {
                 pan_axes,
                 moving,
                 order,
+                clip,
             });
             rects.insert(id, rect);
         }

@@ -50,6 +50,8 @@ fn ready(sense: Sense) -> UiHarness {
     h
 }
 
+/// Touch focus follows the tap, not the press (D361): the press frame equals the mouse's but for
+/// `focused`, and the lift focuses.
 #[test]
 fn a_tap_answers_as_a_mouse_click_does_except_the_hover_after_the_lift() {
     let mut mouse = ready(Sense::CLICK_FOCUS);
@@ -64,9 +66,17 @@ fn a_tap_answers_as_a_mouse_click_does_except_the_hover_after_the_lift() {
     touch.input.touch_end(1, 20.0, 20.0);
     let t_release = two(&mut touch, Sense::CLICK_FOCUS);
 
-    assert_eq!(t_press, m_press);
+    assert!(m_press[0].focused, "a mouse press focuses on the press");
+    assert!(
+        !t_press[0].focused,
+        "a touch press leaves focus to the tap (D361)"
+    );
+    let mut t = t_press.clone();
+    t[0].focused = m_press[0].focused;
+    assert_eq!(t, m_press);
     assert!(t_press[0].pressed && t_press[0].press_started);
     assert!(t_release[0].clicked && m_release[0].clicked);
+    assert!(t_release[0].focused, "the tap focuses");
     assert!(m_release[0].hovered && !t_release[0].hovered);
     let mut t = t_release.clone();
     t[0].hovered = true;
@@ -350,6 +360,7 @@ fn popover(ui: &mut Ui<'_>, open: bool) -> Option<Dismissal> {
     f.dismissed
 }
 
+/// A touch focuses a focusable widget at its tap, not at its press (D361).
 #[test]
 fn a_touch_outside_a_popover_dismisses_it_and_a_touch_focuses_a_focusable_widget() {
     let mut h = harness();
@@ -370,6 +381,12 @@ fn a_touch_outside_a_popover_dismisses_it_and_a_touch_focuses_a_focusable_widget
     let mut h = ready(Sense::CLICK_FOCUS);
     h.input.touch_start(1, 20.0, 20.0);
     two(&mut h, Sense::CLICK_FOCUS);
+    let r = two(&mut h, Sense::CLICK_FOCUS);
+    assert!(
+        !r[0].focused && !r[1].focused,
+        "a held touch has not focused yet (D361)"
+    );
+    h.input.touch_end(1, 20.0, 20.0);
     let r = two(&mut h, Sense::CLICK_FOCUS);
     assert!(r[0].focused && !r[1].focused);
 }

@@ -5,3 +5,6 @@
 #   <path of the test file> | <test name> | <reason> | <D-row>
 # The test name is passed to the test binaries as `--skip <name>`, so it skips every test of that
 # name in every binary of the run. A line starting with `#` and a blank line are ignored.
+
+crates/lune-ui-core/tests/ui_touch.rs | a_tap_answers_as_a_mouse_click_does_except_the_hover_after_the_lift | pins focus on a touch press; M5 D361 moves a touch press's focus to its tap, long press or drag start for apps that turned touch on (D16); no API or mouse, keyboard or wheel pixel check covers touch focus timing. | D361
+crates/lune-ui-core/tests/ui_touch.rs | a_touch_outside_a_popover_dismisses_it_and_a_touch_focuses_a_focusable_widget | pins focus on a touch press; M5 D361 moves a touch press's focus to its tap, long press or drag start for apps that turned touch on (D16); no API or mouse, keyboard or wheel pixel check covers touch focus timing. | D361

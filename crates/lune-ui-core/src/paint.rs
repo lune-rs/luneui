@@ -281,6 +281,9 @@ pub struct Painter<'a, H> {
     xforms: Vec<Xform>,
     /// `(layer, tag)` per entry of `hits`, kept in step by [`Self::hit`].
     hit_meta: Vec<(usize, u32)>,
+    /// The rect clip each entry of `hits` was cut by, in window space, kept in step by
+    /// [`Self::hit`]; a touch target grown past its region is cut by it again (D361).
+    hit_clips: Vec<Option<Rect>>,
     hit_tag: u32,
     recording: Option<Vec<Op>>,
 }
@@ -327,6 +330,7 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
             theme,
             xforms: Vec::new(),
             hit_meta: Vec::new(),
+            hit_clips: Vec::new(),
             hit_tag: 0,
             recording: None,
         }
@@ -438,6 +442,12 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
     #[cfg(test)]
     pub(crate) fn set_hit_tag(&mut self, tag: u32) {
         self.hit_tag = tag;
+    }
+
+    /// The rect clip, in window space, for each entry of `hits`, in the same order. Valid while
+    /// `hits` is only appended to through [`Self::hit`].
+    pub(crate) fn hit_clips(&self) -> &[Option<Rect>] {
+        &self.hit_clips
     }
 
     /// `(layer index, tag)` for each entry of `hits`, in the same order. Valid while `hits` is only
@@ -1142,6 +1152,7 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
         let r = self.hit_rect(r);
         self.hits.push((r, h));
         self.hit_meta.push((self.layer, self.hit_tag));
+        self.hit_clips.push(self.clip.map(|c| self.tr(c)));
     }
 
     /// Whether the pointer is over `h`'s region.

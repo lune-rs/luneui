@@ -54,6 +54,9 @@ pub(crate) struct HitRecord {
     /// The [`Ui::tab_scope`](super::Ui::tab_scope) order the region was registered in: 0 outside
     /// any scope.
     pub(crate) order: i32,
+    /// The clip the region was registered under, in window space; `None` when nothing clipped it.
+    /// `rect` is already cut by it; a touch target grown past `rect` is cut by it again.
+    pub(crate) clip: Option<Rect>,
 }
 
 /// The topmost region of `hits` at `pos` that `eligible` admits: highest layer, then the overlay opened last (tag 0, the base, is below every overlay of a
@@ -68,6 +71,93 @@ pub(crate) fn topmost<'h>(
         .filter(|(_, h)| eligible(h) && h.rect.contains(pos))
         .max_by_key(|(i, h)| (h.layer, h.tag, *i))
         .map(|(_, h)| h)
+}
+
+/// The least size, in logical px, a touch press treats a control as: a smaller capture-sensing
+/// region is hit from a 44 x 44 area centred on it (D361).
+pub(crate) const TOUCH_TARGET: f32 = 44.0;
+
+/// `h`'s rect grown to at least [`TOUCH_TARGET`] on each side, centred on it, and cut by its clip.
+fn grown(h: &HitRecord) -> Rect {
+    let r = h.rect;
+    let dx = ((TOUCH_TARGET - r.w) / 2.0).max(0.0);
+    let dy = ((TOUCH_TARGET - r.h) / 2.0).max(0.0);
+    let g = Rect::new(r.x - dx, r.y - dy, r.w + 2.0 * dx, r.h + 2.0 * dy);
+    match h.clip {
+        Some(c) => g.intersect(&c),
+        None => g,
+    }
+}
+
+/// The distance from `pos` to `r`: 0 inside it.
+fn distance(r: &Rect, pos: (f32, f32)) -> f32 {
+    let dx = (r.x - pos.0).max(pos.0 - r.right()).max(0.0);
+    let dy = (r.y - pos.1).max(pos.1 - r.bottom()).max(0.0);
+    dx.hypot(dy)
+}
+
+/// The region a touch press at `pos` picks (D361), among those `eligible` admits.
+///
+/// The exact topmost hit, as for a mouse, when it senses a press, unless a smaller control drawn
+/// inside it after it is nearer the finger; otherwise the nearest capture-sensing region whose
+/// rect grown to [`TOUCH_TARGET`] holds `pos`, among those of the exact hit's layer and overlay
+/// (of the highest layer and overlay any candidate is in, when nothing is under `pos`). Nearest is
+/// the least distance from `pos` to the region's own rect, ties to the later call. With no
+/// candidate it is the exact hit, as for a mouse.
+pub(crate) fn touch_target<'h>(
+    hits: &'h [HitRecord],
+    pos: (f32, f32),
+    eligible: &dyn Fn(&HitRecord) -> bool,
+) -> Option<&'h HitRecord> {
+    let exact = hits
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| eligible(h) && h.rect.contains(pos))
+        .max_by_key(|(i, h)| (h.layer, h.tag, *i));
+    let mut candidates = hits
+        .iter()
+        .enumerate()
+        .filter(|(_, h)| {
+            eligible(h)
+                && senses_capture(h)
+                && h.rect.w > 0.0
+                && h.rect.h > 0.0
+                && grown(h).contains(pos)
+        })
+        .collect::<Vec<_>>();
+    let band = exact.map_or_else(
+        || candidates.iter().map(|(i, h)| (h.layer, h.tag, *i)).max(),
+        |(i, h)| Some((h.layer, h.tag, i)),
+    );
+    let (layer, tag, _) = band?;
+    candidates.retain(|(_, h)| h.layer == layer && h.tag == tag);
+    let nearest = |from: &[(usize, &'h HitRecord)]| {
+        from.iter()
+            .min_by(|a, b| {
+                distance(&a.1.rect, pos)
+                    .total_cmp(&distance(&b.1.rect, pos))
+                    .then(b.0.cmp(&a.0))
+            })
+            .map(|(_, h)| *h)
+    };
+    match exact {
+        Some((i, h)) if senses_capture(h) => {
+            let inside: Vec<_> = candidates
+                .iter()
+                .copied()
+                .filter(|(j, c)| {
+                    *j > i
+                        && c.rect.x >= h.rect.x
+                        && c.rect.y >= h.rect.y
+                        && c.rect.right() <= h.rect.right()
+                        && c.rect.bottom() <= h.rect.bottom()
+                })
+                .collect();
+            Some(nearest(&inside).unwrap_or(h))
+        }
+        Some((_, h)) => Some(nearest(&candidates).unwrap_or(h)),
+        None => nearest(&candidates),
+    }
 }
 
 /// The topmost scroll region at `pos` that `on` admits, under the rule that routes a wheel delta
@@ -192,6 +282,11 @@ struct Press {
     pan: Option<Pan>,
     /// The long press fired: the release clicks nothing.
     spent: bool,
+    /// A touch press's widget to focus once the touch is a tap, a long press or a drag (D2).
+    focus: Option<WidgetId>,
+    /// The store's overlay tag count when the press began: an overlay with a higher tag opened
+    /// after it (D3).
+    tag_floor: u32,
 }
 
 impl Press {
@@ -207,6 +302,8 @@ impl Press {
             decided: false,
             pan: None,
             spent: false,
+            focus: None,
+            tag_floor: 0,
         }
     }
 
@@ -339,6 +436,12 @@ pub(crate) struct PointerFrame {
     pub(crate) release_velocity: BTreeMap<WidgetId, (f32, f32)>,
     pub(crate) scroll_lines: BTreeMap<WidgetId, (f32, f32)>,
     pub(crate) scroll_pixels: BTreeMap<WidgetId, (f32, f32)>,
+    /// The widget a touch press moved focus to this frame: its tap, long press or drag start
+    /// came, so the press focuses it (D361).
+    pub(crate) touch_focus: Option<WidgetId>,
+    /// A long-pressed touch began to drag `(widget, overlay tag count at its press)`: an overlay
+    /// opened since dismisses (D361).
+    pub(crate) spent_drag: Option<(WidgetId, u32)>,
 }
 
 impl PointerFrame {
@@ -425,6 +528,14 @@ impl PointerState {
                     p.dragging = true;
                     out.drag_started.insert(id);
                     add(&mut out.drag_delta, id, (dx, dy));
+                    if p.kind == PointerKind::Touch {
+                        if let Some(f) = p.focus {
+                            out.touch_focus = Some(f);
+                        }
+                        if p.spent {
+                            out.spent_drag = Some((id, p.tag_floor));
+                        }
+                    }
                 }
             }
         }
@@ -441,9 +552,30 @@ impl PointerState {
         self.pos = None;
     }
 
-    /// The topmost eligible hit at `pos`.
-    pub(crate) fn target<'h>(&self, pos: (f32, f32), cx: &Ctx<'h>) -> Option<&'h HitRecord> {
-        topmost(cx.hits, pos, cx.eligible)
+    /// The eligible hit a pointer of `kind` picks at `pos`: the topmost for a mouse, the touch
+    /// target for a touch (D361).
+    pub(crate) fn target<'h>(
+        &self,
+        kind: PointerKind,
+        pos: (f32, f32),
+        cx: &Ctx<'h>,
+    ) -> Option<&'h HitRecord> {
+        if kind == PointerKind::Touch {
+            touch_target(cx.hits, pos, cx.eligible)
+        } else {
+            topmost(cx.hits, pos, cx.eligible)
+        }
+    }
+
+    /// Arms the touch press in flight: `focus` is the widget it focuses at its tap, long press or
+    /// drag start, and `tag_floor` the overlay tag count it began under (D361).
+    pub(crate) fn arm_touch(&mut self, focus: Option<WidgetId>, tag_floor: u32) {
+        if let Some(p) = &mut self.press
+            && p.kind == PointerKind::Touch
+        {
+            p.focus = focus;
+            p.tag_floor = tag_floor;
+        }
     }
 
     /// A button changed state at `pos`. Returns the id a primary press captured, if any.
@@ -457,7 +589,11 @@ impl PointerState {
         out: &mut PointerFrame,
     ) -> Option<WidgetId> {
         self.moved(pos, cx, out);
-        let target = self.target(pos, cx);
+        let kind = match (button, pressed) {
+            (PointerButton::Primary, false) => self.press.map_or(cx.kind, |p| p.kind),
+            _ => cx.kind,
+        };
+        let target = self.target(kind, pos, cx);
         match (button, pressed) {
             (PointerButton::Primary, true) => {
                 let id = target.filter(|h| senses_capture(h)).map(|h| h.id);
@@ -507,6 +643,11 @@ impl PointerState {
                 }
                 if target.map(|h| h.id) == Some(id) {
                     out.clicked.insert(id);
+                    if p.kind == PointerKind::Touch
+                        && let Some(f) = p.focus
+                    {
+                        out.touch_focus = Some(f);
+                    }
                     match self.last_click {
                         Some((last, t0))
                             if last == id && cx.time.saturating_sub(t0) < DOUBLE_CLICK =>
@@ -570,9 +711,14 @@ impl PointerState {
         out.panning = self.press.and_then(|p| p.pan).map(|p| p.region);
         out.hovered = match (captured, self.pos) {
             (_, None) => None,
-            (Some(id), Some(pos)) => self.target(pos, cx).filter(|h| h.id == id).map(|h| h.id),
+            (Some(id), Some(pos)) => {
+                let kind = self.press.map_or(cx.kind, |p| p.kind);
+                self.target(kind, pos, cx)
+                    .filter(|h| h.id == id)
+                    .map(|h| h.id)
+            }
             (None, Some(pos)) => self
-                .target(pos, cx)
+                .target(PointerKind::Mouse, pos, cx)
                 .filter(|h| h.enabled && h.sense.hover)
                 .map(|h| h.id),
         };
@@ -635,6 +781,9 @@ impl PointerState {
         {
             p.spent = true;
             out.secondary_clicked.insert(id);
+            if let Some(f) = p.focus {
+                out.touch_focus = Some(f);
+            }
         }
     }
 
