@@ -18,7 +18,8 @@ winit activates the app when it first shows a window unless the event loop is bu
 that: an app that shows popovers needs that call to leave the front alone.
 
 On Windows the window takes focus when shown (a window that does not gets no keys and no focus
-loss); elsewhere it is a plain window.
+loss); elsewhere it is a plain window. On iOS and Android there are no popover windows: a second
+window is never shown there, so [`PopoverWindow::wrap`](popover.md#method.PopoverWindow.wrap) answers `Err`.
 
 Source: `crates/lune-ui-platform/src/popover.rs:1`
 
@@ -35,7 +36,7 @@ pub struct PopoverWindow {
 
 The guard of a popover window. See the module docs.
 
-Source: `crates/lune-ui-platform/src/popover.rs:26`
+Source: `crates/lune-ui-platform/src/popover.rs:27`
 
 **Methods and associated items**
 
@@ -57,7 +58,8 @@ Source: `crates/lune-ui-platform/src/popover.rs:26`
 
   Makes `window`, still hidden, a popover window. Build it with
   `lune_ui_winit::popover_attributes`, on the main thread. A visible window, or any failure
-  of the OS step, is an `Err` and leaves the window as it was.
+  of the OS step, is an `Err` and leaves the window as it was. On iOS and Android it is always
+  an `Err`: a phone has no popover window.
 
 **Trait implementations**
 
@@ -76,5 +78,5 @@ pub fn frontmost_app() -> Option<String>
 The name of the app at the front on macOS, `None` elsewhere: how a platform smoke test sees that
 showing a popover took nothing from the user's app.
 
-Source: `crates/lune-ui-platform/src/popover.rs:75`
+Source: `crates/lune-ui-platform/src/popover.rs:77`
 

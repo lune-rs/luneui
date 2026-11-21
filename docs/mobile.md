@@ -156,6 +156,28 @@ Run 2026-11-21, `scripts/ios-sim.sh --smoke` (the demo's `--probe-clipboard`). `
 
 `simctl pbpaste` reads the device's pasteboard, never the Mac's. Unverified here: the iOS "Allow Paste" prompt for text another app put on the pasteboard (the probe reads its own text), and pasting by a person.
 
+## M4 reading: accessibility and the desktop-only modules on a phone
+
+Accessibility (D359): the demo's `access` cargo feature turns on the facade's `accesskit`; `scripts/ios-sim.sh --smoke` builds with it. `setup` creates the window hidden, makes the `AccessBridge` (a failure, or a panic caught with `catch_unwind`, is printed as `probe access err <why>` or `panic`, and the demo runs on with the null bridge, which is what every call does without the feature), then `mobile::attach_to_scene`, then shows the window (an attach shows only a window that is not hidden). Reading, iOS 18.0: `probe access ok`, `probe scene attached`, `presented 1` and the frame as before. On iOS `Window::is_visible()` answers `None`, so `AccessBridge::new`'s "window must be hidden" check (`lune-ui-winit/src/access.rs:651-653`) cannot fire there; the hidden start is for the desktop (the same demo code). The error path was not run on a phone (nothing makes the bridge fail there). Unverified here: VoiceOver (no agent can drive it), and a screen reader reading the tree.
+
+The answers of every desktop-only entry point on iOS and Android (both use the `other` files; the line numbers are the code that decides). Nothing in this table changed except the popover:
+
+| Entry point | Answer on a phone | Where |
+| --- | --- | --- |
+| `popover::PopoverWindow::wrap` | `Err("popover windows do not exist on a phone")` (changed, D359: a second winit window is never attached to a scene, so it would be invisible while `wrap` said `Ok`); macOS, Windows and Linux unchanged | `platform/other.rs:18-24` (`cfg` on `ios`, `android`), `popover.rs` `wrap` |
+| `tray::Tray::new` | `Err(TrayError::Unsupported)` | `platform/other.rs:50-52` |
+| `Tray::set_image`, `set_tooltip`, `rect`, `bar_is_dark`; `tray::set_event_handler` | unreachable (no `Tray` exists); `set_event_handler` is a no-op | `platform/other.rs:54-71` |
+| `popover::frontmost_app` (internal) | `None` | `platform/other.rs:41` |
+| `desktop::monitors`, `window_frame`, `units_per_logical` | winit's physical monitor and frame values (`work` equals `bounds`); not `Unsupported` | `platform/desktop/other.rs:13, 34, 56` |
+| `desktop::pointer`, `desktop::window_at` | `None` | `platform/desktop/other.rs:30, 64` |
+| `desktop::display_depth` | `None` | `platform/desktop/other.rs:60` |
+| `desktop::set_window_origin`, `move_windows` | `winit`'s `set_outer_position`, which iOS ignores; `move_windows` answers `Ok` | `platform/desktop/other.rs:45, 49` |
+| `desktop::set_window_shape` | `Ok(ShapeMode::Unsupported)` (`SHAPE_MODE`) | `platform/desktop/other.rs:69, 71` |
+| `group::owned_by`, `WindowGroup::add`, `set_docked`, `raise`, `minimise`, `restore` | `Ok` or no-ops: a group only records what the app asks | `platform/group/other.rs:5-21` |
+| `material::apply`, `apply_rounded` | `Err("no OS glass on this platform; use the opaque material")` for a glass material, `Ok` for the opaque one; `BEST_SUPPORTED` is `Opaque` | `material/other.rs:6-23` |
+
+Windows on a phone: the toolkit's own glass (`Painter::acrylic`, `frost`, `backdrop`) is drawn by the renderer and works on the phone (the demo's frost panel); only the OS material is absent.
+
 ## Unverified here
 
 - A real device: 120 Hz (the simulator reports 60000 mHz), the GPU's cost (glass blur), thermal behaviour, the real safe area of other models, landscape and the Dynamic Island's insets.

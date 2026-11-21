@@ -13,7 +13,8 @@
 #   --smoke         --probe, and also require `probe scene attached` by the demo's frame 30 (its third
 #                   `probe scene` line) and, in launch 1's output, `probe lifecycle resumed` at launch, then
 #                   `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
-#                   It also requires the demo's clipboard probe (`--probe-clipboard`: a write on frame 2, a read
+#                   The demo is built with `--features access`; the run requires `probe access ok` (the bridge
+#                   made on the hidden window, then the window shown). It also requires the demo's clipboard probe (`--probe-clipboard`: a write on frame 2, a read
 #                   on frame 4) to read back what it wrote and `xcrun simctl pbpaste` to print the same text,
 #                   and every `probe safe_area_event` line to be 0,62,0,34 (the iOS 18.0 portrait
 #                   safe area; not judged with --landscape) and no `presented` line between `probe lifecycle
@@ -153,7 +154,12 @@ if [ -z "$UDID" ]; then
 fi
 
 echo "ios-sim: building demo for $TARGET"
-IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build -p demo --target "$TARGET" || fail "build"
+# A smoke run builds the demo with the accessibility bridge (`--features access`, D359).
+build_features=()
+if [ "$smoke" -eq 1 ]; then
+  build_features=(--features access)
+fi
+IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build -p demo --target "$TARGET" ${build_features[@]+"${build_features[@]}"} || fail "build"
 BIN="${CARGO_TARGET_DIR:-$ROOT/target}/$TARGET/debug/demo"
 [ -f "$BIN" ] || fail "no binary at $BIN"
 
@@ -267,6 +273,11 @@ if [ "$smoke" -eq 1 ]; then
     [ "$(grep '^probe safe_area_event ' "$OUT/stdout.log" | sort -u)" = "probe safe_area_event 0,62,0,34" ] \
       || fail "'probe safe_area_event' is not 0,62,0,34 on every line"
   fi
+  # The accessibility bridge (D359): made on the hidden window before the attach, then the window is
+  # shown; `probe access ok` and a presented frame (the checks above) mean the demo draws with it on.
+  grep '^probe access ' "$OUT/stdout.log" | head -n 1 || true
+  [ "$(grep '^probe access ' "$OUT/stdout.log" | head -n 1)" = "probe access ok" ] \
+    || fail "no 'probe access ok' (the accessibility bridge was not made)"
   # The clipboard (D358): the demo writes `luneui-probe-<pid>` through the frame's clipboard
   # request on frame 2 and reads it back on frame 4; the read must equal the write and the
   # simulator's pasteboard (`simctl pbpaste`, the device's, never the Mac's).

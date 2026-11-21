@@ -1,13 +1,25 @@
-//! Platforms without a tray: the item is refused, the popover window is a plain window.
+//! Platforms without a tray: the item is refused, the popover window is a plain window (on a
+//! phone there is none: `wrap` refuses).
 
 use winit::window::Window;
 
 use crate::tray::{TrayError, TrayEvent, TrayImage, TrayRect};
 
+// On a phone `wrap` never builds one, so the rest of the type is unused there.
 #[derive(Debug)]
+#[cfg_attr(any(target_os = "ios", target_os = "android"), allow(dead_code))]
 pub(crate) struct Panel;
 
+#[cfg_attr(any(target_os = "ios", target_os = "android"), allow(dead_code))]
 impl Panel {
+    /// A phone has no popover window: a second window is never attached to a scene (iOS) or shown
+    /// beside the app (Android), so it would be invisible while `wrap` answered `Ok` (D359).
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    pub(crate) fn wrap(_window: &Window) -> Result<Self, String> {
+        Err("popover windows do not exist on a phone".into())
+    }
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     pub(crate) fn wrap(_window: &Window) -> Result<Self, String> {
         Ok(Self)
     }

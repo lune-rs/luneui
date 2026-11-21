@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{StartCause, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowId};
 
 use lune_ui::clipboard::Clipboard;
@@ -36,6 +36,98 @@ use lune_ui::ui::{FrameConfig, Ui, UiStore};
 use lune_ui::widgets::button::ButtonKind;
 use lune_ui::widgets::field::FieldState;
 use lune_ui::widgets::label::LabelRole;
+
+/// The accessibility bridge, behind the `access` feature. Without the feature every call is a
+/// no-op, which is the null bridge: the demo runs, with nothing for a screen reader.
+#[cfg(feature = "access")]
+mod access {
+    use std::panic::{AssertUnwindSafe, catch_unwind};
+
+    use lune_ui::access::{AccessBridge, RootInfo};
+    use lune_ui::input::{FrameOutput, Translator};
+    use winit::event::WindowEvent;
+    use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+    use winit::window::Window;
+
+    /// The bridge, or none when it could not be made.
+    #[derive(Debug)]
+    pub(crate) struct Access(Option<AccessBridge>);
+
+    impl Access {
+        /// Makes the bridge for `window`, which must still be hidden, and says how it went for
+        /// `probe access`: `ok`, `err <why>` or `panic`. A failure leaves the null bridge.
+        pub(crate) fn new(
+            event_loop: &ActiveEventLoop,
+            window: &Window,
+            proxy: EventLoopProxy<()>,
+        ) -> (Self, String) {
+            // A wake only posts to the event loop, which then draws a frame.
+            let made = catch_unwind(AssertUnwindSafe(|| {
+                AccessBridge::new(event_loop, window, move || {
+                    let _ = proxy.send_event(());
+                })
+            }));
+            match made {
+                Ok(Ok(bridge)) => (Self(Some(bridge)), "ok".to_owned()),
+                Ok(Err(e)) => (Self(None), format!("err {e}")),
+                Err(_) => (Self(None), "panic".to_owned()),
+            }
+        }
+
+        pub(crate) fn window_event(&mut self, window: &Window, event: &WindowEvent) {
+            if let Some(bridge) = &mut self.0 {
+                bridge.window_event(window, event);
+            }
+        }
+
+        pub(crate) fn drain(&self, translator: &mut Translator) {
+            if let Some(bridge) = &self.0 {
+                bridge.drain(translator);
+            }
+        }
+
+        pub(crate) fn update(&mut self, out: &FrameOutput, title: &str, scale: f64) {
+            if let Some(bridge) = &mut self.0 {
+                let root = RootInfo {
+                    title: title.to_owned(),
+                    scale,
+                };
+                bridge.update(out, &root);
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "access"))]
+mod access {
+    use lune_ui::input::{FrameOutput, Translator};
+    use winit::event::WindowEvent;
+    use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+    use winit::window::Window;
+
+    /// The null bridge.
+    #[derive(Debug)]
+    pub(crate) struct Access;
+
+    impl Access {
+        pub(crate) fn new(
+            _event_loop: &ActiveEventLoop,
+            _window: &Window,
+            _proxy: EventLoopProxy<()>,
+        ) -> (Self, String) {
+            (Self, "off".to_owned())
+        }
+
+        pub(crate) fn window_event(&mut self, _window: &Window, _event: &WindowEvent) {}
+
+        pub(crate) fn drain(&self, _translator: &mut Translator) {}
+
+        pub(crate) fn update(&mut self, _out: &FrameOutput, _title: &str, _scale: f64) {}
+    }
+}
+
+/// The window's title, which is also the accessibility tree's root label.
+const TITLE: &str = "luneui demo";
 
 const UI_FONT: &str = "RznSans";
 const MONO_FONT: &str = "RobotoMono Nerd Font Mono";
@@ -196,6 +288,7 @@ struct Shown {
     translator: Translator,
     output: OutputState,
     keyboard: KeyboardInset,
+    access: access::Access,
 }
 
 struct App {
@@ -207,6 +300,8 @@ struct App {
     start: Instant,
     presented: u32,
     taps: u32,
+    /// Wakes the loop for the accessibility bridge.
+    proxy: EventLoopProxy<()>,
     /// The clipboard: the phone's pasteboard on iOS, the OS clipboard elsewhere.
     clipboard: Clipboard,
     /// What the text field holds.
@@ -228,18 +323,30 @@ fn setup(
     event_loop: &ActiveEventLoop,
     options: Options,
     keyboard_changed: Rc<Cell<bool>>,
+    proxy: EventLoopProxy<()>,
 ) -> Result<Shown, String> {
     let probe = options.probe;
     let attrs = Window::default_attributes()
-        .with_title("luneui demo")
-        .with_inner_size(LogicalSize::new(PHONE.0, PHONE.1));
+        .with_title(TITLE)
+        .with_inner_size(LogicalSize::new(PHONE.0, PHONE.1))
+        // The accessibility bridge wants a window that was never shown: with the feature the
+        // window starts hidden and is shown after the scene attach.
+        .with_visible(!cfg!(feature = "access"));
     let window = Arc::new(
         event_loop
             .create_window(attrs)
             .map_err(|e| format!("window: {e}"))?,
     );
+    // The bridge goes before the attach (it wants the window hidden); a failure is recorded and
+    // the demo runs without one.
+    let (access, access_state) = access::Access::new(event_loop, &window, proxy);
+    probe_line("access", access_state);
     // Under the iOS scene life cycle the window shows only once it belongs to a window scene.
     probe_scene(&window, options.scene_attach);
+    if cfg!(feature = "access") {
+        // An attach shows only a window that is not hidden, so the app shows this one itself.
+        window.set_visible(true);
+    }
     let instance = gpu::instance(Some(Box::new(event_loop.owned_display_handle())));
     let surface = instance
         .create_surface(window.clone())
@@ -281,6 +388,7 @@ fn setup(
         translator,
         output: OutputState::new(),
         keyboard,
+        access,
     })
 }
 
@@ -302,6 +410,7 @@ impl App {
             translator,
             output,
             keyboard,
+            access,
         } = shown;
         let target = match surface.acquire(gpu)? {
             Acquired::Frame(t) => t,
@@ -316,6 +425,7 @@ impl App {
         let scale = window.scale_factor();
         translator.scale_factor(scale);
         let s = scale as f32;
+        access.drain(translator);
         let mut input = translator.take(self.start.elapsed());
         if self.options.probe_clipboard {
             for event in &input.events {
@@ -388,6 +498,7 @@ impl App {
             event_loop.exit();
         }
         self.clipboard.service(&out, translator);
+        access.update(&out, TITLE, scale);
         if !out.clipboard.is_empty() {
             // A read's reply arrives in the next frame's input.
             self.want_frame = true;
@@ -533,7 +644,12 @@ impl ApplicationHandler for App {
             shown.window.request_redraw();
             return;
         }
-        match setup(event_loop, self.options, self.keyboard_changed.clone()) {
+        match setup(
+            event_loop,
+            self.options,
+            self.keyboard_changed.clone(),
+            self.proxy.clone(),
+        ) {
             Ok(shown) => {
                 shown.window.request_redraw();
                 self.shown = Some(shown);
@@ -584,6 +700,11 @@ impl ApplicationHandler for App {
         }
     }
 
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        // The accessibility bridge asked for a frame.
+        self.want_frame = true;
+    }
+
     fn memory_warning(&mut self, _event_loop: &ActiveEventLoop) {
         if self.options.probe {
             probe_line("lifecycle", "memory_warning");
@@ -600,6 +721,7 @@ impl ApplicationHandler for App {
         }
         if let Some(shown) = &mut self.shown {
             shown.translator.window_event(&event);
+            shown.access.window_event(&shown.window, &event);
         }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -640,6 +762,7 @@ impl ApplicationHandler for App {
 /// Runs the demo on `event_loop` until its window closes. On iOS `run_app` never returns.
 pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     let mut app = App {
+        proxy: event_loop.create_proxy(),
         options,
         shown: None,
         store: UiStore::default(),
