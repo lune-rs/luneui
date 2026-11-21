@@ -20,7 +20,7 @@ Toast stack and notification history, as Lunegit ships them. Toasts sit bottom-r
 
 ## Existing code
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/MainWindow.axaml`
 - `src/Lunegit.Desktop/Services/NotificationService.cs`
 - `src/Lunegit.Desktop/Views/SidePanels/NotificationHistoryPanelView.axaml`

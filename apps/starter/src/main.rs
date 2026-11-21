@@ -87,7 +87,7 @@ impl Core {
 
 /// The fonts the app supplies (the toolkit bundles none); these are the gallery's files.
 fn text_cache() -> TextCache {
-    TextCache::new(
+    TextCache::new_static(
         &[
             include_bytes!("../../gallery/assets/RobotoMonoNerdFontMono-Regular.ttf").as_slice(),
             include_bytes!("../../gallery/assets/RznSans-Regular.ttf"),

@@ -21,7 +21,7 @@ Lunegit's global search dialog, renamed to the command palette (D11, D42): a 640
 
 `crates/lune-ui-core/src/widgets/command_palette.rs` (`Ui::command_palette`, `Palette`, `PaletteSection`, `PaletteRow`, `PaletteResponse`), on `Ui::filter_bar`, `Ui::scroll_area`, `Ui::tooltip` and `dialog::modal_host`. Tests: `crates/lune-ui-core/tests/widget_command_palette.rs`. Page: `apps/gallery/src/pages/command_palette.rs`.
 
-Lunegit (`~/Projects/AvaloniaApps/Project Lunegit`, HEAD 33a1dd4), paths relative to the repo root:
+Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Views/Dialogs/GlobalSearchDialogView.axaml`, `GlobalSearchDialogView.axaml.cs:19-42` (Escape, Up and Down with wrap, Enter)
 
 Moved code: none.

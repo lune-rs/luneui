@@ -54,7 +54,7 @@ n/a — no input.
 ### Retained state
 
 - Persistent: the shaped-buffer cache, keyed by `cache_key` [R crates/lune-ui-wgpu/src/text_cache.rs:19-31].
-- App-owned: the font data, passed in at `TextCache::new` [R crates/lune-ui-wgpu/src/text_cache.rs:31].
+- App-owned: the font data, passed in at `TextCache::new_static` for bundled `include_bytes!` fonts (a reference, no copy, D409) or `TextCache::new` for bytes read at run time (copied) [R crates/lune-ui-wgpu/src/text_cache.rs].
 
 ### Accessibility
 
