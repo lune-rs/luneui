@@ -4830,6 +4830,19 @@ mod m10 {
                         ui.painter().fill(r, 0.0, c);
                     },
                 );
+                // A pull to refresh holding its band (D375): the spinner's glyph from the theme.
+                ui.pull_to_refresh(
+                    "refresh",
+                    Rect::new(0.0, 0.0, 200.0, 300.0),
+                    true,
+                    &lune_ui_core::widgets::scroll_area::ScrollOptions::default(),
+                    |_, _| {
+                        (
+                            (),
+                            lune_ui_core::widgets::scroll_area::Extent::new(200.0, 300.0),
+                        )
+                    },
+                );
                 let rows = [PaletteRow {
                     key: 1,
                     text: "Reload",

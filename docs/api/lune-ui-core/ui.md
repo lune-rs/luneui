@@ -1097,6 +1097,26 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.pull_to_refresh"></a>
+
+  ```rust
+  pub fn pull_to_refresh<R>(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      refreshing: bool,
+      opts: &ScrollOptions,
+      content: impl FnOnce(&mut Ui<'_>, &ScrollView) -> (R, Extent),
+  ) -> RefreshResponse<R>
+  ```
+
+  A scroll area under `key` over `rect` (as [`Ui::scroll_area`](ui.md#method.Ui.scroll_area), with the same `opts` and
+  `content`) that refreshes on a pull: see the module docs. `refreshing` is whether the
+  app's refresh is running; while it is, the area starts [`BAND`](widgets/pull_to_refresh.md#constant.BAND) px lower and shows the
+  spinner above.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.radio_group"></a>
 
   ```rust

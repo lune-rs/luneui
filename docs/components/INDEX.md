@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 109 |
+| done | 110 |
 | external | 4 |
-| **total** | **115** |
+| **total** | **116** |
 
 ## core
 
@@ -122,6 +122,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [layout.page](layout/page.md) | Page card (header, scroll body, footer) | done | wane | The card that holds a screen: header with title and actions, scrolling body, optional pinned footer |
 | [layout.pager](layout/pager.md) | Pager | done | any | Pager of a phone screen: pages side by side that a finger swipes between one at a time with a rubber band at the ends, and a row of dots with one tab stop |
 | [layout.panel](layout/panel.md) | Panel (group box) | done | wane | Outline-only group box with title, meta, body and action footer |
+| [layout.pull-to-refresh](layout/pull-to-refresh.md) | Pull to refresh | done | any | Pull to refresh of a phone list: a scroll area that reports refresh when a finger pulls its content 64 px past the top and lets go, and holds a spinner in a 56 px band while the app refreshes |
 | [layout.recipes](layout/recipes.md) | Screen design recipes | done | any | Seven screens (list, table, panel, page, sidebar, form, dialog) built from the composites and the layout functions, each a function to copy and a scene to dump at any window size |
 | [layout.scroll-area](layout/scroll-area.md) | Scroll area | done | any | Scrolling region: per-id offset, wheel and trackpad scrolling, scroll-into-view, follow-tail, offset kept across content replacement |
 | [layout.settings-page](layout/settings-page.md) | Settings page layout | done | luneterm | Settings page shell: a 20 px content host for the current section, a restart banner that reveals on demand, and the rows and sections built from toolkit widgets |

@@ -848,6 +848,15 @@ impl Ui<'_> {
         self.transient::<Requests>(id).shift_x += by;
     }
 
+    /// What the area under `id` showed past its ends when its last call ended, as the area stores
+    /// it: the content is drawn translated by the negative of it, so a pull past the top is
+    /// negative on y. `(0, 0)` for an area that has not run or sits in range. The pull to
+    /// refresh reads it (D375).
+    pub(crate) fn scroll_overscroll(&mut self, id: WidgetId) -> (f32, f32) {
+        let over = self.persistent::<ScrollState>(id).over;
+        (over[0], over[1])
+    }
+
     /// The state of the scroll link `group`, with the asking pane counted among the frame's.
     fn link_drawn(&mut self, group: WidgetId) -> &mut LinkState {
         let frame = self.frame_number();

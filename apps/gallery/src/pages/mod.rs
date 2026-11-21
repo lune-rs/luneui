@@ -56,6 +56,7 @@ mod pie_chart;
 mod popover;
 mod primitives;
 mod progress;
+mod pull_to_refresh;
 mod radio_group;
 mod recipes;
 pub(crate) mod reference;
@@ -200,6 +201,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &nav_stack::PAGE,
     &pager::PAGE,
     &swipe_actions::PAGE,
+    &pull_to_refresh::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

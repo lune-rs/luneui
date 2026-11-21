@@ -37,6 +37,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("luneui.tab-bar.name", "Tabs"),
     ("luneui.pager.dots", "Pages"),
     ("luneui.pager.dot", "Page {0} of {1}"),
+    ("luneui.refresh.busy", "Refreshing"),
     ("luneui.verdict-row.ok", "OK"),
     ("luneui.verdict-row.warn", "WARN"),
     ("luneui.verdict-row.no", "NO"),

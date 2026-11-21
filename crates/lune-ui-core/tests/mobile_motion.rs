@@ -771,3 +771,135 @@ mod swipe {
         swipe_row("swipe full", true, false, 395.0, -30.0, 10, 0.0);
     }
 }
+
+// ---- pull to refresh (step 7, D375) --------------------------------------------------------
+
+mod refresh {
+    use super::*;
+    use lune_ui_core::access::{Node, Role};
+    use lune_ui_core::input::Repaint;
+    use lune_ui_core::paint::Rect;
+    use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
+
+    const PHONE: (f32, f32) = (402.0, 874.0);
+    const AREA: Rect = Rect::new(0.0, 106.0, 402.0, 734.0);
+    const STEP: Time = Duration::from_millis(16);
+    const END: Time = Duration::from_millis(1800);
+    /// Where the first row's top rests while the band is open: the rect's top and the band.
+    const HELD: f32 = 106.0 + 56.0;
+
+    /// A refreshing list in a real `Ui`, driven by app time. The app starts its refresh on
+    /// `refresh` (the flag shows from the next frame); it reads the first row node's top. The
+    /// turning spinner asks for frames at the busy cadence, which is not the motion: a frame is
+    /// moving when it asks to be drawn again at once.
+    struct Rig {
+        s: UiSampler,
+        refreshing: bool,
+    }
+
+    impl Rig {
+        fn new(refreshing: bool) -> Rig {
+            Rig {
+                s: UiSampler::new(PHONE, Time::ZERO),
+                refreshing,
+            }
+        }
+
+        fn frame(&mut self, at: Time) -> (f32, bool) {
+            self.s.h.input.set_time(at);
+            let refreshing = self.refreshing;
+            let mut fired = false;
+            let (_, out) = self.s.h.frame(|ui| {
+                let res = ui.pull_to_refresh(
+                    "list",
+                    AREA,
+                    refreshing,
+                    &ScrollOptions::default(),
+                    |ui, view| {
+                        let r = Rect::new(view.viewport.x, view.viewport.y, view.viewport.w, 64.0);
+                        ui.node(Node::new(
+                            WidgetId::ROOT.with("first"),
+                            Role::Group,
+                            "first",
+                            r,
+                        ));
+                        ((), Extent::new(402.0, 64.0 * 30.0))
+                    },
+                );
+                fired = res.refresh;
+            });
+            if fired {
+                self.refreshing = true;
+            }
+            let y = out
+                .tree
+                .get(WidgetId::ROOT.with("first"))
+                .map(|n| n.bounds.y);
+            (y.unwrap_or(f32::NAN), out.repaint == Repaint::Now)
+        }
+
+        fn run(&mut self, from: Time, until: Time) -> Time {
+            let mut t = from;
+            while t <= until {
+                self.frame(t);
+                t += STEP;
+            }
+            t
+        }
+    }
+
+    /// Runs the row's sampler at 60 Hz and checks it moved and ended on `target`.
+    fn check(row: &str, target: f32, make: impl Fn() -> Sampler<'static>) {
+        let fastest = vmax(make(), END);
+        assert!(fastest > 50.0, "{row}: the scan reads {fastest} px/s");
+        let mut sampler = make();
+        let mut end = sampler(Time::ZERO).0;
+        let mut t = STEP;
+        while t <= END {
+            end = sampler(t).0;
+            t += STEP;
+        }
+        assert!((end - target).abs() < 0.5, "{row}: ends at {end}");
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn the_release_into_the_hold_conforms_at_60_and_120() {
+        let make = || -> Sampler<'static> {
+            let mut rig = Rig::new(false);
+            let mut at = rig.run(Time::ZERO, Duration::from_millis(100));
+            let (x, y0) = (200.0, 300.0);
+            rig.s.h.input.touch_start(1, x, y0);
+            rig.frame(at);
+            // 200 px of travel, 10 a frame, then the finger rests for a frame.
+            for i in 1..=20 {
+                at += STEP;
+                rig.s.h.input.touch_move(1, x, y0 + 10.0 * i as f32);
+                rig.frame(at);
+            }
+            at += STEP;
+            rig.frame(at);
+            let origin = at + STEP;
+            let mut first = true;
+            Box::new(move |t| {
+                if first {
+                    first = false;
+                    rig.s.h.input.touch_end(1, x, y0 + 200.0);
+                }
+                rig.frame(origin + t)
+            })
+        };
+        check("refresh hold", HELD, make);
+    }
+
+    #[test]
+    fn the_band_closing_after_the_flag_drops_conforms_at_60_and_120() {
+        let make = || -> Sampler<'static> {
+            let mut rig = Rig::new(true);
+            let origin = rig.run(Time::ZERO, Duration::from_millis(100));
+            rig.refreshing = false;
+            Box::new(move |t| rig.frame(origin + t))
+        };
+        check("refresh close", 106.0, make);
+    }
+}

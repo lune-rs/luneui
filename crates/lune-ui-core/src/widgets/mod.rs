@@ -38,6 +38,7 @@ pub mod panel;
 pub mod pie_chart;
 pub mod popover;
 pub mod progress;
+pub mod pull_to_refresh;
 pub mod radio_group;
 pub mod row;
 pub mod scroll_area;

@@ -159,6 +159,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "nav-stack",
             "pager",
             "swipe-actions",
+            "pull-to-refresh",
         ],
     },
 ];
