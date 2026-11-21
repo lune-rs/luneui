@@ -152,7 +152,7 @@ pub(crate) const GROUPS: &[Group] = &[
     // The phone components (milestone 6): a group of its own after Labs, so no row above moves.
     Group {
         name: "Mobile",
-        pages: &["nav-bar", "tab-bar", "bottom-sheet", "nav-stack"],
+        pages: &["nav-bar", "tab-bar", "bottom-sheet", "nav-stack", "pager"],
     },
 ];
 

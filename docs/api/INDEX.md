@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-98 modules, 1134 items. Left out and counted: 3548 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5112 items of the omitted impls, 1369 items of the trait impls shown as one line, 2376 synthetic impls.
+99 modules, 1136 items. Left out and counted: 3566 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5138 items of the omitted impls, 1375 items of the trait impls shown as one line, 2388 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -77,6 +77,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::nav_item`](lune-ui-core/widgets/nav_item.md) | 14 |
 | [`lune_ui_core::widgets::nav_stack`](lune-ui-core/widgets/nav_stack.md) | 1 |
 | [`lune_ui_core::widgets::page`](lune-ui-core/widgets/page.md) | 16 |
+| [`lune_ui_core::widgets::pager`](lune-ui-core/widgets/pager.md) | 2 |
 | [`lune_ui_core::widgets::panel`](lune-ui-core/widgets/panel.md) | 15 |
 | [`lune_ui_core::widgets::pie_chart`](lune-ui-core/widgets/pie_chart.md) | 6 |
 | [`lune_ui_core::widgets::popover`](lune-ui-core/widgets/popover.md) | 7 |
@@ -932,6 +933,8 @@ Every top-level item of the four owning crates, by name.
 - [`PAD_Y`](lune-ui-core/widgets/icon_rail.md#constant.PAD_Y) - constant, `lune_ui_core::widgets::icon_rail`
 - [`PADDING`](lune-ui-core/widgets/filter_bar.md#constant.PADDING) - constant, `lune_ui_core::widgets::filter_bar`
 - [`PageOptions`](lune-ui-core/widgets/page.md#struct.PageOptions) - struct, `lune_ui_core::widgets::page`
+- [`PagerOptions`](lune-ui-core/widgets/pager.md#struct.PagerOptions) - struct, `lune_ui_core::widgets::pager`
+- [`PagerResponse`](lune-ui-core/widgets/pager.md#struct.PagerResponse) - struct, `lune_ui_core::widgets::pager`
 - [`PageSlot`](lune-ui-core/widgets/page.md#enum.PageSlot) - enum, `lune_ui_core::widgets::page`
 - [`paint`](lune-ui-core/widgets/badge.md#fn.paint) - function, `lune_ui_core::widgets::badge`
 - [`paint`](lune-ui-core/widgets/button.md#fn.paint) - function, `lune_ui_core::widgets::button`

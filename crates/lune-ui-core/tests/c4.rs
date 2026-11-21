@@ -4800,6 +4800,19 @@ mod m10 {
                     let c = ui.theme().surface_selected;
                     ui.painter().fill(r, 0.0, c);
                 });
+                // A pager (D373): the page's own fill and the dots, the current one in the accent.
+                let mut pager_page = 1;
+                ui.pager(
+                    "pager",
+                    Rect::new(0.0, 0.0, 200.0, 300.0),
+                    3,
+                    &mut pager_page,
+                    &lune_ui_core::widgets::pager::PagerOptions::new("Pager"),
+                    |ui, _, r| {
+                        let c = ui.theme().surface_selected;
+                        ui.painter().fill(r, 0.0, c);
+                    },
+                );
                 let rows = [PaletteRow {
                     key: 1,
                     text: "Reload",

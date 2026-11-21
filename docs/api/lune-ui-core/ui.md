@@ -1041,6 +1041,27 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.pager"></a>
+
+  ```rust
+  pub fn pager(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      count: usize,
+      page: &mut usize,
+      opts: &PagerOptions<'_>,
+      draw: impl FnMut(&mut Ui<'_>, usize, Rect),
+  ) -> PagerResponse
+  ```
+
+  A pager under `key` over `rect`: `count` pages, `*page` the current one (clamped to the
+  last), `draw(ui, index, rect)` drawing page `index` in the rect it is given, which moves
+  while the pages do. With no pages it draws nothing. See the module docs for the gestures,
+  the motion and the dots; the node is a `Group` named by `opts.name`.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.panel"></a>
 
   ```rust

@@ -35,6 +35,8 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("luneui.tab-strip.new", "New tab"),
     ("luneui.tab-strip.close", "Close tab"),
     ("luneui.tab-bar.name", "Tabs"),
+    ("luneui.pager.dots", "Pages"),
+    ("luneui.pager.dot", "Page {0} of {1}"),
     ("luneui.verdict-row.ok", "OK"),
     ("luneui.verdict-row.warn", "WARN"),
     ("luneui.verdict-row.no", "NO"),

@@ -43,6 +43,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`nav_item`](widgets/nav_item.md) - A navigation item and the list that owns the group (`widget.nav-item`, D121).
 - [`nav_stack`](widgets/nav_stack.md) - The navigation stack of a phone app (`layout.nav-stack`, D372): the levels of a drill-down, the top one drawn, pushed in from the right edge, popped back out by a call or by a finger's swipe from the ...
 - [`page`](widgets/page.md) - The page card (`layout.page`, D148): header, a vertically scrolling body and an optional pinned footer, with a keyed swap of the body.
+- [`pager`](widgets/pager.md) - The pager of a phone screen (`layout.pager`, D373): pages side by side that a finger swipes between, with a row of dots under them.
 - [`panel`](widgets/panel.md) - The panel (`layout.panel`, D148): an outlined group box with a title and a meta line, a body in one of five kinds and an optional action footer.
 - [`pie_chart`](widgets/pie_chart.md) - The pie chart (`data.pie-chart`, D164, D166): a fan of sectors with value transitions.
 - [`popover`](widgets/popover.md) - Anchored placement ([`place`](widgets/popover.md#fn.place)) and the popover ([`Ui::popover`](ui.md#method.Ui.popover)): a rect of known size next to an anchor, flipped and shifted to stay inside the w...

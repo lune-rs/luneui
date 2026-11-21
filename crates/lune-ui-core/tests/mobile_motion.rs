@@ -499,3 +499,129 @@ mod stack {
         swipe_row("stack swipe springing back", 4.0, 12, 0.0);
     }
 }
+
+// ---- the pager (step 5, D373) --------------------------------------------------------------
+
+mod pager {
+    use super::*;
+    use lune_ui_core::access::{Node, Role};
+    use lune_ui_core::input::Repaint;
+    use lune_ui_core::paint::Rect;
+    use lune_ui_core::widgets::pager::PagerOptions;
+
+    const PHONE: (f32, f32) = (402.0, 874.0);
+    const W: f32 = 402.0;
+    const STEP: Time = Duration::from_millis(16);
+    const END: Time = Duration::from_millis(1800);
+
+    /// Three pages over the whole window in a real `Ui`, driven by app time. It reads the node
+    /// left edge of page `watch` (`W` while that page is not drawn: it is to the right of the
+    /// window).
+    struct Rig {
+        s: UiSampler,
+        page: usize,
+        watch: usize,
+    }
+
+    impl Rig {
+        fn new(watch: usize) -> Rig {
+            Rig {
+                s: UiSampler::new(PHONE, Time::ZERO),
+                page: 0,
+                watch,
+            }
+        }
+
+        fn frame(&mut self, at: Time) -> (f32, bool) {
+            self.s.h.input.set_time(at);
+            let page = &mut self.page;
+            let (_, out) = self.s.h.frame(|ui| {
+                ui.pager(
+                    "pager",
+                    Rect::new(0.0, 0.0, PHONE.0, PHONE.1),
+                    3,
+                    page,
+                    &PagerOptions::new("Pages").with_dots(false),
+                    |ui, i, r| {
+                        let t = *ui.theme();
+                        ui.painter().fill(r, 0.0, t.surface_overlay);
+                        ui.node(Node::new(
+                            WidgetId::ROOT.with(("page", i)),
+                            Role::Group,
+                            "page",
+                            r,
+                        ));
+                    },
+                );
+            });
+            let x = out
+                .tree
+                .get(WidgetId::ROOT.with(("page", self.watch)))
+                .map(|n| n.bounds.x);
+            (x.unwrap_or(W), out.repaint != Repaint::Idle)
+        }
+
+        fn run(&mut self, from: Time, until: Time) -> Time {
+            let mut t = from;
+            while t <= until {
+                self.frame(t);
+                t += STEP;
+            }
+            t
+        }
+    }
+
+    /// A finger down at 350 px moving by `dx` every 16 ms for `moves` frames; the last move and
+    /// the lift are the grid's first frame. `watch` is the page whose left edge is read.
+    fn swipe_row(row: &str, watch: usize, dx: f32, moves: u32, target: f32) {
+        let make = move || -> Sampler<'static> {
+            let mut rig = Rig::new(watch);
+            let mut at = rig.run(Time::ZERO, Duration::from_millis(100));
+            let (x0, y) = (350.0, 400.0);
+            rig.s.h.input.touch_start(1, x0, y);
+            rig.frame(at);
+            for i in 1..moves {
+                at += STEP;
+                rig.s.h.input.touch_move(1, x0 + dx * i as f32, y);
+                rig.frame(at);
+            }
+            let last = x0 + dx * moves as f32;
+            let origin = at + STEP;
+            let mut first = true;
+            Box::new(move |t| {
+                if first {
+                    first = false;
+                    rig.s.h.input.touch_move(1, last, y);
+                    rig.s.h.input.touch_end(1, last, y);
+                }
+                rig.frame(origin + t)
+            })
+        };
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn a_fling_release_to_the_next_page_conforms_at_60_and_120() {
+        // 30 px a frame: 1875 px/s, one page at most.
+        swipe_row("pager fling", 1, -30.0, 5, 0.0);
+    }
+
+    #[test]
+    fn a_short_release_springing_back_conforms_at_60_and_120() {
+        // 48 px of travel at 250 px/s: the coast does not reach the middle.
+        swipe_row("pager spring back", 0, -4.0, 12, 0.0);
+    }
+
+    #[test]
+    fn an_app_set_page_conforms_at_60_and_120() {
+        let make = || -> Sampler<'static> {
+            let mut rig = Rig::new(1);
+            let origin = rig.run(Time::ZERO, Duration::from_millis(100));
+            Box::new(move |t| {
+                rig.page = 1;
+                rig.frame(origin + t)
+            })
+        };
+        assert_conforms("pager app-set page", END, 0.0, make);
+    }
+}

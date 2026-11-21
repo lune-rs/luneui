@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 107 |
+| done | 108 |
 | external | 4 |
-| **total** | **113** |
+| **total** | **114** |
 
 ## core
 
@@ -119,6 +119,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [layout.icon-rail](layout/icon-rail.md) | Icon rail | done | lunegit | Narrow icon column of 40 px toolbar buttons that switch the side panels and toggle the terminal, with a notification badge |
 | [layout.nav-stack](layout/nav-stack.md) | Navigation stack | done | any | Navigation stack of a phone app: the app's levels, the top one pushed in from the right, popped back out by a call or an edge swipe, the level below following by a third with a shade and a shadow |
 | [layout.page](layout/page.md) | Page card (header, scroll body, footer) | done | wane | The card that holds a screen: header with title and actions, scrolling body, optional pinned footer |
+| [layout.pager](layout/pager.md) | Pager | done | any | Pager of a phone screen: pages side by side that a finger swipes between one at a time with a rubber band at the ends, and a row of dots with one tab stop |
 | [layout.panel](layout/panel.md) | Panel (group box) | done | wane | Outline-only group box with title, meta, body and action footer |
 | [layout.recipes](layout/recipes.md) | Screen design recipes | done | any | Seven screens (list, table, panel, page, sidebar, form, dialog) built from the composites and the layout functions, each a function to copy and a scene to dump at any window size |
 | [layout.scroll-area](layout/scroll-area.md) | Scroll area | done | any | Scrolling region: per-id offset, wheel and trackpad scrolling, scroll-into-view, follow-tail, offset kept across content replacement |

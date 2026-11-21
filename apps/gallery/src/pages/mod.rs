@@ -50,6 +50,7 @@ pub(crate) mod motion;
 mod nav_bar;
 mod nav_item;
 mod nav_stack;
+mod pager;
 mod panel;
 mod pie_chart;
 mod popover;
@@ -196,6 +197,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &tab_bar::PAGE,
     &bottom_sheet::PAGE,
     &nav_stack::PAGE,
+    &pager::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a
