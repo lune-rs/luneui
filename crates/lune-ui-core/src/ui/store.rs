@@ -12,6 +12,21 @@ use super::focus::FocusState;
 use super::overlay::OverlayRec;
 use super::pointer::{HitRecord, PointerState};
 use crate::access::SemanticTree;
+use crate::text_edit::{EditActions, EditCommand};
+
+/// The edit commands an app queued for one text widget ([`super::Ui::edit_command`], D364) and
+/// what the widget last said of its state ([`super::Ui::edit_actions`]). A transient entry: the
+/// widget stamps it each frame it runs, so it outlives an undrawn frame by one at most.
+#[derive(Debug, Default)]
+pub(crate) struct EditRequests {
+    /// Each queued command with the frame it is due in; one due in a frame the widget was not
+    /// called in is dropped, never applied later.
+    pub(crate) queued: Vec<(u64, EditCommand)>,
+    /// The last frame the widget took its commands in.
+    pub(crate) ran: Option<u64>,
+    /// The actions the widget published, with the frame it published them in.
+    pub(crate) actions: Option<(u64, EditActions)>,
+}
 
 /// One retained value and the frame that last used it.
 pub(crate) struct Entry {

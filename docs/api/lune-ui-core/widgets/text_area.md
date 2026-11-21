@@ -34,7 +34,7 @@ pub struct AreaOptions<'a> {
 
 What [`Ui::text_area`](../ui.md#method.Ui.text_area) is given besides its rect and text.
 
-Source: `crates/lune-ui-core/src/widgets/text_area.rs:30`
+Source: `crates/lune-ui-core/src/widgets/text_area.rs:31`
 
 **Fields**
 

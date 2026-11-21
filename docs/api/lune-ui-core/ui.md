@@ -1618,6 +1618,23 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
   Puts `text` on the clipboard; the last write of a frame is the one sent.
 
+- <a id="method.Ui.edit_actions"></a>`pub fn edit_actions(&self, id: WidgetId) -> Option<EditActions>`
+
+  Which of Cut, Copy, Paste and Select all the text widget `id` takes now, as it last ran
+  (this frame or the last one): what an app's own edit menu offers (D364). `None` for an id
+  that is not a text widget drawn in either frame.
+
+- <a id="method.Ui.edit_command"></a>`pub fn edit_command(&mut self, id: WidgetId, cmd: EditCommand)`
+
+  Queues `cmd` for the text widget `id` (a text field, text area, code editor or selectable
+  text), for an app whose own menu offers Cut, Copy, Paste and Select all (D364): the widget
+  runs it at its next call, through the path its keys take, so Copy and Cut write the
+  clipboard and Paste asks for a read (answered while the widget holds the focus) as the
+  shortcuts do. A command queued after the widget ran this frame runs in the next frame,
+  which this call asks for. A command due in a frame the widget is not called in is dropped,
+  never run later; a widget in a disabled scope drops its commands; a command the widget
+  does not take in its state ([`EditActions`](text_edit.md#struct.EditActions)) does nothing.
+
 - <a id="method.Ui.end_keep_alive"></a>`pub fn end_keep_alive(&mut self, key: impl std::hash::Hash)`
 
   Ends the keep-alive scope `key`: state kept only by it is dropped at this frame's finish
@@ -2091,7 +2108,7 @@ pub struct UiStore {
 
 A window's retained `Ui` state: one per window, held by the app and lent to each frame.
 
-Source: `crates/lune-ui-core/src/ui/store.rs:34`
+Source: `crates/lune-ui-core/src/ui/store.rs:49`
 
 **Methods and associated items**
 

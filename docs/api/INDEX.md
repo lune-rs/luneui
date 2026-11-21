@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1122 items. Left out and counted: 3460 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 4986 items of the omitted impls, 1341 items of the trait impls shown as one line, 2316 synthetic impls.
+94 modules, 1123 items. Left out and counted: 3469 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 4999 items of the omitted impls, 1345 items of the trait impls shown as one line, 2322 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -38,7 +38,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::strings`](lune-ui-core/strings.md) | 11 |
 | [`lune_ui_core::testing`](lune-ui-core/testing.md) | 21 |
 | [`lune_ui_core::text`](lune-ui-core/text.md) | 14 |
-| [`lune_ui_core::text_edit`](lune-ui-core/text_edit.md) | 13 |
+| [`lune_ui_core::text_edit`](lune-ui-core/text_edit.md) | 14 |
 | [`lune_ui_core::theme`](lune-ui-core/theme.md) | 8 |
 | [`lune_ui_core::theme::lunegit_dark`](lune-ui-core/theme/lunegit_dark.md) | 6 |
 | [`lune_ui_core::theme::near_black`](lune-ui-core/theme/near_black.md) | 13 |
@@ -474,6 +474,7 @@ Every top-level item of the four owning crates, by name.
 - [`edge_step`](lune-ui-core/drag.md#fn.edge_step) - function, `lune_ui_core::drag`
 - [`EDGE_W`](lune-ui-core/widgets/lane_graph.md#constant.EDGE_W) - constant, `lune_ui_core::widgets::lane_graph`
 - [`EDIT`](lune-ui-core/icon.md#constant.EDIT) - constant, `lune_ui_core::icon`
+- [`EditActions`](lune-ui-core/text_edit.md#struct.EditActions) - struct, `lune_ui_core::text_edit`
 - [`EditBuffer`](lune-ui-core/text_edit.md#trait.EditBuffer) - trait, `lune_ui_core::text_edit`
 - [`EditCommand`](lune-ui-core/text_edit.md#enum.EditCommand) - enum, `lune_ui_core::text_edit`
 - [`EditFlags`](lune-ui-core/text_edit.md#struct.EditFlags) - struct, `lune_ui_core::text_edit`

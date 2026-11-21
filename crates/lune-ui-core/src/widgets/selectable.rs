@@ -15,14 +15,17 @@
 use std::hash::Hash;
 use std::ops::Range;
 
-use super::field::{EditConfig, NodeFacts, Shown, begin_edit, edit_node, edit_pointer, end_edit};
+use super::field::{
+    EditConfig, HandleSpace, NodeFacts, Shown, begin_edit, edit_handles, edit_node, edit_pointer,
+    end_edit,
+};
 use super::selection;
 use super::text_lines::range_boxes;
 use crate::access::{Action, Node, Role, State, TextValue, Value};
-use crate::input::CursorIcon;
+use crate::input::{CursorIcon, PointerKind};
 use crate::paint::Rect;
 use crate::text::{Spec, joined_text};
-use crate::text_edit::{EditCommand, EditFlags};
+use crate::text_edit::{EditActions, EditCommand, EditFlags};
 use crate::ui::{Response, Sense, Ui};
 
 /// A value takes hover, clicks, drags and focus, but no Tab stop.
@@ -73,6 +76,8 @@ impl Ui<'_> {
             if h > 0.0 { h } else { rect.h },
         );
         let r = self.interact(id, hit, SELECT_SENSE);
+        // The text claims no axis: a touch drag on it is a pan of what holds it (D364).
+        self.set_drag_axes(id, false, false);
         let focused = r.focused;
         // The key focus, kept in a disabled scope: the keys are taken there and nothing acts (D140).
         let held = self.focus_state().0 == Some(id);
@@ -86,8 +91,22 @@ impl Ui<'_> {
             self.selectable_positional(id, hit, &r, rect, spec, full, name, &[], held, false);
         } else {
             let mut selected = self.persistent::<WholeSelection>(id).0 && held;
-            if r.press_started {
+            // A mouse selects at the press; a finger at the tap or the long press, so a pan
+            // selects nothing (D364).
+            let touch = self.pointer_kind() == PointerKind::Touch;
+            if (r.press_started && !touch) || (touch && (r.clicked || r.secondary_clicked)) {
                 selected = true;
+            }
+            // The app's edit commands (D364): Select all and Copy, as their keys; a disabled
+            // scope drops them (D140).
+            for cmd in self.take_edit_commands(id) {
+                match cmd {
+                    EditCommand::SelectAll if r.enabled => selected = true,
+                    EditCommand::Copy if r.enabled && selected => {
+                        self.clipboard_write(full.to_owned());
+                    }
+                    _ => {}
+                }
             }
             if held {
                 let act = r.enabled;
@@ -114,6 +133,7 @@ impl Ui<'_> {
                 }
             }
             self.persistent::<WholeSelection>(id).0 = selected;
+            self.publish_edit_actions(id, EditActions::whole(selected));
             let shown = selected && focused;
             if shown {
                 let row = [Rect::new(rect.x, rect.y, w, h)];
@@ -164,6 +184,7 @@ impl Ui<'_> {
             if h > 0.0 { h } else { rect.h },
         );
         let r = self.interact(id, hit, SELECT_SENSE);
+        self.set_drag_axes(id, false, false);
         let held = self.focus_state().0 == Some(id);
         let full = joined_text(spec);
         let name = strip_pads(&full, 0..full.chars().count(), pads);
@@ -233,6 +254,13 @@ impl Ui<'_> {
             .collect();
         selection::paint(self.painter(), &rows, (false, false), ink);
         self.painter().text(spec, rect.x, rect.y);
+        let space = HandleSpace {
+            origin: (rect.x, rect.y),
+            drawn: (rect.x, rect.y),
+            clip_x: None,
+            ink: self.theme().fg_primary,
+        };
+        edit_handles(self, id, &cfg, &mut st, &mut text, space, focused);
         let facts = NodeFacts {
             role: Role::StaticText,
             name,

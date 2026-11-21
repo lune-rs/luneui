@@ -10,8 +10,9 @@
 use std::hash::Hash;
 
 use super::field::{
-    CARET_ROOM, EDIT_SENSE, EditConfig, FieldResponse, NodeFacts, Shown, animated_look, begin_edit,
-    caret_at, draw_shown, edit_node, edit_pointer, end_edit, paint_frame, screen_area, set_value,
+    CARET_ROOM, EDIT_SENSE, EditConfig, FieldResponse, HandleSpace, NodeFacts, Shown,
+    animated_look, begin_edit, caret_at, draw_shown, edit_handles, edit_node, edit_pointer,
+    end_edit, paint_frame, screen_area, set_value,
 };
 use super::scroll_area::{Bars, Extent, Reveal, ScrollOptions, reveal_offset};
 use crate::access::{AccessValue, Role};
@@ -126,6 +127,8 @@ impl Ui<'_> {
                     viewport.h,
                 );
                 let mut resp = ui.interact(id, hit, EDIT_SENSE);
+                // The body claims no axis: a touch drag on it scrolls the area (D364).
+                ui.set_drag_axes(id, false, false);
                 if frame.changed {
                     resp.mark_changed();
                 }
@@ -147,6 +150,13 @@ impl Ui<'_> {
                 if focused {
                     area = Some(screen_area(ui, bar, hit));
                 }
+                let space = HandleSpace {
+                    origin,
+                    drawn: origin,
+                    clip_x: None,
+                    ink: t.fg_primary,
+                };
+                edit_handles(ui, id, &cfg, &mut st, text, space, focused);
                 let facts = NodeFacts {
                     role: Role::MultilineText,
                     name: opts.label.unwrap_or(opts.placeholder),

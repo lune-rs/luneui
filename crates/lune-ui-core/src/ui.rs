@@ -1452,4 +1452,68 @@ impl<'a> Ui<'a> {
     pub fn clipboard_read(&mut self) {
         self.clipboard_read = true;
     }
+
+    /// Queues `cmd` for the text widget `id` (a text field, text area, code editor or selectable
+    /// text), for an app whose own menu offers Cut, Copy, Paste and Select all (D364): the widget
+    /// runs it at its next call, through the path its keys take, so Copy and Cut write the
+    /// clipboard and Paste asks for a read (answered while the widget holds the focus) as the
+    /// shortcuts do. A command queued after the widget ran this frame runs in the next frame,
+    /// which this call asks for. A command due in a frame the widget is not called in is dropped,
+    /// never run later; a widget in a disabled scope drops its commands; a command the widget
+    /// does not take in its state ([`EditActions`](crate::text_edit::EditActions)) does nothing.
+    pub fn edit_command(&mut self, id: WidgetId, cmd: crate::text_edit::EditCommand) {
+        let frame = self.store.frame;
+        let requests = self.transient::<store::EditRequests>(id);
+        let late = requests.ran == Some(frame);
+        requests.queued.push((frame + u64::from(late), cmd));
+        if late {
+            self.request_catch_up();
+        }
+    }
+
+    /// Which of Cut, Copy, Paste and Select all the text widget `id` takes now, as it last ran
+    /// (this frame or the last one): what an app's own edit menu offers (D364). `None` for an id
+    /// that is not a text widget drawn in either frame.
+    pub fn edit_actions(&self, id: WidgetId) -> Option<crate::text_edit::EditActions> {
+        let key = (id, std::any::TypeId::of::<store::EditRequests>());
+        let requests = self
+            .store
+            .transient
+            .get(&key)?
+            .value
+            .downcast_ref::<store::EditRequests>()?;
+        let (frame, actions) = requests.actions?;
+        (frame + 1 >= self.store.frame).then_some(actions)
+    }
+
+    /// Takes the commands queued for the text widget `id` that are due this frame, dropping those
+    /// whose frame passed, and notes that the widget ran.
+    pub(crate) fn take_edit_commands(
+        &mut self,
+        id: WidgetId,
+    ) -> Vec<crate::text_edit::EditCommand> {
+        let frame = self.store.frame;
+        let requests = self.transient::<store::EditRequests>(id);
+        requests.ran = Some(frame);
+        let queued = std::mem::take(&mut requests.queued);
+        let mut due = Vec::new();
+        for (at, cmd) in queued {
+            if at == frame {
+                due.push(cmd);
+            } else if at > frame {
+                requests.queued.push((at, cmd));
+            }
+        }
+        due
+    }
+
+    /// Publishes what the text widget `id` takes now, for [`Self::edit_actions`].
+    pub(crate) fn publish_edit_actions(
+        &mut self,
+        id: WidgetId,
+        actions: crate::text_edit::EditActions,
+    ) {
+        let frame = self.store.frame;
+        self.transient::<store::EditRequests>(id).actions = Some((frame, actions));
+    }
 }

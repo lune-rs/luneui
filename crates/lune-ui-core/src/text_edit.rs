@@ -389,6 +389,48 @@ pub struct EditOutcome {
     pub consumed: bool,
 }
 
+/// Which of the edit menu's commands a text widget takes in its current state, for an app that
+/// builds its own menu on the widget's `secondary_clicked` (a long press under touch, D364): read
+/// it with [`Ui::edit_actions`](crate::ui::Ui::edit_actions) and run a pick with
+/// [`Ui::edit_command`](crate::ui::Ui::edit_command). Each flag is [`TextEdit::takes`] of its
+/// command, except that a password neither cuts nor copies: read-only text has no cut and no
+/// paste, and an empty selection no cut and no copy.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EditActions {
+    /// [`EditCommand::Cut`] would run.
+    pub cut: bool,
+    /// [`EditCommand::Copy`] would run.
+    pub copy: bool,
+    /// [`EditCommand::Paste`] would run.
+    pub paste: bool,
+    /// [`EditCommand::SelectAll`] would run.
+    pub select_all: bool,
+}
+
+impl EditActions {
+    /// The actions `edit` takes now.
+    pub(crate) fn of(edit: &TextEdit) -> Self {
+        let shows = !edit.flags.password;
+        Self {
+            cut: shows && edit.takes(&EditCommand::Cut),
+            copy: shows && edit.takes(&EditCommand::Copy),
+            paste: edit.takes(&EditCommand::Paste),
+            select_all: edit.takes(&EditCommand::SelectAll),
+        }
+    }
+
+    /// The actions of a text selected only whole: copy while selected, select all always.
+    pub(crate) fn whole(selected: bool) -> Self {
+        Self {
+            cut: false,
+            copy: selected,
+            paste: false,
+            select_all: true,
+        }
+    }
+}
+
 impl EditCommand {
     /// The command an event asks for, if any. `flags` comes from [`TextEdit::flags`]. Keys map per
     /// the catalogue's `text.text-edit`; while `flags.composing` keys and typed text yield nothing,

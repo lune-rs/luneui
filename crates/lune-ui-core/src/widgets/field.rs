@@ -28,7 +28,8 @@ use crate::motion::{Kind, Lerp, Motion};
 use crate::paint::{Painter, Rect};
 use crate::text::{CaretPos, Font, LineSpan, Spec, Style, TextSystem, Unit};
 use crate::text_edit::{
-    EditCommand, EditFlags, EditLayout, EditOutcome, MAX_SHAPED_INSERT, SpecLayout, TextEdit,
+    EditActions, EditCommand, EditFlags, EditLayout, EditOutcome, MAX_SHAPED_INSERT, SpecLayout,
+    TextEdit,
 };
 use crate::theme::Theme;
 use crate::ui::{Response, Sense, Ui, WidgetId};
@@ -72,6 +73,11 @@ const EMPTY_CARET: f32 = 16.0;
 const CARET_MARGIN: f32 = 2.0;
 /// What the caret takes past the text's end.
 pub(super) const CARET_ROOM: f32 = CARET_GAP + CARET_WIDTH;
+/// A selection handle (D364): the bar's width, the knob's side, and the side of the square hit
+/// centred on the knob.
+const HANDLE_BAR: f32 = 2.0;
+const HANDLE_KNOB: f32 = 10.0;
+const HANDLE_HIT: f32 = 44.0;
 
 /// An edit takes hover, clicks, drags and focus.
 pub(super) const EDIT_SENSE: Sense = Sense {
@@ -336,6 +342,22 @@ pub(super) struct EditState {
     drag_extends: bool,
     /// A command moved the caret, so a text area brings it into view.
     pub(super) reveal: bool,
+    /// The touch press in flight on the body: where it landed, from the text's top-left corner.
+    touch_at: Option<(f32, f32)>,
+    /// The touch press in flight fired its long press, so its drag extends the selection.
+    long_drag: bool,
+    /// The selection was made or last changed by touch: its handles show (D364).
+    handles: bool,
+    /// The handle drag in flight.
+    handle_drag: Option<HandleDrag>,
+}
+
+/// A selection handle held by a finger: the end that stays, and where the finger holds the
+/// handle from the moving end's caret point.
+#[derive(Debug, Clone, Copy)]
+struct HandleDrag {
+    fixed: usize,
+    grab: (f32, f32),
 }
 
 /// Set on every frame that draws the widget: a fresh one means the last frame did not, and a
@@ -430,6 +452,9 @@ pub(super) trait EditHost {
     /// The offset nearest to `pos`, from the text's top-left corner.
     fn hit(&mut self, ui: &mut Ui<'_>, pos: (f32, f32)) -> usize;
 
+    /// Where the caret at `offset` is, from the text's top-left corner: the space of [`Self::hit`].
+    fn caret(&mut self, ui: &mut Ui<'_>, offset: usize) -> CaretPos;
+
     /// Where the caret starts.
     fn first_caret(&self) -> usize;
 
@@ -475,6 +500,17 @@ impl EditHost for TextHost<'_, '_> {
         let spec = self.cfg.spec(self.text);
         let chars = self.text.chars().count();
         with_layout(ui, self.cfg, &spec, chars, |l| l.hit(pos))
+    }
+
+    fn caret(&mut self, ui: &mut Ui<'_>, offset: usize) -> CaretPos {
+        let spec = self.cfg.spec(self.text);
+        // The mask has no positions: its start, or its end.
+        let offset = match offset {
+            0 => 0,
+            _ if self.cfg.password => usize::MAX,
+            _ => offset,
+        };
+        drawn_layout(ui, &spec, |l| l.caret(offset))
     }
 
     fn first_caret(&self) -> usize {
@@ -543,6 +579,7 @@ pub(super) fn begin_edit_with(
     host.sync(ui, &mut st.edit);
     if !focused || !drawn {
         st.paste_pending = false;
+        st.handles = false;
         if st.edit.preedit().is_some() {
             host.apply(ui, &mut st.edit, EditCommand::ImeCancel);
         }
@@ -551,7 +588,41 @@ pub(super) fn begin_edit_with(
     if key_focus {
         run_events(ui, id, host, &mut st, &mut frame, focused);
     }
+    // The app's edit commands (D364) take the keys' path; a disabled scope drops them (D140).
+    let commands = ui.take_edit_commands(id);
+    if ui.is_enabled() {
+        for cmd in commands {
+            if host.admits(&cmd) && st.edit.takes(&cmd) {
+                run_command(ui, host, &mut st, &mut frame, cmd);
+            }
+        }
+    }
     (st, frame)
+}
+
+/// Runs one command of a focus event or of the app through the engine, with what follows from it:
+/// the reveal, the frame's flags and the clipboard requests. Whether the engine took it.
+fn run_command(
+    ui: &mut Ui<'_>,
+    host: &mut dyn EditHost,
+    st: &mut EditState,
+    frame: &mut EditFrame,
+    cmd: EditCommand,
+) -> bool {
+    let out = host.apply(ui, &mut st.edit, cmd);
+    if out.consumed {
+        st.reveal = true;
+    }
+    frame.changed |= out.changed;
+    frame.submitted |= out.submitted;
+    if let Some(write) = out.clipboard_write {
+        ui.clipboard_write(write);
+    }
+    if out.clipboard_read {
+        ui.clipboard_read();
+        st.paste_pending = true;
+    }
+    out.consumed
 }
 
 /// Runs the focus events of `id` through the engine. With `act` false (a disabled scope) the engine
@@ -621,19 +692,10 @@ fn run_events(
             }
             continue;
         }
-        let out = host.apply(ui, &mut st.edit, cmd);
-        if out.consumed {
+        if run_command(ui, host, st, frame, cmd) {
             ui.consume_focus_event(*index);
-            st.reveal = true;
-        }
-        frame.changed |= out.changed;
-        frame.submitted |= out.submitted;
-        if let Some(write) = out.clipboard_write {
-            ui.clipboard_write(write);
-        }
-        if out.clipboard_read {
-            ui.clipboard_read();
-            st.paste_pending = true;
+            // A key edit is not a touch: the handles go (D364).
+            st.handles = false;
         }
     }
 }
@@ -697,7 +759,19 @@ pub(super) fn edit_pointer_with(
         .painter()
         .transformed(Rect::new(origin.0, origin.1, 0.0, 0.0));
     let local = |p: (f32, f32)| (p.0 - at.x, p.1 - at.y);
-    if r.press_started {
+    // Gated on this widget's own pointer event: the kind stays `Touch` after the lift (D364).
+    let touch = ui.pointer_kind() == PointerKind::Touch
+        && (r.press_started
+            || r.clicked
+            || r.double_clicked
+            || r.secondary_clicked
+            || r.drag_started
+            || r.dragged
+            || r.drag_stopped);
+    if touch {
+        edit_touch(ui, host, st, r, &local);
+    } else if r.press_started {
+        st.handles = false;
         let composing = st.edit.preedit().is_some();
         let shift = r.press_modifiers.shift;
         st.drag_extends = !composing && (r.press_count <= 1 || shift);
@@ -715,6 +789,7 @@ pub(super) fn edit_pointer_with(
         }
     }
     if r.dragged
+        && !touch
         && st.drag_extends
         && let Some(pos) = ui.pointer_pos()
     {
@@ -730,6 +805,197 @@ pub(super) fn edit_pointer_with(
     if r.hovered || r.pressed {
         ui.set_cursor(CursorIcon::Text);
     }
+}
+
+/// A touch on the body (D364): the press only notes where it landed; a tap places the caret
+/// there, a double tap selects the word, a long press selects the word (unless it lands inside the
+/// selection; the mask selects all) and lets the drag that follows extend. A plain drag does
+/// nothing: the body claims no axis, so in a scroll area a pan has taken it. While composing, a
+/// touch moves nothing.
+fn edit_touch(
+    ui: &mut Ui<'_>,
+    host: &mut dyn EditHost,
+    st: &mut EditState,
+    r: &Response,
+    local: &dyn Fn((f32, f32)) -> (f32, f32),
+) {
+    if r.press_started {
+        st.touch_at = r.press_pos.map(local);
+        st.long_drag = false;
+    }
+    if st.edit.preedit().is_some() {
+        return;
+    }
+    let word = |ui: &mut Ui<'_>, host: &mut dyn EditHost, pos| {
+        if host.masked() {
+            EditCommand::SelectAll
+        } else {
+            EditCommand::SelectWordAt(host.hit(ui, pos))
+        }
+    };
+    if let Some(pos) = st.touch_at {
+        let cmd = if r.secondary_clicked {
+            st.long_drag = true;
+            st.handles = true;
+            let sel = st.edit.selection();
+            let at = host.hit(ui, pos);
+            let inside = !sel.is_empty() && sel.start <= at && at <= sel.end;
+            (!inside).then(|| word(ui, host, pos))
+        } else if r.double_clicked {
+            st.handles = true;
+            Some(word(ui, host, pos))
+        } else if r.clicked {
+            st.handles = false;
+            Some(EditCommand::PlaceCaret(pos))
+        } else {
+            None
+        };
+        if let Some(cmd) = cmd {
+            host.apply(ui, &mut st.edit, cmd);
+            st.reveal = true;
+        }
+    }
+    if r.dragged
+        && st.long_drag
+        && let Some(pos) = ui.pointer_pos()
+    {
+        let cmd = if host.masked() {
+            EditCommand::SelectAll
+        } else {
+            EditCommand::ExtendTo(local(pos))
+        };
+        host.apply(ui, &mut st.edit, cmd);
+        st.handles = true;
+        st.reveal = true;
+    }
+}
+
+/// Where an edit's selection handles go: `origin` is the text's top-left corner as the pointer
+/// reads it (the `origin` of [`edit_pointer_with`]), `drawn` where the text was drawn, both in the
+/// current space; with `clip_x`, a handle whose caret is outside that span is left out (a field
+/// that scrolls its text sideways draws them outside its clip).
+#[derive(Debug, Clone, Copy)]
+pub(super) struct HandleSpace {
+    pub(super) origin: (f32, f32),
+    pub(super) drawn: (f32, f32),
+    pub(super) clip_x: Option<(f32, f32)>,
+    /// The caret's colour.
+    pub(super) ink: Rgba,
+}
+
+/// The selection handles of `id` (D364), after its text: shown only while it is `focused` (so
+/// enabled), not composing, under touch, and its selection is non-empty and was made or last
+/// changed by touch. Each is a bar of the line's height at its end and a knob (above the start's
+/// line, below the end's) with a square hit centred on the knob, registered after the body so it
+/// wins where they overlap, claiming both drag axes. Dragging one moves that end and keeps the
+/// other, across it too. A change asks for the frame that draws it.
+pub(super) fn edit_handles_with(
+    ui: &mut Ui<'_>,
+    id: WidgetId,
+    host: &mut dyn EditHost,
+    st: &mut EditState,
+    space: HandleSpace,
+    focused: bool,
+) {
+    if !focused || ui.pointer_kind() != PointerKind::Touch || st.edit.preedit().is_some() {
+        st.handles = false;
+    }
+    let sel = st.edit.selection();
+    if !st.handles || (sel.is_empty() && st.handle_drag.is_none()) {
+        st.handle_drag = None;
+        return;
+    }
+    let at = ui
+        .painter()
+        .transformed(Rect::new(space.origin.0, space.origin.1, 0.0, 0.0));
+    let local = |p: (f32, f32)| (p.0 - at.x, p.1 - at.y);
+    let ends = [sel.start, sel.end];
+    let (mut held, mut moved) = (false, false);
+    let mut shapes = Vec::new();
+    for (k, &end) in ends.iter().enumerate() {
+        let c = host.caret(ui, end);
+        let h = if c.height > 0.0 {
+            c.height
+        } else {
+            EMPTY_CARET
+        };
+        let x = c.x + CARET_GAP + CARET_WIDTH / 2.0;
+        let draw_x = space.drawn.0 + x;
+        if space.clip_x.is_some_and(|(l, r)| draw_x < l || draw_x > r) {
+            continue;
+        }
+        let top = space.drawn.1 + c.y;
+        let knob_y = if k == 0 {
+            top - HANDLE_KNOB / 2.0
+        } else {
+            top + h + HANDLE_KNOB / 2.0
+        };
+        let hid = id.with(("selection-handle", k));
+        let hit = Rect::new(
+            draw_x - HANDLE_HIT / 2.0,
+            knob_y - HANDLE_HIT / 2.0,
+            HANDLE_HIT,
+            HANDLE_HIT,
+        );
+        let hr = ui.interact(hid, hit, Sense::DRAG);
+        ui.set_drag_axes(hid, true, true);
+        if hr.press_started
+            && let Some(p) = hr.press_pos
+        {
+            let p = local(p);
+            let grab = (p.0 - x, p.1 - (c.y + h / 2.0));
+            st.handle_drag = Some(HandleDrag {
+                fixed: ends[1 - k],
+                grab,
+            });
+        }
+        if hr.dragged
+            && let Some(d) = st.handle_drag
+            && let Some(p) = ui.pointer_pos()
+        {
+            let p = local(p);
+            let caret = host.hit(ui, (p.0 - d.grab.0, p.1 - d.grab.1));
+            if (st.edit.anchor(), st.edit.caret()) != (d.fixed, caret) {
+                st.edit.set_selection(d.fixed, caret);
+                moved = true;
+            }
+        }
+        held |= hr.pressed;
+        shapes.push((
+            Rect::new(draw_x - HANDLE_BAR / 2.0, top, HANDLE_BAR, h),
+            Rect::new(
+                draw_x - HANDLE_KNOB / 2.0,
+                knob_y - HANDLE_KNOB / 2.0,
+                HANDLE_KNOB,
+                HANDLE_KNOB,
+            ),
+        ));
+    }
+    if !held {
+        st.handle_drag = None;
+    }
+    if moved {
+        st.reveal = true;
+        ui.request_catch_up();
+    }
+    let ink = premul(space.ink);
+    for (bar, knob) in shapes {
+        ui.painter().fill_over(bar, 0.0, ink);
+        ui.painter().fill_over(knob, HANDLE_KNOB / 2.0, ink);
+    }
+}
+
+/// [`edit_handles_with`] on a `String`.
+pub(super) fn edit_handles(
+    ui: &mut Ui<'_>,
+    id: WidgetId,
+    cfg: &EditConfig,
+    st: &mut EditState,
+    text: &mut String,
+    space: HandleSpace,
+    focused: bool,
+) {
+    edit_handles_with(ui, id, &mut TextHost { cfg, text }, st, space, focused);
 }
 
 /// What an edit draws this frame. Offsets are chars of `spec`'s text, which is the app's text with
@@ -910,6 +1176,7 @@ pub(super) fn end_edit_with(
     area: Option<Rect>,
 ) -> Option<Rect> {
     ui.set_composing(id, st.edit.preedit().is_some());
+    ui.publish_edit_actions(id, EditActions::of(&st.edit));
     *ui.persistent::<EditState>(id) = st;
     let area = area.filter(|_| takes_composition);
     if area.is_some() {
@@ -1069,6 +1336,8 @@ impl Ui<'_> {
             rich: None,
         };
         let mut r = self.interact(id, rect, EDIT_SENSE);
+        // The body claims no axis: a touch drag on it is a pan of what holds it (D364).
+        self.set_drag_axes(id, false, false);
         let (mut st, frame) = begin_edit(self, id, &cfg, text);
         if frame.changed {
             r.mark_changed();
@@ -1156,6 +1425,13 @@ impl Ui<'_> {
         let bar = draw_shown_inked(self, &shown, (left - scroll, top), look.caret, caret_ink);
         let area = screen_area(self, bar, clip);
         self.painter().pop_clip();
+        let space = HandleSpace {
+            origin: (left - scroll, rect.y),
+            drawn: (left - scroll, top),
+            clip_x: Some((clip.x, clip.right())),
+            ink: caret_ink,
+        };
+        edit_handles(self, id, &cfg, &mut st, text, space, r.focused);
 
         let (name, color) = (opts.label.unwrap_or(opts.placeholder), t.fg_secondary);
         match opts.variant {

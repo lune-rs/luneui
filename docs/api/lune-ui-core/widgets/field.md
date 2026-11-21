@@ -37,7 +37,7 @@ pub struct FieldLook {
 
 The continuous look of a text field.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:153`
+Source: `crates/lune-ui-core/src/widgets/field.rs:159`
 
 **Fields**
 
@@ -92,7 +92,7 @@ pub struct FieldOptions<'a> {
 
 What [`Ui::text_field_with`](../ui.md#method.Ui.text_field_with) is given besides its rect and text.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:121`
+Source: `crates/lune-ui-core/src/widgets/field.rs:127`
 
 **Fields**
 
@@ -151,7 +151,7 @@ pub struct FieldResponse {
 
 What [`Ui::text_field_with`](../ui.md#method.Ui.text_field_with) and [`Ui::text_area`](../ui.md#method.Ui.text_area) return.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:142`
+Source: `crates/lune-ui-core/src/widgets/field.rs:148`
 
 **Fields**
 
@@ -185,7 +185,7 @@ pub struct FieldState {
 
 What the app says about the field: an error flag (the form around it sets it).
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:88`
+Source: `crates/lune-ui-core/src/widgets/field.rs:94`
 
 **Fields**
 
@@ -215,7 +215,7 @@ pub enum FieldChrome {
 
 The chrome a field draws around its text.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:109`
+Source: `crates/lune-ui-core/src/widgets/field.rs:115`
 
 **Variants**
 
@@ -254,7 +254,7 @@ pub enum Variant {
 
 The look and behaviour a field takes.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:94`
+Source: `crates/lune-ui-core/src/widgets/field.rs:100`
 
 **Variants**
 
@@ -305,7 +305,7 @@ pub fn field<H: Copy + PartialEq>(
 The Painter-API field: the discrete look (`focused` given, hover from the painter), then its
 hit region.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:240`
+Source: `crates/lune-ui-core/src/widgets/field.rs:246`
 
 <a id="fn.paint"></a>
 ### Function `paint`
@@ -322,7 +322,7 @@ pub fn paint<H: Copy + PartialEq>(
 
 Draws a field showing `text` (or `placeholder` while empty) in `r` with `look`.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:209`
+Source: `crates/lune-ui-core/src/widgets/field.rs:215`
 
 ## Constants
 
@@ -335,7 +335,7 @@ pub const ERROR: Motion;
 
 Ring colour: to `err` on an error.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:41`
+Source: `crates/lune-ui-core/src/widgets/field.rs:42`
 
 <a id="constant.FOCUS"></a>
 ### Constant `FOCUS`
@@ -346,7 +346,7 @@ pub const FOCUS: Motion;
 
 Ring colour: `border` to `accent` on focus.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:39`
+Source: `crates/lune-ui-core/src/widgets/field.rs:40`
 
 <a id="constant.HOVER"></a>
 ### Constant `HOVER`
@@ -357,7 +357,7 @@ pub const HOVER: Motion;
 
 Box fill on hover (not while focused).
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:37`
+Source: `crates/lune-ui-core/src/widgets/field.rs:38`
 
 <a id="constant.MASK_DOTS"></a>
 ### Constant `MASK_DOTS`
@@ -368,7 +368,7 @@ pub const MASK_DOTS: usize = 16;
 
 How many dots a password shows, whatever its length.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:46`
+Source: `crates/lune-ui-core/src/widgets/field.rs:47`
 
 <a id="constant.SMALL_HEIGHT"></a>
 ### Constant `SMALL_HEIGHT`
@@ -379,5 +379,5 @@ pub const SMALL_HEIGHT: f32 = 24.0;
 
 The height of a `small` field.
 
-Source: `crates/lune-ui-core/src/widgets/field.rs:44`
+Source: `crates/lune-ui-core/src/widgets/field.rs:45`
 

@@ -25,6 +25,56 @@ Source: `crates/lune-ui-core/src/text_edit.rs:1`
 
 ## Structs
 
+<a id="struct.EditActions"></a>
+### Struct `EditActions`
+
+```rust
+#[non_exhaustive]
+pub struct EditActions {
+    pub cut: bool,
+    pub copy: bool,
+    pub paste: bool,
+    pub select_all: bool,
+}
+```
+
+Which of the edit menu's commands a text widget takes in its current state, for an app that
+builds its own menu on the widget's `secondary_clicked` (a long press under touch, D364): read
+it with [`Ui::edit_actions`](ui.md#method.Ui.edit_actions) and run a pick with
+[`Ui::edit_command`](ui.md#method.Ui.edit_command). Each flag is [`TextEdit::takes`](text_edit.md#method.TextEdit.takes) of its
+command, except that a password neither cuts nor copies: read-only text has no cut and no
+paste, and an empty selection no cut and no copy.
+
+Source: `crates/lune-ui-core/src/text_edit.rs:400`
+
+**Fields**
+
+- <a id="structfield.EditActions.cut"></a>`pub cut: bool`
+
+  [`EditCommand::Cut`](text_edit.md#variant.EditCommand.Cut) would run.
+
+- <a id="structfield.EditActions.copy"></a>`pub copy: bool`
+
+  [`EditCommand::Copy`](text_edit.md#variant.EditCommand.Copy) would run.
+
+- <a id="structfield.EditActions.paste"></a>`pub paste: bool`
+
+  [`EditCommand::Paste`](text_edit.md#variant.EditCommand.Paste) would run.
+
+- <a id="structfield.EditActions.select_all"></a>`pub select_all: bool`
+
+  [`EditCommand::SelectAll`](text_edit.md#variant.EditCommand.SelectAll) would run.
+
+**Trait implementations**
+
+- `impl Clone for EditActions`
+- `impl Copy for EditActions`
+- `impl Debug for EditActions`
+- `impl Default for EditActions`
+- `impl Eq for EditActions`
+- `impl PartialEq for EditActions`
+- `impl StructuralPartialEq for EditActions`
+
 <a id="struct.EditFlags"></a>
 ### Struct `EditFlags`
 
@@ -175,7 +225,7 @@ The edit state of one text: caret and anchor as char offsets, the undo and redo 
 preferred x of vertical motion, the preedit, and the fingerprint of the last text it saw. The
 text stays with the app.
 
-Source: `crates/lune-ui-core/src/text_edit.rs:509`
+Source: `crates/lune-ui-core/src/text_edit.rs:551`
 
 **Methods and associated items**
 

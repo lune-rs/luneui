@@ -46,7 +46,7 @@ pub struct CodeOptions<'a> {
 
 What [`Ui::code_editor`](../ui.md#method.Ui.code_editor) is given besides its rect and document.
 
-Source: `crates/lune-ui-core/src/widgets/code_editor.rs:68`
+Source: `crates/lune-ui-core/src/widgets/code_editor.rs:69`
 
 **Fields**
 
@@ -111,7 +111,7 @@ pub struct CodeResponse {
 
 What [`Ui::code_editor`](../ui.md#method.Ui.code_editor) returns.
 
-Source: `crates/lune-ui-core/src/widgets/code_editor.rs:126`
+Source: `crates/lune-ui-core/src/widgets/code_editor.rs:127`
 
 **Fields**
 
@@ -152,7 +152,7 @@ pub struct LineBand {
 
 A full-row tint on one line.
 
-Source: `crates/lune-ui-core/src/widgets/code_editor.rs:60`
+Source: `crates/lune-ui-core/src/widgets/code_editor.rs:61`
 
 **Fields**
 
@@ -182,7 +182,7 @@ pub const ANCHOR_INSET: f32 = 16.0;
 
 What an overlay pinned to a line keeps from the view's right edge.
 
-Source: `crates/lune-ui-core/src/widgets/code_editor.rs:45`
+Source: `crates/lune-ui-core/src/widgets/code_editor.rs:46`
 
 <a id="constant.LINE"></a>
 ### Constant `LINE`
@@ -193,5 +193,5 @@ pub const LINE: f32 = 20.0;
 
 The height of an unwrapped line, and a wrapped line's estimate until it is built.
 
-Source: `crates/lune-ui-core/src/widgets/code_editor.rs:43`
+Source: `crates/lune-ui-core/src/widgets/code_editor.rs:44`
 

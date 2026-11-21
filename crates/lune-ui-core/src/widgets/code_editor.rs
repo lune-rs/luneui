@@ -20,8 +20,9 @@ use std::hash::Hash;
 use std::ops::Range;
 
 use super::field::{
-    CARET_ROOM, EDIT_SENSE, EditHost, EditState, Shown, begin_edit_with, caret_at,
-    draw_shown_inked, edit_node_states, edit_pointer_with, end_edit_with, screen_area,
+    CARET_ROOM, EDIT_SENSE, EditHost, EditState, HandleSpace, Shown, begin_edit_with, caret_at,
+    draw_shown_inked, edit_handles_with, edit_node_states, edit_pointer_with, end_edit_with,
+    screen_area,
 };
 use super::focus_ring::{self, RingKind};
 use super::scroll_area::{Bars, Extent, Reveal, ScrollOptions, ScrollView, reveal_offset};
@@ -515,6 +516,23 @@ impl EditHost for DocHost<'_> {
             base: self.base,
         };
         layout.hit(pos)
+    }
+
+    fn caret(&mut self, ui: &mut Ui<'_>, offset: usize) -> CaretPos {
+        let p = ui.painter();
+        let scale = p.s;
+        let system: &mut dyn TextSystem = &mut *p.text;
+        let mut layout = DocLayout {
+            system,
+            scale,
+            doc: &*self.doc,
+            tops: &mut self.tops,
+            style: self.style,
+            wrap: self.wrap,
+            page_rows: self.page_rows,
+            base: self.base,
+        };
+        layout.caret(offset)
     }
 
     /// A document opens at its top.
@@ -1093,6 +1111,8 @@ impl Ui<'_> {
                 ..EDIT_SENSE
             };
             let mut r = ui.interact(id, viewport, sense);
+            // The body claims no axis: a touch drag on it scrolls the area (D364).
+            ui.set_drag_axes(id, false, false);
             if frame.changed {
                 r.mark_changed();
             }
@@ -1122,6 +1142,13 @@ impl Ui<'_> {
             if focused {
                 area = bar;
             }
+            let space = HandleSpace {
+                origin,
+                drawn: origin,
+                clip_x: Some((viewport.x + cols.gutter, viewport.right())),
+                ink: ui.theme().fg_primary,
+            };
+            edit_handles_with(ui, id, &mut host, &mut st, space, focused);
             if host.tops.shift != 0.0 {
                 ui.scroll_shift(AREA, std::mem::take(&mut host.tops.shift));
             }
