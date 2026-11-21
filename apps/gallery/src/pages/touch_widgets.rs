@@ -47,8 +47,10 @@ fn live() -> Box<dyn PageState> {
     Box::new(Live::new())
 }
 
-/// The page with no edit menu: the scenes that show a selection and its handles start from it,
-/// because a menu moves focus to its first row, and a field that is not focused draws neither.
+/// The page with no edit menu, for `field-long-press` and `handle-drag`. The menu holds the field
+/// (D367), so its selection and handles would still draw, but with the menu open a press outside
+/// it only dismisses it: the handle drag would not reach the handle. Without it, each of the two
+/// scenes shows its one rule; `edit-menu` shows the held selection under the menu.
 fn without_menu() -> Box<dyn PageState> {
     Box::new(Live {
         menus: false,
