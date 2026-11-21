@@ -15,7 +15,7 @@ The phone targets are a rustup target each: `rustup target add aarch64-apple-ios
 
 ## Wiring an iOS app
 
-What an app adds to the toolkit's iOS layer, with the demo's code as the reference: `docs/consuming.md`, "0.7.1 to 0.7.2: iOS platform layer" (D353 to D360). The readings below are the demo's, on the simulator.
+What an app adds to the toolkit's iOS layer, with the demo's code as the reference: `docs/consuming.md`, "0.7.2 to 0.7.3: iOS platform layer" (D353 to D360). The readings below are the demo's, on the simulator.
 
 ## `scripts/ios-sim.sh`
 

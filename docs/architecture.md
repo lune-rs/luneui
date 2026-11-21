@@ -586,7 +586,7 @@ From M1 to M3:
 - new: `RawInput`, `FrameOutput`, `Translator`, `OutputState`, `Backdrop::apply`, `WindowBackdrop`,
   the `testing` module.
 
-Since 0.7.1 (iOS platform layer, D353 to D360; the workspace version is 0.7.2; `docs/consuming.md`, "0.7.1 to 0.7.2", is the migration map; additive, nothing breaks):
+Since 0.7.2 (iOS platform layer, D353 to D360; the workspace version is 0.7.3; `docs/consuming.md`, "0.7.2 to 0.7.3", is the migration map; additive, nothing breaks):
 
 - `lune_ui_platform::mobile` (re-exported as `lune_ui::mobile`): `attach_to_scene` and `SceneAttach` (D354), `safe_area` (D355), `KeyboardInset` (`new`, `inset`; D357), `Pasteboard` (D358); every item exists on every OS, and off iOS each answers its neutral value. No `Lifecycle`: winit's `suspended` and `resumed` arrive under the scene manifest (D356);
 - `lune_ui_core::input::ClipboardBackend` (`read`, `write`), the OS clipboard as a core trait; `lune_ui_winit::clipboard::Backend` is the same trait at its old path, and `Clipboard::with_backend` is documented (D358);
