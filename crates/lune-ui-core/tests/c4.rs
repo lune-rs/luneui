@@ -4794,6 +4794,12 @@ mod m10 {
                         );
                     },
                 );
+                // A navigation stack (D372) at rest: it paints nothing of its own (the shade and the
+                // shadow of a move are the theme's scrim), the level's fill is the page's.
+                ui.nav_stack("stack", Rect::new(0.0, 0.0, 200.0, 300.0), 1, |ui, _, r| {
+                    let c = ui.theme().surface_selected;
+                    ui.painter().fill(r, 0.0, c);
+                });
                 let rows = [PaletteRow {
                     key: 1,
                     text: "Reload",

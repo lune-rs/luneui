@@ -347,3 +347,155 @@ mod sheet {
         release_row("sheet fling to closed", BOTH, 0, 5, CLOSED);
     }
 }
+
+// ---- the navigation stack (step 4, D372) ---------------------------------------------------
+
+mod stack {
+    use super::*;
+    use lune_ui_core::access::{Node, Role};
+    use lune_ui_core::input::Repaint;
+    use lune_ui_core::paint::Rect;
+
+    const PHONE: (f32, f32) = (402.0, 874.0);
+    const W: f32 = 402.0;
+    const STEP: Time = Duration::from_millis(16);
+    const END: Time = Duration::from_millis(1800);
+
+    /// A stack over the whole window in a real `Ui`, driven by app time; the app lowers its depth
+    /// on the frame after `popped`, as an app does. It reads the top level's node rect left edge,
+    /// `W` once the top has left (what its right edge is).
+    struct Rig {
+        s: UiSampler,
+        depth: usize,
+        pop: bool,
+        /// The top level has been popped: what it was drawn at is gone, so it reads `W`.
+        gone: bool,
+    }
+
+    impl Rig {
+        fn new(depth: usize) -> Rig {
+            Rig {
+                s: UiSampler::new(PHONE, Time::ZERO),
+                depth,
+                pop: false,
+                gone: false,
+            }
+        }
+
+        /// One frame at app time `at`: the top level's left edge and whether another is wanted.
+        fn frame(&mut self, at: Time) -> (f32, bool) {
+            self.s.h.input.set_time(at);
+            let (depth, pop) = (self.depth, self.pop);
+            self.pop = false;
+            let mut popped = false;
+            let (_, out) = self.s.h.frame(|ui| {
+                let r = ui.nav_stack(
+                    "stack",
+                    Rect::new(0.0, 0.0, PHONE.0, PHONE.1),
+                    depth,
+                    |ui, level, r| {
+                        let t = *ui.theme();
+                        ui.painter().fill(r, 0.0, t.surface_overlay);
+                        ui.node(Node::new(
+                            WidgetId::ROOT.with(("page", level)),
+                            Role::Group,
+                            "level",
+                            r,
+                        ));
+                    },
+                );
+                popped = r.popped;
+                if pop {
+                    ui.nav_stack_pop("stack");
+                }
+            });
+            if popped {
+                self.depth -= 1;
+                self.gone = true;
+            }
+            let top = out
+                .tree
+                .get(WidgetId::ROOT.with(("page", depth - 1)))
+                .map(|n| n.bounds.x);
+            let x = if self.gone { W } else { top.unwrap_or(W) };
+            (x, out.repaint != Repaint::Idle)
+        }
+
+        fn run(&mut self, from: Time, until: Time) -> Time {
+            let mut t = from;
+            while t <= until {
+                self.frame(t);
+                t += STEP;
+            }
+            t
+        }
+    }
+
+    #[test]
+    fn a_push_conforms_at_60_and_120() {
+        let make = || -> Sampler<'static> {
+            let mut rig = Rig::new(1);
+            let origin = rig.run(Time::ZERO, Duration::from_millis(100));
+            Box::new(move |t| {
+                rig.depth = 2;
+                rig.frame(origin + t)
+            })
+        };
+        assert_conforms("stack push", END, 0.0, make);
+    }
+
+    #[test]
+    fn a_queued_pop_conforms_at_60_and_120() {
+        let make = || -> Sampler<'static> {
+            let mut rig = Rig::new(2);
+            let at = rig.run(Time::ZERO, Duration::from_millis(100));
+            // The request is taken by the stack's next call, which is the grid's first frame.
+            rig.pop = true;
+            rig.frame(at);
+            let origin = at + STEP;
+            Box::new(move |t| rig.frame(origin + t))
+        };
+        assert_conforms("stack pop", END, W, make);
+    }
+
+    /// A finger down in the edge band at 10 px, moving right by `dx` every 16 ms for `moves`
+    /// frames; the last move and the lift are the grid's first frame.
+    fn swipe_row(row: &str, dx: f32, moves: u32, target: f32) {
+        let make = move || -> Sampler<'static> {
+            let mut rig = Rig::new(2);
+            let mut at = rig.run(Time::ZERO, Duration::from_millis(100));
+            let y = 400.0;
+            rig.s.h.input.touch_start(1, 10.0, y);
+            rig.frame(at);
+            for i in 1..moves {
+                at += STEP;
+                rig.s.h.input.touch_move(1, 10.0 + dx * i as f32, y);
+                rig.frame(at);
+            }
+            let last = 10.0 + dx * moves as f32;
+            let origin = at + STEP;
+            let mut first = true;
+            Box::new(move |t| {
+                if first {
+                    first = false;
+                    rig.s.h.input.touch_move(1, last, y);
+                    rig.s.h.input.touch_end(1, last, y);
+                }
+                rig.frame(origin + t)
+            })
+        };
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn a_swipe_released_past_the_middle_conforms_at_60_and_120() {
+        // 216 px of travel (206 after the slop) at 1500 px/s.
+        swipe_row("stack swipe completing", 24.0, 9, W);
+    }
+
+    #[test]
+    fn a_swipe_released_short_springs_back_and_conforms_at_60_and_120() {
+        // 48 px of travel at 250 px/s: the coast does not reach the middle.
+        swipe_row("stack swipe springing back", 4.0, 12, 0.0);
+    }
+}

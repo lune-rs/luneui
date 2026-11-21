@@ -31,6 +31,7 @@ pub mod markdown;
 pub mod menu;
 pub mod nav_bar;
 pub mod nav_item;
+pub mod nav_stack;
 pub mod page;
 pub mod panel;
 pub mod pie_chart;
