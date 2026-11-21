@@ -433,7 +433,7 @@ For an app that turned touch on, the touch rules (each read only for a touch pre
 - A text widget: a tap places the caret, a double tap or a long press selects a word, a drag after a long press extends, and selection handles show (D364). While the app's edit menu (opened from that `context`) has the key focus, the widget keeps its selection, its handles and its `edit_actions`, and focus returns to it when the menu closes (D367).
 - A scroll area under the on-screen keyboard extends its range by the covered part and reveals the focused field; menus, popovers, tooltips, toasts, the dialog card and the palette place inside the safe area and above the keyboard (D365).
 
-To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary_clicked` (D292), offer the rows `Ui::edit_actions` allows, and run the chosen one as `Ui::edit_command`. No migration map: nothing an app already calls changes.
+To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary_clicked` (D292), offer the rows `Ui::edit_actions` allows, and run the chosen one as `Ui::edit_command`. Open the menu only when `edit_actions` allows at least one action: a composing widget takes none, and an empty menu takes no focus and leaves Escape to the input method, so only an outside press would close it. No migration map: nothing an app already calls changes.
 
 **Unverified here.** Every constant is a starting value: the 44 pt target, the 500 ms rest, the 1.5 s linger and the handle look were judged on scripted input, not under a finger (no finger can be driven here). The keyboard avoidance was judged on scripted insets, not a live keyboard or a notch.
 

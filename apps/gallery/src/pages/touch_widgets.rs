@@ -249,6 +249,11 @@ impl Live {
             .filter(|(takes, ..)| *takes)
             .map(|(_, text, cmd)| (text, cmd))
             .collect();
+        // Nothing to offer (a composing field takes no command): no menu, not an empty one.
+        if shown.is_empty() {
+            self.edit = None;
+            return;
+        }
         let rows: Vec<MenuRow<'_>> = shown
             .iter()
             .map(|(text, _)| MenuRow::Item {
@@ -750,7 +755,7 @@ const BENCH: &[Step] = &[
 mod tests {
     use super::*;
     use crate::page::{Player, run_scene};
-    use lune_ui::access::{Node, State, Value};
+    use lune_ui::access::{Node, Role, State, Value};
     use lune_ui::input::FrameOutput;
     use lune_ui::testing::FakeText;
 
@@ -961,6 +966,40 @@ mod tests {
         let (_, after) = player.frame(&mut FakeText, 1200, &[]).expect("frame");
         assert_eq!(selection(&after, "Name"), (0, 12), "select all ran");
         assert!(named(&after, "Cut").is_none(), "the menu closed");
+    }
+
+    #[test]
+    fn a_long_press_while_composing_opens_no_empty_edit_menu() {
+        // The field composes, so it takes no edit command: the app opens no menu at all.
+        let mut player = Player::for_scene("touch-widgets", scene("phone-widgets-edit-menu"));
+        player.frame(&mut FakeText, 0, SETUP.events).expect("frame");
+        let (x, y) = FIELD_TAP_AT;
+        player
+            .frame(&mut FakeText, 16, &[Ev::TouchStart(1, x, y)])
+            .expect("frame");
+        player
+            .frame(&mut FakeText, 80, &[Ev::TouchEnd(1, x, y)])
+            .expect("frame");
+        let compose = [Ev::ImePreedit("x", Some((1, 1)))];
+        let (_, typed) = player.frame(&mut FakeText, 200, &compose).expect("frame");
+        assert!(
+            focused(&typed, "Name") && typed.ime_area.is_some(),
+            "composing"
+        );
+        player
+            .frame(&mut FakeText, 300, &[Ev::TouchStart(1, x, y)])
+            .expect("frame");
+        let (_, long) = player.frame(&mut FakeText, 900, &[]).expect("frame");
+        player
+            .frame(&mut FakeText, 1000, &[Ev::TouchEnd(1, x, y)])
+            .expect("frame");
+        let (_, out) = player.frame(&mut FakeText, 1300, &[]).expect("frame");
+        let menus = |o: &FrameOutput| o.tree.nodes.iter().filter(|n| n.role == Role::Menu).count();
+        assert_eq!((menus(&long), menus(&out)), (0, 0), "no menu opened");
+        assert!(
+            focused(&out, "Name"),
+            "the composition goes on in the field"
+        );
     }
 
     #[test]
