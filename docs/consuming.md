@@ -340,6 +340,52 @@ raw.events.push(Event::KeyboardInset(Insets::new(0.0, 0.0, 0.0, keyboard_height)
 
 **Unverified here.** Desktop touchscreens: the order in which Windows delivers a touch and its promoted mouse copy is read from source, not seen (D12). The feel of a real finger: every constant (10 px slop, 500 ms long press, decay rate 0.998 per ms, rubber band 0.55, the 0.4 s spring) is the toolkit's starting value. The motion is proven headless and rate-independent (60 and 120 Hz agree).
 
+## 0.7.1 to 0.7.2: iOS platform layer
+
+D353 to D360. Additive, hence 0.7.2: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and a desktop app needs nothing changed. Off iOS every new item answers its neutral value: `attach_to_scene` answers `NotNeeded`, `safe_area` and `KeyboardInset` read zero, `Pasteboard` answers `Err`, and `PopoverWindow::wrap` is unchanged on macOS, Windows and Linux (D354, D355, D357, D358, D359). A desktop app keeps `Clipboard::new()`.
+
+An iOS app is a new target. `apps/demo` is the reference wiring, and the iOS-only dependencies (`objc2` 0.6, `objc2-foundation`, `block2`, `objc2-ui-kit`, `objc2-core-foundation`, D353 and D357) are compiled only for an iOS target. What an iOS app adds:
+
+- The scene manifest in `Info.plist`: a `UIApplicationSceneManifest` with one `UIWindowSceneSessionRoleApplication` configuration named `Default Configuration`, and a `UILaunchScreen` entry. Copy `apps/demo/ios/Info.plist` (D354); iOS 27 refuses at launch an app built with its SDK that lacks the manifest.
+- `mobile::attach_to_scene(&window)` once, right after the window is created. It is idempotent, and its `SceneAttach` answer says whether the window has its scene yet (D354).
+- An accessibility bridge, if the app has one, created before the attach (D359).
+- Each frame, after `translator.take(..)`: `Event::SafeArea(mobile::safe_area(&window))` and `Event::KeyboardInset(keyboard.inset())`, where `keyboard` is a `mobile::KeyboardInset::new(&window, wake)` the app keeps alive (D355, D357).
+- The keyboard's `wake` only wakes the app: it sets a flag that `about_to_wait` turns into a frame, and calls `request_redraw` (D357).
+- Touch on with `translator.set_touch_enabled(true)`, once per window, as in 0.7.1 (the demo leaves it off).
+- The clipboard: `Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))` in place of `Clipboard::new()` (D358).
+- No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface` (its CAMetalLayer survives the background); on `resumed` clear the stop and ask for a frame (D356).
+- Every frame is requested from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle; a `Repaint::At` that comes due is turned into a frame (D356).
+
+The per-frame inset lines, as `apps/demo/src/lib.rs` has them:
+
+```rust
+let mut input = translator.take(self.start.elapsed());
+// The insets are the app's to push every frame (the core keeps the last value).
+input
+    .events
+    .push(Event::SafeArea(mobile::safe_area(window)));
+let kb = keyboard.inset();
+input.events.push(Event::KeyboardInset(kb));
+```
+
+**Additions.**
+
+| item | what it is |
+| --- | --- |
+| `mobile` (module, also `lune_ui::mobile`) | the iOS platform layer; every item exists on every OS, so the API pages list it from macOS (D354) |
+| `mobile::attach_to_scene`, `mobile::SceneAttach` (`Attached`, `Waiting`, `NotNeeded`; `#[non_exhaustive]`) | the UIScene attach (D354) |
+| `mobile::safe_area` | the window's insets in logical pixels, from winit's queries (D355) |
+| `mobile::KeyboardInset` (`new`, `inset`) | the soft keyboard's bottom overlap, with a wake callback (D357) |
+| `mobile::Pasteboard` (`new`; `ClipboardBackend`) | `UIPasteboard`, on the main thread only (D358) |
+| `input::ClipboardBackend` (core; `read`, `write`) | the OS clipboard as a core trait; `lune_ui_winit::clipboard::Backend` is the same trait at its old path (D358) |
+| `lune_ui_winit::clipboard::Clipboard::with_backend` | now documented, no longer hidden (D358) |
+
+No `mobile::Lifecycle`: winit's `suspended` and `resumed` arrive under the manifest on iOS 18.0 and 27.2 (D356).
+
+**Readings.** On the iOS 18.0 and 27.2 simulators (`docs/mobile.md`, "M4 reading"): the demo launches under the manifest and draws full screen; the portrait safe area is 0, 62, 0, 34; the keyboard inset is 291 (18.0) and 301 (27.2); the pasteboard round trip reads back what it wrote.
+
+**Unverified here.** A real device: 120 Hz, the GPU's cost, the safe area of other models, notches and the Dynamic Island. VoiceOver (D359). A finger: the 0.7.1 touch constants are starting values. Typed text through a live soft keyboard (D357). The iOS "Allow Paste" prompt for another app's text (D358). Landscape: the safe area was read on iOS 18.0 only (`docs/mobile.md`, R6). A scene the OS discards and reconnects, and rotation at run time, were not driven.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so

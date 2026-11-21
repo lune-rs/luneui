@@ -13,6 +13,10 @@ The phone targets are a rustup target each: `rustup target add aarch64-apple-ios
 - `lune-ui-winit --features accesskit` also passes clippy for `aarch64-apple-ios-sim` (`accesskit_ios` 0.2.0 is pulled in); input for M4's accessibility bridge.
 - An iOS binary is built with `IPHONEOS_DEPLOYMENT_TARGET=17.0` (the simulator script sets it). Nothing here signs for a real device.
 
+## Wiring an iOS app
+
+What an app adds to the toolkit's iOS layer, with the demo's code as the reference: `docs/consuming.md`, "0.7.1 to 0.7.2: iOS platform layer" (D353 to D360). The readings below are the demo's, on the simulator.
+
 ## `scripts/ios-sim.sh`
 
 Builds `apps/demo` for `aarch64-apple-ios-sim`, assembles `target/ios-sim/Demo.app` (the binary and `apps/demo/ios/Info.plist`, ad-hoc signed), runs it on one simulator device of its own and checks that a frame was presented.
