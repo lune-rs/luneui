@@ -6,6 +6,7 @@
 //!
 //! Every item exists on every target; off iOS each one does nothing and says so.
 
+use lune_ui_core::layout::Insets;
 use winit::window::Window;
 
 use crate::platform::mobile as os;
@@ -38,4 +39,19 @@ pub enum SceneAttach {
 /// Off iOS it does nothing and answers [`SceneAttach::NotNeeded`].
 pub fn attach_to_scene(window: &Window) -> SceneAttach {
     os::attach_to_scene(window)
+}
+
+/// The window edges the system covers (the status bar and the notch above, the home indicator
+/// below, the rounded corners and the camera housing in landscape), in logical pixels: the
+/// `Event::SafeArea` an app pushes after `Translator::take` every frame.
+///
+/// On iOS it is derived from `window`'s four position and size queries, which winit reads live from
+/// UIKit's `safeAreaInsets`: the left and top insets are the offset of the inner (safe) rectangle
+/// inside the outer (screen) one, the right and bottom the rest, each clamped to at least 0. A value
+/// that cannot be read, a non-finite one or a failed position query gives [`Insets::ZERO`].
+///
+/// Everywhere else it is [`Insets::ZERO`]: a desktop window's frame (a title bar) is not an area the
+/// content must keep clear of.
+pub fn safe_area(window: &Window) -> Insets {
+    os::safe_area(window)
 }

@@ -141,7 +141,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-7 modules, 28 items. Left out and counted: 161 blanket impls, 151 items of the omitted impls, 36 items of the trait impls shown as one line, 78 synthetic impls.
+7 modules, 29 items. Left out and counted: 161 blanket impls, 151 items of the omitted impls, 36 items of the trait impls shown as one line, 78 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -149,7 +149,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 12 |
 | [`lune_ui_platform::group`](lune-ui-platform/group.md) | 2 |
 | [`lune_ui_platform::material`](lune-ui-platform/material.md) | 3 |
-| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 2 |
+| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 3 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
 
@@ -1076,6 +1076,7 @@ Every top-level item of the four owning crates, by name.
 - [`RUBBER_BAND`](lune-ui-core/motion.md#constant.RUBBER_BAND) - constant, `lune_ui_core::motion`
 - [`rubber_band`](lune-ui-core/motion.md#fn.rubber_band) - function, `lune_ui_core::motion`
 - [`rubber_band_inverse`](lune-ui-core/motion.md#fn.rubber_band_inverse) - function, `lune_ui_core::motion`
+- [`safe_area`](lune-ui-platform/mobile.md#fn.safe_area) - function, `lune_ui_platform::mobile`
 - [`Sampling`](lune-ui-core/image.md#enum.Sampling) - enum, `lune_ui_core::image`
 - [`Scene`](lune-ui-core/scene.md#struct.Scene) - struct, `lune_ui_core::scene`
 - [`SCENE_LAYERS`](lune-ui-core/scene.md#constant.SCENE_LAYERS) - constant, `lune_ui_core::scene`

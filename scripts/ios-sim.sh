@@ -13,6 +13,10 @@
 #   --smoke         --probe, and also require `probe scene attached` by the demo's frame 30 (its third
 #                   `probe scene` line) and, in launch 1's output, `probe lifecycle resumed` at launch, then
 #                   `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
+#                   It also requires every `probe safe_area_event` line to be 0,62,0,34 (the iOS 18.0 portrait
+#                   safe area; not judged with --landscape) and no `presented` line between `probe lifecycle
+#                   suspended` and the next `probe lifecycle resumed`, with one after it. It also requires the frame the demo
+#                   schedules 1 s after its frame 30 with `Repaint::At` (`presented 31`) to arrive while idle.
 #   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
 #                   the app without the scene life cycle).
 #   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
@@ -210,6 +214,27 @@ if [ "$smoke" -eq 1 ]; then
   grep '^probe scene ' "$OUT/stdout.log" || true
   [ "$(grep '^probe scene ' "$OUT/stdout.log" | sed -n 3p)" = "probe scene attached" ] \
     || fail "no 'probe scene attached' by frame 30"
+  # The safe area `ui.safe_area()` returned at frames 1 and 30 (D355): the iOS 18.0 portrait
+  # reading. A --landscape run prints the lines and does not judge them.
+  for _ in $(seq 1 60); do
+    [ "$(grep -c '^probe safe_area_event ' "$OUT/stdout.log" || true)" -ge 2 ] && break
+    sleep 0.5
+  done
+  grep '^probe safe_area_event ' "$OUT/stdout.log" || true
+  if [ "$landscape" -eq 0 ]; then
+    [ "$(grep -c '^probe safe_area_event ' "$OUT/stdout.log" || true)" -ge 2 ] \
+      || fail "fewer than two 'probe safe_area_event' lines"
+    [ "$(grep '^probe safe_area_event ' "$OUT/stdout.log" | sort -u)" = "probe safe_area_event 0,62,0,34" ] \
+      || fail "'probe safe_area_event' is not 0,62,0,34 on every line"
+  fi
+  # The frame the demo schedules 1 s after its frame 30 (`Repaint::At`) must arrive while the app
+  # is idle: nothing else asks for frame 31 (D356).
+  for _ in $(seq 1 40); do
+    grep -q '^presented 31 ' "$OUT/stdout.log" && break
+    sleep 0.5
+  done
+  grep -q '^presented 31 ' "$OUT/stdout.log" \
+    || fail "the scheduled frame (Repaint::At) did not arrive while idle (no 'presented 31')"
 fi
 xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-1.png" >/dev/null 2>&1 || fail "screenshot"
 [ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
@@ -242,6 +267,18 @@ if [ "$smoke" -eq 1 ]; then
   echo "ios-sim: life cycle: $cycle"
   grep -qE '^resumed .*suspended .*resumed' <<< "$cycle" \
     || fail "life cycle not 'resumed' at launch, then 'suspended' and 'resumed'"
+  # No frame while suspended (D356): between a `probe lifecycle suspended` line and the next
+  # `probe lifecycle resumed` line there is no `presented` line, and one follows the `resumed`.
+  # (A probe run prints a `presented` line for every frame.)
+  verdict="$(awk '
+    /^probe lifecycle suspended/ { state = "suspended"; next }
+    /^probe lifecycle resumed/   { if (state == "suspended") { state = "resumed"; trips++ } next }
+    /^presented /                { if (state == "suspended") during++; else if (state == "resumed") after++ }
+    END { printf "during=%d after=%d trips=%d", during, after, trips }
+  ' "$OUT/stdout.log")"
+  echo "ios-sim: frames around the suspend: $verdict"
+  [[ "$verdict" == "during=0 after="[1-9]* ]] \
+    || fail "a frame was presented while suspended, or none after 'resumed' ($verdict)"
 fi
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true

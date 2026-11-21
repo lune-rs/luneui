@@ -20,6 +20,9 @@ use objc2_ui_kit::{
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
+use lune_ui_core::layout::Insets;
+
+use super::insets_from_geometry;
 use crate::mobile::SceneAttach;
 
 /// The scene observer's state, on the main thread only.
@@ -134,4 +137,20 @@ pub(crate) fn attach_to_scene(window: &Window) -> SceneAttach {
     }
     wait_for_scene(&ui_window);
     SceneAttach::Waiting
+}
+
+/// The safe-area insets from winit's live queries (on iOS `inner_*` is the safe area and `outer_*`
+/// the screen).
+pub(crate) fn safe_area(window: &Window) -> Insets {
+    let (Ok(inner_pos), Ok(outer_pos)) = (window.inner_position(), window.outer_position()) else {
+        return Insets::ZERO;
+    };
+    let (inner, outer) = (window.inner_size(), window.outer_size());
+    insets_from_geometry(
+        (inner_pos.x, inner_pos.y),
+        (outer_pos.x, outer_pos.y),
+        (inner.width, inner.height),
+        (outer.width, outer.height),
+        window.scale_factor(),
+    )
 }

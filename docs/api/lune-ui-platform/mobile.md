@@ -30,7 +30,7 @@ pub enum SceneAttach {
 
 What [`attach_to_scene`](mobile.md#fn.attach_to_scene) found or did.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:16`
+Source: `crates/lune-ui-platform/src/mobile.rs:17`
 
 **Variants**
 
@@ -79,5 +79,26 @@ first) shows it itself.
 
 Off iOS it does nothing and answers [`SceneAttach::NotNeeded`](mobile.md#variant.SceneAttach.NotNeeded).
 
-Source: `crates/lune-ui-platform/src/mobile.rs:39`
+Source: `crates/lune-ui-platform/src/mobile.rs:40`
+
+<a id="fn.safe_area"></a>
+### Function `safe_area`
+
+```rust
+pub fn safe_area(window: &winit::window::Window) -> lune_ui_core::layout::Insets
+```
+
+The window edges the system covers (the status bar and the notch above, the home indicator
+below, the rounded corners and the camera housing in landscape), in logical pixels: the
+`Event::SafeArea` an app pushes after `Translator::take` every frame.
+
+On iOS it is derived from `window`'s four position and size queries, which winit reads live from
+UIKit's `safeAreaInsets`: the left and top insets are the offset of the inner (safe) rectangle
+inside the outer (screen) one, the right and bottom the rest, each clamped to at least 0. A value
+that cannot be read, a non-finite one or a failed position query gives [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO).
+
+Everywhere else it is [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO): a desktop window's frame (a title bar) is not an area the
+content must keep clear of.
+
+Source: `crates/lune-ui-platform/src/mobile.rs:55`
 

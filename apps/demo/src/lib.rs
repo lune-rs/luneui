@@ -8,17 +8,18 @@
 #![deny(unsafe_code)]
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::WindowEvent;
+use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
 use lune_ui::frame::FrameRenderer;
 use lune_ui::gpu::{self, Gpu};
-use lune_ui::input::{OutputState, Translator, control_flow, keymap};
+use lune_ui::input::{Event, OutputState, Translator, control_flow, keymap};
+use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark::THEME;
 use lune_ui::mobile::{self, SceneAttach};
 use lune_ui::motion::{Cadence, MotionTier};
@@ -45,7 +46,8 @@ const BLUR_SATURATION: f32 = 1.8;
 /// What a run does beyond drawing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
-    /// How many presented frames print a `presented <n> <width>x<height>` line, then none.
+    /// How many presented frames print a `presented <n> <width>x<height>` line, then none. A
+    /// `--probe` run prints one for every frame.
     pub log_frames: u32,
     /// Print `probe <key> <value>` lines for what the platform reports: at window creation and on
     /// every resize, scale change and life-cycle callback (never per frame).
@@ -57,6 +59,9 @@ pub struct Options {
     /// which does nothing off iOS). Off only for the control run that shows what an unattached
     /// window looks like.
     pub scene_attach: bool,
+    /// Draw nothing between `suspended` and `resumed`. Off only for the control run that shows the
+    /// smoke check can see a frame drawn while suspended.
+    pub pause: bool,
 }
 
 impl Default for Options {
@@ -66,6 +71,7 @@ impl Default for Options {
             probe: false,
             frames: None,
             scene_attach: true,
+            pause: true,
         }
     }
 }
@@ -76,6 +82,10 @@ const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android"
 /// The presented frame at which a `--probe` run prints the scene state a second time; the demo
 /// keeps requesting frames until it.
 const PROBE_LAST_FRAME: u32 = 30;
+
+/// How long after its last probe frame a `--probe` run asks for one more (`Repaint::At`), to show
+/// a scheduled frame arrives while the app is idle.
+const PROBE_TIMED_FRAME: Duration = Duration::from_millis(1000);
 
 /// The `probe scene` word for an attach state.
 fn scene_word(state: SceneAttach) -> &'static str {
@@ -119,31 +129,17 @@ fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
     let scale = window.scale_factor();
     probe_line("inner_size", format!("{}x{}", inner.width, inner.height));
     probe_line("outer_size", format!("{}x{}", outer.width, outer.height));
-    let inner_pos = window.inner_position();
-    let outer_pos = window.outer_position();
-    probe_line("inner_position", position_text(inner_pos.clone()));
-    probe_line("outer_position", position_text(outer_pos.clone()));
+    probe_line("inner_position", position_text(window.inner_position()));
+    probe_line("outer_position", position_text(window.outer_position()));
     probe_line("scale_factor", scale);
-    match (inner_pos, outer_pos) {
-        (Ok(i), Ok(o)) => {
-            let left = i.x - o.x;
-            let top = i.y - o.y;
-            let right = outer.width as i32 - inner.width as i32 - left;
-            let bottom = outer.height as i32 - inner.height as i32 - top;
-            let l = |v: i32| f64::from(v) / scale;
-            probe_line(
-                "safe_area_logical",
-                format!(
-                    "left={:.2} top={:.2} right={:.2} bottom={:.2}",
-                    l(left),
-                    l(top),
-                    l(right),
-                    l(bottom)
-                ),
-            );
-        }
-        _ => probe_line("safe_area_logical", "n/a"),
-    }
+    let safe = mobile::safe_area(window);
+    probe_line(
+        "safe_area_logical",
+        format!(
+            "left={:.2} top={:.2} right={:.2} bottom={:.2}",
+            safe.left, safe.top, safe.right, safe.bottom
+        ),
+    );
     let rate = window
         .current_monitor()
         .and_then(|m| m.refresh_rate_millihertz());
@@ -189,6 +185,11 @@ struct App {
     start: Instant,
     presented: u32,
     taps: u32,
+    /// Between `suspended` and `resumed`: nothing is acquired, drawn or presented.
+    paused: bool,
+    /// The last frame, or an event since, asks for another: `about_to_wait` requests it. A request
+    /// made inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
+    want_frame: bool,
     error: Option<String>,
 }
 
@@ -241,6 +242,9 @@ fn setup(event_loop: &ActiveEventLoop, options: Options) -> Result<Shown, String
 impl App {
     /// Draws one frame and presents it.
     fn render(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
+        if self.paused {
+            return Ok(());
+        }
         let Some(shown) = &mut self.shown else {
             return Ok(());
         };
@@ -257,7 +261,7 @@ impl App {
             Acquired::Frame(t) => t,
             Acquired::Skip => return Ok(()),
             Acquired::Redraw => {
-                window.request_redraw();
+                self.want_frame = true;
                 return Ok(());
             }
         };
@@ -266,7 +270,11 @@ impl App {
         let scale = window.scale_factor();
         translator.scale_factor(scale);
         let s = scale as f32;
-        let input = translator.take(self.start.elapsed());
+        let mut input = translator.take(self.start.elapsed());
+        // The insets are the app's to push every frame (the core keeps the last value).
+        input
+            .events
+            .push(Event::SafeArea(mobile::safe_area(window)));
         let config = FrameConfig {
             theme: THEME,
             tier: MotionTier::Full,
@@ -279,8 +287,12 @@ impl App {
         let mut ui = Ui::begin(&mut self.store, &input, config, text);
         // The surface in logical points: the markers sit on its four edges.
         let (w, h) = (size.0 as f32 / s, size.1 as f32 / s);
+        let safe = ui.safe_area();
+        if self.options.probe && self.presented + 1 == PROBE_LAST_FRAME {
+            ui.request_repaint_at(input.time + PROBE_TIMED_FRAME);
+        }
         let mut taps = self.taps;
-        draw(&mut ui, w, h, &mut taps);
+        draw(&mut ui, w, h, safe, &mut taps);
         self.taps = taps;
         let (display, out) = ui.finish();
         if output.apply(window, &out, s) {
@@ -298,31 +310,44 @@ impl App {
         surface.present(gpu, target);
         gpu.end_frame(text);
         self.presented += 1;
-        if self.presented <= self.options.log_frames {
+        let probe = self.options.probe;
+        if probe || self.presented <= self.options.log_frames {
             println!("presented {} {}x{}", self.presented, size.0, size.1);
-            window.request_redraw();
         }
-        if self.presented == 1 || (self.options.probe && self.presented == PROBE_LAST_FRAME) {
+        if self.presented == 1 || (probe && self.presented == PROBE_LAST_FRAME) {
             probe_scene(window, self.options.scene_attach);
+            if probe {
+                // What `ui.safe_area()` returned this frame.
+                probe_line(
+                    "safe_area_event",
+                    format!("{},{},{},{}", safe.left, safe.top, safe.right, safe.bottom),
+                );
+            }
+        }
+        // The frames this run asks for by itself: the first few, and a probe run's first 30.
+        if self.presented < self.options.log_frames || (probe && self.presented < PROBE_LAST_FRAME)
+        {
+            self.want_frame = true;
         }
         if LOOP_RETURNS && let Some(n) = self.options.frames {
             if self.presented >= n {
                 event_loop.exit();
                 return Ok(());
             }
-            window.request_redraw();
+            self.want_frame = true;
         }
         let (flow, redraw) = control_flow(out.repaint, self.start);
         event_loop.set_control_flow(flow);
         if redraw {
-            window.request_redraw();
+            self.want_frame = true;
         }
         Ok(())
     }
 }
 
-/// One frame of the demo in a surface of `w` by `h` logical points.
-fn draw(ui: &mut Ui<'_>, w: f32, h: f32, taps: &mut u32) {
+/// One frame of the demo in a surface of `w` by `h` logical points, with `safe` the edges the
+/// system covers.
+fn draw(ui: &mut Ui<'_>, w: f32, h: f32, safe: Insets, taps: &mut u32) {
     let t = *ui.theme();
     let p = ui.painter();
     p.fill(Rect::new(0.0, 0.0, w, h), 0.0, [20, 22, 28, 255]);
@@ -369,6 +394,14 @@ fn draw(ui: &mut Ui<'_>, w: f32, h: f32, taps: &mut u32) {
     p.fill(Rect::new(w - m, 0.0, m, h), 0.0, [0, 255, 0, 255]);
     p.fill(Rect::new(0.0, h - m, w, m), 0.0, [0, 128, 255, 255]);
     p.fill(Rect::new(0.0, 0.0, m, h), 0.0, [255, 255, 0, 255]);
+    // An outline of the safe area: the part of the surface the content may use.
+    let inside = Rect::new(
+        safe.left,
+        safe.top,
+        w - safe.left - safe.right,
+        h - safe.top - safe.bottom,
+    );
+    p.ring(inside, 0.0, 1.0, [255, 255, 255, 160], false);
 }
 
 impl ApplicationHandler for App {
@@ -376,6 +409,7 @@ impl ApplicationHandler for App {
         if self.options.probe {
             probe_line("lifecycle", "resumed");
         }
+        self.paused = false;
         if let Some(shown) = &self.shown {
             if self.options.probe {
                 probe_window("resumed", &shown.window, &shown.surface);
@@ -396,6 +430,13 @@ impl ApplicationHandler for App {
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        // Stop drawing. The surface stays: on iOS its layer survives the background, so the frame
+        // that follows `resumed` draws into it as before (docs/mobile.md, life cycle).
+        if self.options.pause {
+            self.paused = true;
+        } else {
+            self.want_frame = true;
+        }
         if self.options.probe {
             probe_line("lifecycle", "suspended");
             if let Some(shown) = &self.shown {
@@ -404,13 +445,22 @@ impl ApplicationHandler for App {
         }
     }
 
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        // A frame scheduled with `Repaint::At` (`ControlFlow::WaitUntil`) is due: the loop woke for
+        // it and nothing else asks.
+        if matches!(cause, StartCause::ResumeTimeReached { .. }) {
+            self.want_frame = true;
+        }
+    }
+
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        // A `--probe` run draws until its last probe frame. The request is made here: one made
-        // inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
-        if self.options.probe
-            && self.presented < PROBE_LAST_FRAME
+        // Every frame this run asks for is requested here, never inside `RedrawRequested`, where a
+        // request is lost while iOS is idle (docs/mobile.md, M1 reading).
+        if self.want_frame
+            && !self.paused
             && let Some(shown) = &self.shown
         {
+            self.want_frame = false;
             shown.window.request_redraw();
         }
     }
@@ -424,6 +474,10 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         if event_loop.exiting() {
             return;
+        }
+        // An input event needs a frame to be read; a redraw request is not one.
+        if !matches!(event, WindowEvent::RedrawRequested) {
+            self.want_frame = true;
         }
         if let Some(shown) = &mut self.shown {
             shown.translator.window_event(&event);
@@ -475,6 +529,8 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         start: Instant::now(),
         presented: 0,
         taps: 0,
+        paused: false,
+        want_frame: false,
         error: None,
     };
     event_loop
