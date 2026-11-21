@@ -25,8 +25,15 @@
 #                   and `probe keyboard_inset 0,0,0,<b>` with <b> above 200 is required.
 #   --keyboard      launch the demo with --probe and --focus-field (it focuses its text field on frame 1, which
 #                   asks for the soft keyboard), require `probe keyboard_inset 0,0,0,<b>` with <b> above 200 in
-#                   the output, take one screenshot (shot-1.png) 2 s after it and stop. The soft keyboard needs
-#                   the Simulator's "Connect Hardware Keyboard" off; this script never changes that preference.
+#                   the output, take one screenshot (shot-1.png) 2 s after it and stop.
+#   Soft keyboard (--keyboard and --smoke): a headless simulator always has its hardware keyboard attached
+#                   (backboardd logs "Hardware keyboard attached" at every boot), and with the device's own
+#                   keyboard setting AutomaticMinimizationEnabled true (the system writes it during a boot)
+#                   UIKit then shows only a minimised bar below the screen, so no keyboard rises. Before
+#                   these launches the script writes that one key false inside this script's device
+#                   (`simctl spawn <udid> defaults write com.apple.keyboard.preferences
+#                   AutomaticMinimizationEnabled -bool false`, read at once, no reboot; docs/mobile.md).
+#                   It never changes the Simulator's own preferences (com.apple.iphonesimulator).
 #   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
 #                   the app without the scene life cycle).
 #   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
@@ -41,7 +48,8 @@
 # missing. The Info.plist edits apply to the copy in target/ios-sim/Demo.app only, never to
 # apps/demo/ios/Info.plist.
 # Never: touches any other device, uses `booted` as a device argument, opens Simulator.app, drives the
-# UI, records video, or writes outside target/ios-sim/ (cargo's own target dir aside).
+# UI, records video, or writes outside target/ios-sim/ (cargo's own target dir and the keyboard setting
+# inside its own device aside).
 # Exit codes: 0 passed; 1 a check failed (build, launch, no frame); 2 usage or setup (a tool, the rustup
 # target or the runtime is missing).
 set -euo pipefail
@@ -191,6 +199,11 @@ booted_by_us=1
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || fail "bootstatus"
 
 xcrun simctl install "$UDID" "$APP" || fail "install"
+if [ "$keyboard" -eq 1 ] || [ "$smoke" -eq 1 ]; then
+  # The soft keyboard rises only with keyboard minimisation off on this device (see the header).
+  xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false \
+    || fail "could not turn keyboard minimisation off on $NAME"
+fi
 rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/stdout-2.log" "$OUT/stderr-2.log" \
   "$OUT/stdout-3.log" "$OUT/stderr-3.log" "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
 : > "$OUT/stdout.log"
@@ -219,7 +232,7 @@ check_keyboard() {
     # Keep what the screen shows for the reading.
     xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-nokeyboard.png" >/dev/null 2>&1 || true
   fi
-  [ -n "$line" ] || fail "no 'probe keyboard_inset' line: device $NAME showed no soft keyboard (a device with a hardware keyboard connected never does, and the 18.0 device first made here is one; a fresh device shows it: LUNEUI_IOS_DEVICE_NAME=<a new name> makes one, --delete-device removes $NAME; this script never changes the Simulator's preferences)"
+  [ -n "$line" ] || fail "no 'probe keyboard_inset' line: device $NAME showed no soft keyboard (screenshot $OUT/shot-nokeyboard.png)"
   awk -v l="$line" 'BEGIN { n = split(l, p, " "); split(p[3], v, ","); exit !(v[1] == 0 && v[2] == 0 && v[3] == 0 && v[4] > 200) }' \
     || fail "keyboard inset is not 0,0,0,<b> with <b> above 200: $line"
 }
