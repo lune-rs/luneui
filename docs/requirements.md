@@ -82,6 +82,10 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   setting the app passes per frame, on by default with a macOS-like look, the same on every OS, and
   readable by an app's own glyph renderer so both draw the same glyphs. Resolved: `text.rendering`
   (D294 to D297).
+- R-text-7 [new] Touch text editing: a tap places the caret, a double tap or a long press selects the
+  word under the finger, a drag after a long press extends the selection, and selection handles show
+  and move with it. An app's own `context` menu offers cut, copy, paste and select all as the widget
+  allows, through `Ui::edit_actions` and `Ui::edit_command` (D364). Resolved: `text.text-edit` (M5).
 
 ### Render
 
@@ -132,6 +136,14 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   verdict row. Built in M6 (each with a page and scenes in the gallery).
 - R-widget-5 [new] Controls with no Lunegit look: slider (`widget.slider`) and spinner
   (`widget.spinner`), their looks derived from sibling tokens (D51). Built in M6.
+- R-widget-6 [new] Touch-ready widgets: for an app that turned touch on (D16), every control answers a
+  finger as it answers a mouse. A touch press picks its widget with a 44 pt target around a small
+  control, in hit testing only; a drag consumer claims only the axes it uses (`Ui::set_drag_axes`), so
+  a pan on the other axis scrolls the area around it; a control does on its tap what it does on a
+  mouse press when that changes app state (a slider's value jump, a tab's activation, a row's
+  selection); and no action or hint exists only on hover, so a finger resting on an anchor shows its
+  tooltip. Mouse, keyboard and wheel behaviour is unchanged. Resolved: `widget.slider`,
+  `widget.tab-strip`, `core.gestures` and `overlay.tooltip` (M5, D361 to D363).
 
 ### Overlays
 
@@ -144,6 +156,10 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-overlay-4 [new] Anchored popover placement and dismiss: an anchor rect placed with flip and shift
   inside the window, dismissed on outside click, Escape and focus loss, opening and closing with
   motion tokens (`overlay.popover`).
+- R-overlay-5 [new] Overlays inside the safe area and above the on-screen keyboard: menus, dropdowns,
+  popovers, tooltips, toasts, the dialog card and the palette place within `Ui::safe_area` and above
+  `Ui::keyboard_inset`, and a scroll area under the keyboard extends its range by the covered part and
+  reveals the focused field's caret (D365). Resolved: `overlay.menu` and `layout.scroll-area` (M5).
 
 ### Layout and data views
 

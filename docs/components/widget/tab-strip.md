@@ -25,6 +25,7 @@ rename and close policy.
 - Close-confirm uses the modal dialog (R-overlay-1); rename is a dialog with a text field in Lunegit (R-widget-1).
 - Reorder through `infra.drag-and-drop` (R-infra-5); scrolling through `layout.scroll-area` (R-layout-2).
 - A tab control as one of the controls Lunegit has that the toolkit lacks (R-widget-2).
+- Under a finger: a pan scrolls the strip, a tap activates, and the close is reached on the active tab (R-widget-6, D362, D363).
 
 ## Existing code
 

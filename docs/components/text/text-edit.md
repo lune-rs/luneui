@@ -24,6 +24,7 @@ selection or clipboard. Lunegit gets all of it from Avalonia's `TextBox`; the to
 - IME composition integrated with the edit state (R-text-4).
 - Edit state with undo history as persistent state that survives keep-alive (R-core-8).
 - Caret and hit queries on the text system (`text.shaping`, `TextSystem`, C2).
+- Touch editing: tap caret, word on double tap and long press, handles, and the app's edit menu through `Ui::edit_actions` (R-text-7, D364).
 
 ## Existing code
 

@@ -18,6 +18,7 @@ summary: Slider: 4 px track with accent fill and a 12 px knob (14 hovered); look
 - Drawn through the painter and generic over the app's hit type (R-widget-5).
 - Arrow-key stepping and focus (R-widget-3); semantic node with the slider role (R-infra-4).
 - Value change under the motion tiers (R-motion-2).
+- Under a finger: the 44 pt target, the horizontal axis claimed alone and the value jump on the tap (R-widget-6, D362).
 
 ## Existing code
 

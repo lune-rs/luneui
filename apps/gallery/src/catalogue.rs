@@ -1713,14 +1713,14 @@ mod tests {
             }
         }
         assert!(cited >= 8, "the table cites {cited} tests");
-        // The mobile rules still open are slots: nothing claims to enforce them. The mobile program
-        // fills them as it decides them (M3 filled four of the seven).
-        assert!(
+        // The mobile program has decided every mobile rule (M3 filled four of the seven, M5 the last
+        // three), so no row is left as an open slot.
+        assert_eq!(
             rules
                 .iter()
                 .filter(|r| r.kind == RuleKind::MobileSlot)
-                .count()
-                >= 3
+                .count(),
+            0
         );
     }
 }

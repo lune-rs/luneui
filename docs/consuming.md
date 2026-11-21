@@ -411,6 +411,32 @@ No `mobile::Lifecycle`: winit's `suspended` and `resumed` arrive under the manif
 
 **Unverified here.** A real device: 120 Hz, the GPU's cost, the safe area of other models, notches and the Dynamic Island. VoiceOver (D359). A finger: the 0.7.1 touch constants are starting values. Typed text through a live soft keyboard (D357). The iOS "Allow Paste" prompt for another app's text (D358). Landscape: the safe area was read on iOS 18.0 only (`docs/mobile.md`, R6). A scene the OS discards and reconnects, and rotation at run time, were not driven.
 
+## On the branch: touch-ready widgets (ships with the next patch)
+
+D361 to D366. Not released: the workspace stays 0.7.3, and M6's release ships this section (D14). Additive, nothing breaks: no struct gains a field, no trait a required method, no exhaustive enum a variant. An app that never turns touch on (`set_touch_enabled(true)`, D16) sees no change: its mouse, keyboard and wheel frames are byte-identical, and it needs no edit.
+
+Public additions (the only ones; the rest is crate-private or a gallery page):
+
+| item | what it is |
+| --- | --- |
+| `text_edit::EditActions` | `#[non_exhaustive]`, with `cut`, `copy`, `paste` and `select_all`: what a text widget takes now (D364) |
+| `Ui::edit_command(id, EditCommand)` | queues a command for a text widget (field, text area, code editor, selectable text), run at its next call through its own path, so `Paste` asks the clipboard as Cmd+V does (D364) |
+| `Ui::edit_actions(id)` | `Option<EditActions>`, as the widget last ran; `None` for an id that is not a text widget drawn in the last two frames (D364) |
+
+For an app that turned touch on, the touch rules (each read only for a touch press):
+
+- A touch press picks its widget with a 44 pt target around a small control; the drawing stays (D361).
+- Focus moves on the tap, a long press or a drag's start, not on the press. A pan over a form now focuses no field and raises no keyboard. This is a behaviour change for an opted-in touch app only (D361).
+- A drag that grows out of a long press dismisses the menu that long press opened (D361).
+- The slider, the scrollbar thumb and the split divider claim their axes, so a pan on the other axis scrolls the area around them; tabs and board cards claim none. A tap does what a mouse press does where that changes app state (D362).
+- A finger resting 500 ms on a tooltip's anchor shows the tooltip; it stays 1.5 s after the lift (D363).
+- A text widget: a tap places the caret, a double tap or a long press selects a word, a drag after a long press extends, and selection handles show (D364).
+- A scroll area under the on-screen keyboard extends its range by the covered part and reveals the focused field; menus, popovers, tooltips, toasts, the dialog card and the palette place inside the safe area and above the keyboard (D365).
+
+To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary_clicked` (D292), offer the rows `Ui::edit_actions` allows, and run the chosen one as `Ui::edit_command`. No migration map: nothing an app already calls changes.
+
+**Unverified here.** Every constant is a starting value: the 44 pt target, the 500 ms rest, the 1.5 s linger and the handle look were judged on scripted input, not under a finger (no finger can be driven here). The keyboard avoidance was judged on scripted insets, not a live keyboard or a notch.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so

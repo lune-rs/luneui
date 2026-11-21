@@ -22,6 +22,7 @@ behaviours (`ScrollOffsetPreserver`, `AutoScrollBehavior`); the toolkit has to o
 - Scroll regions that keep offset (R-layout-2).
 - Offset as persistent state under keep-alive (R-core-8).
 - The scrollbar widget draws the thumb (R-widget-2).
+- Under the on-screen keyboard: the range extended by the covered part and the focused field revealed (R-overlay-5, D365).
 
 ## Existing code
 
