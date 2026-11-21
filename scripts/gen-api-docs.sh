@@ -37,8 +37,15 @@ for tool in cargo diff; do
 done
 
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/gen-api-docs.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+# shellcheck source=scripts/rustdoc-guard.sh
+. "$ROOT/scripts/rustdoc-guard.sh"
+trap 'guard_cleanup; rm -rf "$TMP"' EXIT
 cd "$ROOT"
+guard_lock "$TARGET" gen-api-docs
+guard_watch gen-api-docs
+# No doc output of an earlier run is read back: each run documents from a clean doc directory (the
+# compiled dependencies stay).
+rm -rf "${TARGET:?}/$DOC_TARGET/doc"
 
 # The target's std must be installed; say so before cargo fails with a long error.
 if command -v rustup > /dev/null 2>&1; then
