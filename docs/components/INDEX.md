@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 108 |
+| done | 109 |
 | external | 4 |
-| **total** | **114** |
+| **total** | **115** |
 
 ## core
 
@@ -90,6 +90,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [widget.status-dot](widget/status-dot.md) | Status dot | done | wane | Status dot: static 8 px circle in ok, warn, err, data or paused tone; never alone, a word beside it carries the meaning |
 | [widget.stepper](widget/stepper.md) | Numeric stepper | done | luneterm, wane | Numeric stepper: value with minus and plus buttons; clamping and step size belong to the app |
 | [widget.steps](widget/steps.md) | Wizard steps | done | wane | Wizard steps: four 32 px rows in the sidebar slot with upcoming, current and done states; not clickable |
+| [widget.swipe-actions](widget/swipe-actions.md) | Swipe row actions | done | any | Swipe row actions of a phone list: a row whose content a finger slides sideways to uncover trailing or leading buttons, with a full swipe, and the secondary click or long press the app answers with its menu |
 | [widget.tab-bar](widget/tab-bar.md) | Bottom tab bar | done | any | Bottom tab bar of a phone screen: a 49 px row of equal items (glyph, label, optional badge) at the top of the rect the app gives it, one tab stop with roving focus |
 | [widget.tab-strip](widget/tab-strip.md) | Tab strip | done | luneterm, lunegit | Tab strip: tabs with close, new-tab button, overflow scrolling, drag reorder, and the connected tab outline with a running cue |
 | [widget.text-field](widget/text-field.md) | Text field | done | luneterm, wane | Single-line text box: 32 px, radius 6, placeholder, caret when focused; variants fill, small, mono, password, search and date; editing engine from text.text-edit |

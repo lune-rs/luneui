@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-99 modules, 1136 items. Left out and counted: 3566 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5138 items of the omitted impls, 1375 items of the trait impls shown as one line, 2388 synthetic impls.
+100 modules, 1140 items. Left out and counted: 3600 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5186 items of the omitted impls, 1384 items of the trait impls shown as one line, 2412 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -101,6 +101,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::status_dot`](lune-ui-core/widgets/status_dot.md) | 3 |
 | [`lune_ui_core::widgets::stepper`](lune-ui-core/widgets/stepper.md) | 11 |
 | [`lune_ui_core::widgets::steps`](lune-ui-core/widgets/steps.md) | 10 |
+| [`lune_ui_core::widgets::swipe_actions`](lune-ui-core/widgets/swipe_actions.md) | 4 |
 | [`lune_ui_core::widgets::tab_bar`](lune-ui-core/widgets/tab_bar.md) | 3 |
 | [`lune_ui_core::widgets::tab_strip`](lune-ui-core/widgets/tab_strip.md) | 24 |
 | [`lune_ui_core::widgets::table`](lune-ui-core/widgets/table.md) | 18 |
@@ -1238,6 +1239,10 @@ Every top-level item of the four owning crates, by name.
 - [`SWATCH_RADIUS`](lune-ui-core/widgets/bar_chart.md#constant.SWATCH_RADIUS) - constant, `lune_ui_core::widgets::bar_chart`
 - [`SWEEP_PASSES`](lune-ui-core/widgets/tab_strip.md#constant.SWEEP_PASSES) - constant, `lune_ui_core::widgets::tab_strip`
 - [`sweeps`](lune-ui-core/widgets/pie_chart.md#fn.sweeps) - function, `lune_ui_core::widgets::pie_chart`
+- [`SwipeAction`](lune-ui-core/widgets/swipe_actions.md#struct.SwipeAction) - struct, `lune_ui_core::widgets::swipe_actions`
+- [`SwipeActions`](lune-ui-core/widgets/swipe_actions.md#struct.SwipeActions) - struct, `lune_ui_core::widgets::swipe_actions`
+- [`SwipeEdge`](lune-ui-core/widgets/swipe_actions.md#enum.SwipeEdge) - enum, `lune_ui_core::widgets::swipe_actions`
+- [`SwipeResponse`](lune-ui-core/widgets/swipe_actions.md#struct.SwipeResponse) - struct, `lune_ui_core::widgets::swipe_actions`
 - [`SYNC`](lune-ui-core/icon.md#constant.SYNC) - constant, `lune_ui_core::icon`
 - [`Tab`](lune-ui-core/widgets/tab_strip.md#struct.Tab) - struct, `lune_ui_core::widgets::tab_strip`
 - [`TabBarItem`](lune-ui-core/widgets/tab_bar.md#struct.TabBarItem) - struct, `lune_ui_core::widgets::tab_bar`

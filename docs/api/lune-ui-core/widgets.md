@@ -67,6 +67,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`status_dot`](widgets/status_dot.md) - A small filled dot in a status tone (`widget.status-dot`): 8 px, no glow, ring or pulse.
 - [`stepper`](widgets/stepper.md) - NumericUpDown control: a value with − and + buttons in an input box.
 - [`steps`](widgets/steps.md) - A numbered sequence of steps with a done state (`widget.steps`).
+- [`swipe_actions`](widgets/swipe_actions.md) - Swipe row actions of a phone list (`widget.swipe-actions`, D374): a row whose content a finger slides sideways to uncover buttons under it, trailing ones on a leftward swipe and leading ones on a righ...
 - [`tab_bar`](widgets/tab_bar.md) - The bottom tab bar of a phone screen (`widget.tab-bar`, D370): equal-width items of a glyph, a label and an optional badge on a 49 px row.
 - [`tab_strip`](widgets/tab_strip.md) - Tabs with close, overflow, drag reorder, the outline and a busy cue (`widget.tab-strip`).
 - [`table`](widgets/table.md) - The data table (`data.table`, D162): a sortable header over a virtualized body on the list frame (`ListStyle`, D161).

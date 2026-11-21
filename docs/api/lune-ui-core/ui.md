@@ -1402,6 +1402,25 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.swipe_actions"></a>
+
+  ```rust
+  pub fn swipe_actions<R>(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      actions: &SwipeActions<'_>,
+      row: impl FnOnce(&mut Ui<'_>, Rect) -> R,
+  ) -> SwipeResponse<R>
+  ```
+
+  A row under `key` over `rect` with `actions` under it. `row(ui, content)` draws the row's
+  content in `content`, `rect` shifted by the swipe and clipped to `rect`; the content
+  carries its own background. With no actions on either edge it is just the closure. See the
+  module docs for the gestures, the motion and the buttons.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.tab_bar"></a>
 
   ```rust

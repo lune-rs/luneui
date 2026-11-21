@@ -625,3 +625,149 @@ mod pager {
         assert_conforms("pager app-set page", END, 0.0, make);
     }
 }
+
+// ---- swipe row actions (step 6, D374) ------------------------------------------------------
+
+mod swipe {
+    use super::*;
+    use lune_ui_core::access::{Node, Role};
+    use lune_ui_core::input::Repaint;
+    use lune_ui_core::paint::Rect;
+    use lune_ui_core::widgets::swipe_actions::{SwipeAction, SwipeActions};
+    use lune_ui_core::widgets::tone::Tone;
+
+    const PHONE: (f32, f32) = (402.0, 874.0);
+    const ROW: Rect = Rect::new(0.0, 200.0, 402.0, 64.0);
+    const Y: f32 = 232.0;
+    const STEP: Time = Duration::from_millis(16);
+    const END: Time = Duration::from_millis(1800);
+    const TRAILING: [SwipeAction<'static>; 2] = [
+        SwipeAction::new("More"),
+        SwipeAction::new("Delete").with_tone(Tone::Err),
+    ];
+
+    /// One swipe row in a real `Ui`, driven by app time. It reads the left edge of the row's
+    /// content node.
+    struct Rig {
+        s: UiSampler,
+        full: bool,
+    }
+
+    impl Rig {
+        fn new(full: bool) -> Rig {
+            Rig {
+                s: UiSampler::new(PHONE, Time::ZERO),
+                full,
+            }
+        }
+
+        fn frame(&mut self, at: Time) -> (f32, bool) {
+            self.s.h.input.set_time(at);
+            let a = SwipeActions::new()
+                .with_trailing(&TRAILING)
+                .with_full_swipe(self.full);
+            let (_, out) = self.s.h.frame(|ui| {
+                ui.swipe_actions("row", ROW, &a, |ui, r| {
+                    let t = *ui.theme();
+                    ui.painter().fill(r, 0.0, t.surface_overlay);
+                    ui.node(Node::new(
+                        WidgetId::ROOT.with("content"),
+                        Role::Group,
+                        "content",
+                        r,
+                    ));
+                });
+            });
+            let x = out
+                .tree
+                .get(WidgetId::ROOT.with("content"))
+                .map(|n| n.bounds.x);
+            (x.unwrap_or(0.0), out.repaint != Repaint::Idle)
+        }
+
+        fn run(&mut self, from: Time, until: Time) -> Time {
+            let mut t = from;
+            while t <= until {
+                self.frame(t);
+                t += STEP;
+            }
+            t
+        }
+    }
+
+    /// A finger down at `x0` moving by `dx` every 16 ms for `moves` frames, with `first` frames
+    /// of travel before it (a row that is already open starts from there); the last move and the
+    /// lift are the grid's first frame.
+    fn swipe_row(row: &str, full: bool, opened: bool, x0: f32, dx: f32, moves: u32, target: f32) {
+        let make = move || -> Sampler<'static> {
+            let mut rig = Rig::new(full);
+            let mut at = rig.run(Time::ZERO, Duration::from_millis(100));
+            if opened {
+                // Open it first by a still release, then let it settle.
+                rig.s.h.input.touch_start(1, 300.0, Y);
+                rig.frame(at);
+                for i in 1..=6 {
+                    at += STEP;
+                    rig.s.h.input.touch_move(1, 300.0 - 30.0 * i as f32, Y);
+                    rig.frame(at);
+                }
+                for _ in 0..10 {
+                    at += STEP;
+                    rig.frame(at);
+                }
+                at += STEP;
+                rig.s.h.input.touch_end(1, 120.0, Y);
+                rig.frame(at);
+                at = rig.run(at + STEP, at + Duration::from_millis(1200));
+            }
+            rig.s.h.input.touch_start(1, x0, Y);
+            rig.frame(at);
+            for i in 1..moves {
+                at += STEP;
+                rig.s.h.input.touch_move(1, x0 + dx * i as f32, Y);
+                rig.frame(at);
+            }
+            let last = x0 + dx * moves as f32;
+            let origin = at + STEP;
+            let mut first = true;
+            Box::new(move |t| {
+                if first {
+                    first = false;
+                    rig.s.h.input.touch_move(1, last, Y);
+                    rig.s.h.input.touch_end(1, last, Y);
+                }
+                rig.frame(origin + t)
+            })
+        };
+        // The instrument is reading a real motion: something moved, and it moved to the target.
+        let fastest = vmax(make(), END);
+        assert!(fastest > 200.0, "{row}: the scan reads {fastest} px/s");
+        let mut sampler = make();
+        let mut end = sampler(Time::ZERO).0;
+        let mut t = STEP;
+        while t <= END {
+            end = sampler(t).0;
+            t += STEP;
+        }
+        assert!((end - target).abs() < 0.5, "{row}: ends at {end}");
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn a_release_opening_the_trailing_edge_conforms_at_60_and_120() {
+        // 30 px a frame: a flick that opens it (both buttons at 74 px).
+        swipe_row("swipe open", false, false, 350.0, -30.0, 5, -148.0);
+    }
+
+    #[test]
+    fn a_release_closing_the_row_conforms_at_60_and_120() {
+        // Open, then a flick to the right.
+        swipe_row("swipe close", false, true, 100.0, 30.0, 4, 0.0);
+    }
+
+    #[test]
+    fn a_full_swipe_to_arrival_and_the_close_after_it_conform_at_60_and_120() {
+        // 300 px of travel (past 60 % of 402), released: the full width, then the close.
+        swipe_row("swipe full", true, false, 395.0, -30.0, 10, 0.0);
+    }
+}

@@ -76,6 +76,7 @@ mod stat;
 mod status_dot;
 mod stepper;
 mod steps;
+mod swipe_actions;
 mod tab_bar;
 mod tab_strip;
 mod table;
@@ -198,6 +199,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &bottom_sheet::PAGE,
     &nav_stack::PAGE,
     &pager::PAGE,
+    &swipe_actions::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

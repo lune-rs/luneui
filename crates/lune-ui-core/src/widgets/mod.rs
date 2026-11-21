@@ -57,6 +57,7 @@ pub mod stat;
 pub mod status_dot;
 pub mod stepper;
 pub mod steps;
+pub mod swipe_actions;
 pub mod tab_bar;
 pub mod tab_strip;
 pub mod table;

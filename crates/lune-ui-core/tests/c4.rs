@@ -4813,6 +4813,23 @@ mod m10 {
                         ui.painter().fill(r, 0.0, c);
                     },
                 );
+                // A swipe row at rest (D374): its content's own fill; the buttons draw only while
+                // uncovered (`widget_swipe_actions.rs` draws them under a theme of its own).
+                let swipe_actions =
+                    [
+                        lune_ui_core::widgets::swipe_actions::SwipeAction::new("Delete")
+                            .with_tone(Tone::Err),
+                    ];
+                ui.swipe_actions(
+                    "swipe",
+                    Rect::new(0.0, 320.0, 200.0, 48.0),
+                    &lune_ui_core::widgets::swipe_actions::SwipeActions::new()
+                        .with_trailing(&swipe_actions),
+                    |ui, r| {
+                        let c = ui.theme().surface_selected;
+                        ui.painter().fill(r, 0.0, c);
+                    },
+                );
                 let rows = [PaletteRow {
                     key: 1,
                     text: "Reload",
