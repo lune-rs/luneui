@@ -43,7 +43,7 @@ const EDGE: f32 = 24.0;
 const PARALLAX: f32 = 0.3;
 /// The most of the scrim's alpha the shade over the lower level takes (when the top level has
 /// just begun to cover it).
-const SHADE: f32 = 0.4;
+const SHADE: f32 = 1.0;
 /// The soft shadow along the top level's leading edge: its blur, in logical px, and the share of
 /// the scrim's alpha it takes at its strongest.
 const SHADOW_SIGMA: f32 = 10.0;

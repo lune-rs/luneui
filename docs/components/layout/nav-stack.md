@@ -34,7 +34,7 @@ Neither Lunegit nor Wane has a stack of screens; the look is a deliberate deviat
 - Rect: the area the app gives the stack (the whole window for a phone screen); everything is clipped to it.
 - Top level: drawn in the rect moved right by `x` (0 at rest, the width when gone); the app's `page` gets the moved rect.
 - Lower level (while moving): drawn at `rect.x - 0.3 * width * (1 - x / width)`, clipped to the part left of the top's edge (its text draws above every fill of the layer and would otherwise show through the top level).
-- Shade: an over fill on the lower level's uncovered part (so it dims text as well as fills), `dialog_backdrop` with its alpha times `0.4 * (1 - x / width)`.
+- Shade: an over fill on the lower level's uncovered part (so it dims text as well as fills), `dialog_backdrop` with its alpha times `1.0 * (1 - x / width)` (the director's value, D370: 0.4 left the lower level 10 % darker and the levels read as equals).
 - Shadow: `Painter::shadow` of the top level's rect, sigma 10, `dialog_backdrop` with its alpha times `0.7 * (1 - x / width)`, the shape 30 px taller each way so the edge does not fade at the rect's top and bottom; drawn under the top level, cut by the clip.
 - Edge band: the rect's left 24 px, a pan region (x) registered before the levels, while `depth` is at least 2.
 - Hold region: the whole rect, registered after the levels, only while it moves.
