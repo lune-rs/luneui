@@ -89,6 +89,8 @@ None: the slider has no text; the label is the owner's.
 - `slider-value-mid`: value one step up by keys, t = 90 ms (half of `fast`).
 - `slider-hover-mid`: knob rest → hover, t = 60 ms (half of `instant`).
 - `slider-focus-mid`: focus-visible on, t = 90 ms (half of `fast`).
+- `phone-widgets-slider-pan`: a finger moved 60 px up from the slider's track in a page that scrolls: the page scrolled 50 and the value is as it was (the slider claims only the horizontal axis), settled.
+- `phone-widgets-slider-drag`: the same finger moved along the track: the value follows it from the slop on and the page does not move, settled.
 
 ### Painter primitives
 

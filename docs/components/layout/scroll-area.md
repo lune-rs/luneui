@@ -120,6 +120,7 @@ None: the area has no text of its own.
 - `phone-touch-landed`: the same flick after the decay's end (about 3 s): at rest, settled.
 - `phone-touch-rubber-band`: the finger pulled 150 px past the top and holds: the list is stretched by less than the pull, settled.
 - `phone-touch-bounce`: 100 ms after that pull is let go: the list is springing back, moving.
+- `phone-widgets-keyboard`: a tap in a box low in a full-window page, then a keyboard 300 px high: the page extends its range by the covered part and scrolls the box above the keyboard, settled.
 
 ### Painter primitives
 

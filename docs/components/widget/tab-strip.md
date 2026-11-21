@@ -146,6 +146,7 @@ The confirm and rename dialog texts, "Duplicate Tab" and "Copy Working Directory
 - `tab-strip-settle`: released tab settling, t = 90 ms.
 - `tab-strip-content-swap`: activation of tab 3, outgoing and incoming content at t = 125 ms (half of `base`).
 - `tab-strip-switch-mid`: the same activation, captured 90 ms (half of `fast`) after the strip first draws the new active tab (t = 106 ms; the click frame still draws the old key): the notch is half way between tab 2 and tab 3, moving.
+- `phone-widgets-tabs-pan`: a finger moved 170 px left from the second tab of an overflowing strip: the strip scrolled, no tab was activated and nothing reordered, settled.
 
 ### Painter primitives
 

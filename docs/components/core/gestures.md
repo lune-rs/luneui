@@ -79,6 +79,7 @@ None.
 - `phone-touch-pan`: the finger has moved 200 px up the list and rests: the list moved 190, settled.
 - `phone-touch-arbitration`: a vertical pan that started on a pin button in a row: the list moved 130 and the button was not pressed, settled.
 - `phone-touch-pinch`: two touches spread from 100 to 160 px: the box is at scale 1.6, settled.
+- `phone-widgets-hit-area`: a tap 12 px beside the 16 px box of a small checkbox, 4 px outside its 24 px hit, in the phone window: the 44 pt touch target takes it and the box is checked, settled.
 
 ### Painter primitives
 

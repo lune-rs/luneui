@@ -82,6 +82,7 @@ mod toggle;
 mod toolbar;
 mod tooltip;
 mod touch;
+mod touch_widgets;
 mod tray;
 mod tree_view;
 mod ui;
@@ -186,6 +187,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &crate::showcase::labs::depth::PAGE,
     &crate::showcase::labs::banding::PAGE,
     &recipes::PAGE,
+    &touch_widgets::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

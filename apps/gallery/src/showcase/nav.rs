@@ -84,6 +84,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "stack",
             "scroll-area",
             "touch",
+            "touch-widgets",
             "virtual-list",
             "page",
             "panel",
