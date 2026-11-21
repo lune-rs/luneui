@@ -287,8 +287,8 @@ impl Geometry {
         };
         let h = search_block + results_h + footer_h;
         let card = Rect::new(
-            (win.w - CARD_W) / 2.0,
-            ((win.h - h) / 2.0).max(20.0),
+            win.x + (win.w - CARD_W) / 2.0,
+            win.y + ((win.h - h) / 2.0).max(20.0),
             CARD_W,
             h,
         );
@@ -674,7 +674,7 @@ impl<'a> Ui<'a> {
         let t = *self.theme();
         let lines = Lines::of(&t);
         let list = List::of(palette, lines);
-        let win = self.painter().window;
+        let win = self.overlay_bounds();
         let geo = Geometry::of(win, &list, palette.error.is_some(), lines);
         let search_key = (id, "search");
         let search_id = self.id(search_key);

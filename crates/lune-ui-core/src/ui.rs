@@ -621,7 +621,12 @@ impl<'a> Ui<'a> {
 
         let focus_at_begin = (store.focus.focused, store.focus.visible);
         let window = Rect::new(0.0, 0.0, input.size.0, input.size.1);
-        let painter = Painter::new(input.scale, window, text, pointer.hovered, config.theme);
+        let mut painter = Painter::new(input.scale, window, text, pointer.hovered, config.theme);
+        painter.set_bounds(overlay_bounds(
+            window,
+            store.safe_area,
+            store.keyboard_inset,
+        ));
         Ui {
             store,
             input,
@@ -946,6 +951,18 @@ impl<'a> Ui<'a> {
     /// disables IME); the last call wins.
     pub fn set_ime_area(&mut self, area: Option<Rect>) {
         self.ime_area = area;
+    }
+
+    /// The rect menus, popovers, tooltips, toasts, the dialog card and the palette place
+    /// inside: the window inset by the safe area, its bottom by the larger of the safe area's and
+    /// the keyboard's. The window itself when both are zero (D365).
+    pub(crate) fn overlay_bounds(&self) -> Rect {
+        self.painter.bounds()
+    }
+
+    /// The input method area the frame has set so far, in window space.
+    pub(crate) fn frame_ime_area(&self) -> Option<Rect> {
+        self.ime_area
     }
 
     /// The pointer's position in logical pixels, or `None` when it is outside the window.
@@ -1516,4 +1533,21 @@ impl<'a> Ui<'a> {
         let frame = self.store.frame;
         self.transient::<store::EditRequests>(id).actions = Some((frame, actions));
     }
+}
+
+/// `window` inset by `safe` on every side, its bottom by the larger of `safe.bottom` and the
+/// keyboard's: `window` itself when both are zero (D365).
+fn overlay_bounds(window: Rect, safe: Insets, keyboard: Insets) -> Rect {
+    if safe == Insets::ZERO && keyboard == Insets::ZERO {
+        return window;
+    }
+    let clean = |v: f32| if v.is_finite() { v.max(0.0) } else { 0.0 };
+    let bottom = clean(safe.bottom).max(clean(keyboard.bottom));
+    let (l, t, r) = (clean(safe.left), clean(safe.top), clean(safe.right));
+    Rect::new(
+        window.x + l,
+        window.y + t,
+        (window.w - l - r).max(0.0),
+        (window.h - t - bottom).max(0.0),
+    )
 }

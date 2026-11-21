@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use super::popover::{GLASS_RADIUS, glass_surface};
-use super::popover::{PlaceAlign, PlaceRequest, Side, place};
+use super::popover::{PlaceAlign, PlaceRequest, Side, keep_in_bounds, place};
 use crate::access::{Node, Role};
 use crate::input::PointerKind;
 use crate::motion::{Easing, Kind, Motion, Reduce, Time, Token};
@@ -189,7 +189,7 @@ impl<'a> Ui<'a> {
 
         let ((cw, ch), data) = layout(self);
         let size = ((cw + 2.0 * PAD_X).min(MAX_WIDTH), ch + 2.0 * PAD_Y);
-        let window = self.painter().window;
+        let window = self.overlay_bounds();
         let rect = place(&PlaceRequest {
             anchor: anchor.rect,
             size,
@@ -201,6 +201,7 @@ impl<'a> Ui<'a> {
             window,
         })
         .rect;
+        let rect = keep_in_bounds(rect, self.painter().window, window, MARGIN);
         let inner = Rect::new(
             rect.x + PAD_X,
             rect.y + PAD_Y,

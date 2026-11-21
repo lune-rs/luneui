@@ -4,7 +4,7 @@
 
 use std::hash::Hash;
 
-use super::popover::{PlaceAlign, PlaceRequest, Side, Surface, glass_panel, place};
+use super::popover::{PlaceAlign, PlaceRequest, Side, Surface, glass_panel, keep_in_bounds, place};
 use super::status_dot;
 use super::tone::Tone;
 use crate::access::{Action, Node, Role, State};
@@ -287,9 +287,10 @@ pub fn menu_layout_at<H: Copy + PartialEq>(
         gap,
         margin: 8.0,
         shift: true,
-        window: p.window,
+        window: p.bounds(),
     })
     .rect;
+    let panel = keep_in_bounds(panel, p.window, p.bounds(), 8.0);
     MenuLayout {
         panel,
         rows: row_rects(panel, rows),

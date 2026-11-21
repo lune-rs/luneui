@@ -650,6 +650,8 @@ struct ScrollState {
     /// on a motion in flight stops at.
     drawn: [f64; 2],
     over: [f32; 2],
+    /// The keyboard's bottom inset the last frame saw, so a change reveals the caret (D365).
+    last_inset: f32,
 }
 
 /// `Ui::scroll_to` and `Ui::scroll_shift` requests, taken by the area on its next call.
@@ -698,6 +700,44 @@ fn reveal_axis(span: Option<(f64, f64)>, cur: f64, ext: f64, vp: f64, how: Revea
 /// viewport's top-left corner at offset 0.
 fn content_rect(r: Rect, viewport: Rect) -> Rect {
     Rect::new(r.x - viewport.x, r.y - viewport.y, r.w, r.h)
+}
+
+/// The height of the area at `rect` an on-screen keyboard `inset` tall covers, in the area's own
+/// space: 0 with no keyboard, otherwise the part of the area's window rect below the keyboard's
+/// top, clamped to the area (D365).
+fn keyboard_cut(ui: &mut Ui<'_>, rect: Rect, inset: f32) -> f32 {
+    if inset.is_nan() || inset <= 0.0 || inset.is_infinite() || rect.h.is_nan() || rect.h <= 0.0 {
+        return 0.0;
+    }
+    let top = ui.painter().window.h - inset;
+    let win = ui.painter().transformed(rect);
+    let covered = (win.bottom() - top).clamp(0.0, win.h);
+    // The window height the area spans, back to the area's own space.
+    if win.h > 0.0 {
+        (covered * rect.h / win.h).clamp(0.0, rect.h)
+    } else {
+        0.0
+    }
+}
+
+/// `child`, the focused widget's rect in the content space, narrowed to the caret the widget
+/// published as the frame's input method area, when that lies inside `shown`, the child's rect
+/// where it was drawn (the area's own space); `child` itself otherwise. The caller asks for it
+/// only for a child taller than the visible part: one that fits is brought in whole (D365).
+fn caret_in(ui: &mut Ui<'_>, child: Rect, shown: Rect) -> Rect {
+    let Some(ime) = ui.frame_ime_area() else {
+        return child;
+    };
+    let win = ui.painter().transformed(shown);
+    if !(ime.w > 0.0 && ime.h > 0.0 && within(ime, win)) {
+        return child;
+    }
+    Rect::new(
+        child.x + (ime.x - win.x),
+        child.y + (ime.y - win.y),
+        ime.w,
+        ime.h,
+    )
 }
 
 /// Whether `inner` lies wholly inside `outer`, both in one space.
@@ -898,7 +938,12 @@ impl Ui<'_> {
         let now = self.time();
         let physics = self.scroll_physics();
         let live = [opts.bars.0 != Bars::Disabled, opts.bars.1 != Bars::Disabled];
-        let vp = [f64::from(rect.w), f64::from(rect.h)];
+        // The part of the area an on-screen keyboard covers adds to its y range (D365): the
+        // viewport the scroll arithmetic uses is the uncovered part, and the app's `ScrollView`
+        // keeps the whole rect. No keyboard: `cut` is 0 and every value is as before.
+        let inset = self.keyboard_inset().bottom;
+        let cut = keyboard_cut(self, rect, inset);
+        let vp = [f64::from(rect.w), f64::from(rect.h - cut)];
         let own = self.registration_mark();
         let pulled = self.take_link_pulled(self.scope_id());
         let resp = self.interact(
@@ -1093,6 +1138,12 @@ impl Ui<'_> {
         // a keyboard focus move to a child (the least movement).
         let (focused, ring) = self.focus_state();
         let inside = focused.and_then(|f| watched.iter().rev().find(|(w, _)| *w == f).copied());
+        // With a keyboard up, a child that gained focus (a touch focus has no ring) or a keyboard
+        // that changed its height reveals the caret, in the part the keyboard leaves (D365).
+        let kb_up = inset > 0.0;
+        let kb_reveal = kb_up
+            && inside.is_some_and(|(f, _)| st.last_focus != Some(f) || st.last_inset != inset);
+        let visible = Rect::new(rect.x, rect.y, rect.w, rect.h - cut);
         if translate {
             for (w, r) in &watched {
                 if self.is_scroll_target(*w) {
@@ -1100,26 +1151,43 @@ impl Ui<'_> {
                 }
             }
             if let Some((f, r)) = inside
-                && ring
-                && st.last_focus != Some(f)
+                && ((ring && st.last_focus != Some(f)) || kb_reveal)
             {
+                let r = if kb_up && f64::from(r.h) > vp[1] {
+                    let shown = Rect::new(
+                        r.x - (pre[0] + f64::from(over_pre[0])) as f32,
+                        r.y - (pre[1] + f64::from(over_pre[1])) as f32,
+                        r.w,
+                        r.h,
+                    );
+                    caret_in(self, r, shown)
+                } else {
+                    r
+                };
                 reveals.push((Target::rect(content_rect(r, rect)), Reveal::Nearest));
             }
         } else if let Some((f, r)) = inside
-            && ring
-            && st.last_focus != Some(f)
-            && !within(r, rect)
+            && ((ring && st.last_focus != Some(f)) || kb_reveal)
+            && (kb_up || !within(r, rect))
         {
-            // Drawn at the offset the content was given, in the viewport's own space.
-            let at = |start: f32, origin: f32, ax: usize| f64::from(start - origin) + pre[ax];
-            reveals.push((
-                Target {
-                    x: Some((at(r.x, rect.x, 0), f64::from(r.w))),
-                    y: Some((at(r.y, rect.y, 1), f64::from(r.h))),
-                },
-                Reveal::Nearest,
-            ));
+            let r = if kb_up && f64::from(r.h) > vp[1] {
+                caret_in(self, r, r)
+            } else {
+                r
+            };
+            if !kb_up || !within(r, visible) {
+                // Drawn at the offset the content was given, in the viewport's own space.
+                let at = |start: f32, origin: f32, ax: usize| f64::from(start - origin) + pre[ax];
+                reveals.push((
+                    Target {
+                        x: Some((at(r.x, rect.x, 0), f64::from(r.w))),
+                        y: Some((at(r.y, rect.y, 1), f64::from(r.h))),
+                    },
+                    Reveal::Nearest,
+                ));
+            }
         }
+        st.last_inset = inset;
         st.last_focus = inside.map(|(f, _)| f);
         for (target, how) in reveals {
             for ax in 0..2 {
@@ -1214,12 +1282,13 @@ impl Ui<'_> {
         ];
         let room = opts.bar_room;
         let has_y = bar[1]
-            && bar_geometry(Axis::Vertical, rect, now_off[1], ext[1], false, room.1).is_some();
+            && bar_geometry(Axis::Vertical, visible, now_off[1], ext[1], false, room.1).is_some();
         let has_x = bar[0]
-            && bar_geometry(Axis::Horizontal, rect, now_off[0], ext[0], false, room.0).is_some();
+            && bar_geometry(Axis::Horizontal, visible, now_off[0], ext[0], false, room.0).is_some();
         let reveal = self.pointer_in(rect);
         if has_y
-            && let Some(g) = bar_geometry(Axis::Vertical, rect, now_off[1], ext[1], has_x, room.1)
+            && let Some(g) =
+                bar_geometry(Axis::Vertical, visible, now_off[1], ext[1], has_x, room.1)
         {
             let drag = self.scrollbar(id.with("bar-y"), Axis::Vertical, &g, reveal);
             if drag != 0.0 {
@@ -1229,7 +1298,8 @@ impl Ui<'_> {
             }
         }
         if has_x
-            && let Some(g) = bar_geometry(Axis::Horizontal, rect, now_off[0], ext[0], has_y, room.0)
+            && let Some(g) =
+                bar_geometry(Axis::Horizontal, visible, now_off[0], ext[0], has_y, room.0)
         {
             let drag = self.scrollbar(id.with("bar-x"), Axis::Horizontal, &g, reveal);
             if drag != 0.0 {

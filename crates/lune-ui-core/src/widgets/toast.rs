@@ -536,7 +536,7 @@ impl<'a> Ui<'a> {
 
     fn toast_stack(&mut self, toasts: &mut Toasts, resp: &mut ToastResponse) {
         let tier = self.tier();
-        let window = self.painter().window;
+        let window = self.overlay_bounds();
         // A toast that left before it was ever drawn has nothing to fade.
         let unseen: Vec<ToastId> = toasts
             .entries

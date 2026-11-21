@@ -114,7 +114,9 @@ impl Layout {
         card_w: f32,
     ) -> Layout {
         let t = p.theme;
-        let win = p.window;
+        let win = p.bounds();
+        // Where the bounds start inside the window: 0 unless a safe area or keyboard cuts them.
+        let (dx, dy) = (win.x - p.window.x, win.y - p.window.y);
         let inner = card_w - 48.0;
         let title_style = Style::ui(t.font_m, t.fg_primary).medium();
         let body_style = Style::ui(t.font_base, t.fg_secondary);
@@ -125,8 +127,8 @@ impl Layout {
         let body_h = 24.0 + th + 10.0 + mh + spec.extra_h + 24.0;
         let footer_h = 18.0 + 32.0 + 18.0;
         let card = Rect::new(
-            (win.w - card_w) / 2.0,
-            ((win.h - body_h - footer_h) / 2.0).max(20.0),
+            dx + (win.w - card_w) / 2.0,
+            dy + ((win.h - body_h - footer_h) / 2.0).max(20.0),
             card_w,
             body_h + footer_h,
         );

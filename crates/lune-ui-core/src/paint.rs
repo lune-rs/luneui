@@ -261,6 +261,9 @@ impl PainterState {
 pub struct Painter<'a, H> {
     pub s: f32,
     pub window: Rect,
+    /// Where an overlay places itself: `window` inset by the safe area and the keyboard, which
+    /// `Ui` sets; `window` itself for a painter used on its own (D365).
+    bounds: Rect,
     /// The display list painted so far: every layer and the backdrop request.
     pub scene: Scene,
     /// The fixed layer drawing is on, and what a hit records.
@@ -318,6 +321,7 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
         Self {
             s,
             window,
+            bounds: window,
             scene: Scene::default(),
             layer: 0,
             slot: None,
@@ -334,6 +338,16 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
             hit_tag: 0,
             recording: None,
         }
+    }
+
+    /// The rect an overlay places inside: `window` unless the `Ui` set it narrower (D365).
+    pub(crate) fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    /// Sets the rect [`Self::bounds`] returns.
+    pub(crate) fn set_bounds(&mut self, bounds: Rect) {
+        self.bounds = bounds;
     }
 
     fn rec(&mut self, op: impl FnOnce() -> Op) {
