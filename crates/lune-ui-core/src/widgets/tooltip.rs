@@ -9,9 +9,11 @@ use std::time::Duration;
 use super::popover::{GLASS_RADIUS, glass_surface};
 use super::popover::{PlaceAlign, PlaceRequest, Side, place};
 use crate::access::{Node, Role};
+use crate::input::PointerKind;
 use crate::motion::{Easing, Kind, Motion, Reduce, Time, Token};
 use crate::paint::{LayerId, Ops, Painter, Rect, Xform};
 use crate::text::{Spec, Style};
+use crate::ui::LONG_PRESS;
 use crate::ui::{OverlayOptions, OverlayPhase, Response, Ui, WidgetId};
 
 /// The minimum continuous hover before lazily built hover content is built (C5's 150 ms). Not the tooltip delay, which is `MotionTokens::tooltip_delay`.
@@ -50,6 +52,20 @@ struct Dwell {
 /// A tooltip's hiding state: a press or Escape hides it until the pointer (and focus) leave.
 #[derive(Debug, Default)]
 struct Hidden(bool);
+
+/// How long app time a touch tooltip stays after the finger lifts (D363): long enough to read it.
+pub(crate) const TOUCH_LINGER: Duration = Duration::from_millis(1500);
+
+/// A touch tooltip's state under its anchor (D363).
+#[derive(Debug, Default)]
+struct TouchTip {
+    /// The `t0` of the press that owns the tooltip: the finger rests on the anchor.
+    press: Option<Time>,
+    /// When the linger after the lift ends.
+    until: Option<Time>,
+    /// The press whose tooltip Escape dismissed.
+    dismissed: Option<Time>,
+}
 
 /// The tooltip's panel opacity at one moment.
 fn opacity(phase: OverlayPhase) -> f32 {
@@ -149,8 +165,10 @@ impl<'a> Ui<'a> {
                 }
             });
         }
-        // `anchor.rect` is a `Response`'s: already in window coordinates.
-        let hover = self.pointer_over(anchor.rect);
+        // `anchor.rect` is a `Response`'s: already in window coordinates. Under a finger there is
+        // no hover: a rest of the finger shows the tooltip instead (D363).
+        let touch = self.pointer_kind() == PointerKind::Touch;
+        let hover = !touch && self.pointer_over(anchor.rect);
         let active = hover || anchor.focus_visible;
         let hidden_id = anchor.id.with("tooltip-hidden");
         let hidden = {
@@ -164,7 +182,8 @@ impl<'a> Ui<'a> {
         };
         let delay = self.theme().motion.tooltip_delay;
         let due = self.hover_dwell(anchor.id.with("tooltip-dwell"), active && !hidden, delay);
-        if !due {
+        let touched = touch && self.touch_tooltip(anchor);
+        if !(due || touched) {
             return;
         }
 
@@ -230,6 +249,68 @@ impl<'a> Ui<'a> {
         });
         if frame.dismissed.is_some() {
             self.transient::<Hidden>(hidden_id).0 = true;
+            let held = self.touch_rest().map(|p| p.t0);
+            self.transient::<TouchTip>(anchor.id.with("tooltip-touch"))
+                .dismissed = held;
+        }
+    }
+
+    /// Whether a touch shows `anchor`'s tooltip now (D363): the finger rested on the anchor for
+    /// `LONG_PRESS`, and it stays while the finger is down and for `TOUCH_LINGER` after a lift
+    /// that came after the tooltip showed. A new press elsewhere, a pan, a drag past the slop, a
+    /// cancel or Escape hides it. Asks for the frame each deadline falls on.
+    fn touch_tooltip(&mut self, anchor: &Response) -> bool {
+        let now = self.time();
+        let rest = self.touch_rest();
+        let end = self.touch_end();
+        let id = anchor.id.with("tooltip-touch");
+        let st = self.transient::<TouchTip>(id);
+        match rest {
+            Some(p) if p.resting && anchor.rect.contains(p.at) => {
+                if st.press != Some(p.t0) {
+                    st.press = Some(p.t0);
+                    st.until = None;
+                }
+                if st.dismissed == Some(p.t0) {
+                    return false;
+                }
+                let due = p.t0 + LONG_PRESS;
+                if now >= due {
+                    return true;
+                }
+                self.request_repaint_at(due);
+                false
+            }
+            Some(_) => {
+                st.press = None;
+                st.until = None;
+                false
+            }
+            None => {
+                let Some(t0) = st.press else {
+                    return false;
+                };
+                let shown = end.filter(|e| {
+                    e.t0 == t0
+                        && e.rested_lift
+                        && e.at >= t0 + LONG_PRESS
+                        && st.dismissed != Some(t0)
+                });
+                let Some(e) = shown else {
+                    st.press = None;
+                    st.until = None;
+                    return false;
+                };
+                let until = *st.until.get_or_insert(e.at + TOUCH_LINGER);
+                if now < until {
+                    self.request_repaint_at(until);
+                    true
+                } else {
+                    st.press = None;
+                    st.until = None;
+                    false
+                }
+            }
         }
     }
 }

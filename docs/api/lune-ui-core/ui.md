@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:64`
+Source: `crates/lune-ui-core/src/ui.rs:65`
 
 **Fields**
 
@@ -434,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:131`
+Source: `crates/lune-ui-core/src/ui.rs:132`
 
 **Methods and associated items**
 

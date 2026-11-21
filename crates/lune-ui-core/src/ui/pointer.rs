@@ -400,9 +400,33 @@ impl Tracker {
     }
 }
 
+/// What a touch press in flight reads as to a tooltip (D363).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TouchRest {
+    /// The frame time the press began at: the press's identity.
+    pub(crate) t0: Time,
+    /// Where it began.
+    pub(crate) at: (f32, f32),
+    /// The finger still rests: it has not left the slop, been taken by a pan or begun a drag.
+    pub(crate) resting: bool,
+}
+
+/// How the last touch press ended (D363).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct TouchEnd {
+    /// The ended press's `t0`.
+    pub(crate) t0: Time,
+    /// The frame time of the lift; zero for a cancel.
+    pub(crate) at: Time,
+    /// A lift of a finger that still rested, not a cancel, a pan or a drag.
+    pub(crate) rested_lift: bool,
+}
+
 /// Pointer state that outlives a frame (held in the store).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct PointerState {
+    /// How the last touch press ended.
+    touch_end: Option<TouchEnd>,
     pos: Option<(f32, f32)>,
     press: Option<Press>,
     tracker: Tracker,
@@ -626,6 +650,13 @@ impl PointerState {
             }
             (PointerButton::Primary, false) => {
                 let p = self.press.take()?;
+                if p.kind == PointerKind::Touch {
+                    self.touch_end = Some(TouchEnd {
+                        t0: p.t0,
+                        at: cx.time,
+                        rested_lift: !p.passed && p.pan.is_none() && !p.dragging,
+                    });
+                }
                 if let Some(pan) = p.pan {
                     let (vx, vy) = project(self.tracker.velocity(), pan.lock);
                     out.pan_ended.insert(pan.region);
@@ -737,6 +768,13 @@ impl PointerState {
         if let Some(pan) = self.press.and_then(|p| p.pan) {
             out.pan_ended.insert(pan.region);
         }
+        if let Some(p) = self.press.filter(|p| p.kind == PointerKind::Touch) {
+            self.touch_end = Some(TouchEnd {
+                t0: p.t0,
+                at: Time::ZERO,
+                rested_lift: false,
+            });
+        }
         self.press = None;
         self.secondary = None;
         self.tracker.clear();
@@ -785,6 +823,22 @@ impl PointerState {
                 out.touch_focus = Some(f);
             }
         }
+    }
+
+    /// The touch press in flight, as a tooltip reads it (D363).
+    pub(crate) fn touch_rest(&self) -> Option<TouchRest> {
+        self.press
+            .filter(|p| p.kind == PointerKind::Touch)
+            .map(|p| TouchRest {
+                t0: p.t0,
+                at: p.at,
+                resting: !p.passed && p.pan.is_none() && !p.dragging,
+            })
+    }
+
+    /// How the last touch press ended.
+    pub(crate) fn touch_end(&self) -> Option<TouchEnd> {
+        self.touch_end
     }
 
     /// The time a long press still to fire comes due at.

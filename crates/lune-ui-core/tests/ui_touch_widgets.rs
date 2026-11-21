@@ -561,7 +561,10 @@ fn a_split_divider_claims_its_axis_a_vertical_pan_scrolls_and_a_horizontal_drag_
     // the held press.
     let mut h = ready();
     let seen = swipe(&mut h, mid, (mid.0 + 6.0, mid.1), split_frame);
-    assert!(seen.iter().all(|(size, changed, _)| *size == 100.0 && !*changed));
+    assert!(
+        seen.iter()
+            .all(|(size, changed, _)| *size == 100.0 && !*changed)
+    );
 
     let mut h = ready();
     let seen = swipe(&mut h, mid, (mid.0 + 40.0, mid.1), split_frame);
@@ -727,4 +730,55 @@ fn in_a_strip_that_fits_a_horizontal_touch_drag_reorders_as_a_mouse_drag_does() 
             .cloned()
     };
     assert_eq!(reorder(&t), reorder(&events(&m)));
+}
+
+// Step 3 (D363): nothing reachable only by hover.
+
+/// One frame of three closable tabs, `active` the app's active tab.
+fn closable_frame(h: &mut UiHarness, active: u64) -> TabStripResponse {
+    let mut out = None;
+    h.frame(|ui| {
+        let tabs: Vec<Tab<'_>> = (0..3)
+            .map(|k| Tab {
+                key: TabKey(k),
+                title: "A tab",
+                closable: true,
+                progress: None,
+            })
+            .collect();
+        let o = TabStripOptions {
+            active: Some(TabKey(active)),
+            panel_focused: false,
+            busy: None,
+            busy_tone: Tone::Neutral,
+            card: Rect::new(40.0, 40.0, 500.0, 200.0),
+            name: "Sessions",
+            header_tint: None,
+        };
+        out = Some(ui.tab_strip("s", Rect::new(40.0, 40.0, 500.0, 32.0), &tabs, &o));
+    });
+    out.expect("the frame ran")
+}
+
+#[test]
+fn a_tab_close_is_reached_by_touch_through_a_tap_on_its_tab() {
+    let mut h = UiHarness::new((600.0, 300.0));
+    closable_frame(&mut h, 0);
+    closable_frame(&mut h, 0);
+    // A tap on the inactive tab 1 (its slot starts at x = 40 + 113) activates it.
+    h.input.touch_start(1, 200.0, 56.0);
+    closable_frame(&mut h, 0);
+    h.input.touch_end(1, 200.0, 56.0);
+    let tap = closable_frame(&mut h, 0);
+    assert_eq!(tap.events, vec![TabEvent::Activate(TabKey(1))]);
+    closable_frame(&mut h, 1);
+    // Its close sits at the right end of the slot: 20 px square, 8 px from the edge.
+    let close = (40.0 + 113.0 + 108.0 - 8.0 - 10.0, 56.0);
+    h.input.touch_start(1, close.0, close.1);
+    assert_eq!(closable_frame(&mut h, 1).events, vec![]);
+    h.input.touch_end(1, close.0, close.1);
+    assert_eq!(
+        closable_frame(&mut h, 1).events,
+        vec![TabEvent::Close(TabKey(1))]
+    );
 }

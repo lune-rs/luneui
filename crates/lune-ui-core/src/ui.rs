@@ -54,6 +54,7 @@ use crate::widgets::scroll_area::ScrollPhysics;
 use access::Routed;
 use keys::KeyPress;
 use overlay::Dismissal as D;
+pub(crate) use pointer::LONG_PRESS;
 use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost, touch_target};
 
 /// The opacity of a disabled subtree.
@@ -1248,6 +1249,16 @@ impl<'a> Ui<'a> {
             caught: p.caught.contains(&id),
             active: p.panning == Some(id),
         }
+    }
+
+    /// The touch press in flight, for a tooltip's rest rule (D363).
+    pub(crate) fn touch_rest(&self) -> Option<pointer::TouchRest> {
+        self.store.pointer.touch_rest()
+    }
+
+    /// How the last touch press ended, for a tooltip's linger (D363).
+    pub(crate) fn touch_end(&self) -> Option<pointer::TouchEnd> {
+        self.store.pointer.touch_end()
     }
 
     /// Which axes a touch drag on `id` is the widget's own, from the next frame on (D349): a

@@ -547,3 +547,137 @@ fn a_tooltip_in_a_scrolled_area_ignores_a_point_one_offset_away_from_its_anchor(
     // Content y 250 at offset 100 is screen y 150; screen y 66 is what a second translate gives.
     assert!(!scrolled_and_waited(250.0, (50.0, 66.0)).shown());
 }
+
+// ---- under a finger (D363) ------------------------------------------------------------
+
+/// A finger down on `A` at 0 ms; two frames at 0 and 10 ms.
+fn finger() -> UiHarness {
+    let mut h = UiHarness::new(WIN);
+    frame(&mut h, 0, &[anchor("a", A)]);
+    let (x, y) = centre(A);
+    h.at_ms(0).input.touch_start(1, x, y);
+    frame(&mut h, 0, &[anchor("a", A)]);
+    h
+}
+
+#[test]
+fn a_finger_resting_500_ms_shows_the_tooltip_and_the_mouse_dwell_is_unchanged() {
+    let mut h = finger();
+    let pending = frame(&mut h, 10, &[anchor("a", A)]);
+    assert!(!pending.shown());
+    assert_eq!(
+        pending.repaint,
+        Repaint::At(ms(500)),
+        "it asks for its frame"
+    );
+    assert!(
+        !frame(&mut h, 450, &[anchor("a", A)]).shown(),
+        "not at 450 ms"
+    );
+    assert!(!frame(&mut h, 499, &[anchor("a", A)]).shown());
+    assert!(frame(&mut h, 500, &[anchor("a", A)]).shown(), "at 500 ms");
+    assert!(frame(&mut h, 900, &[anchor("a", A)]).shown(), "while held");
+    assert!(
+        frame(&mut h, 5000, &[anchor("a", A)]).shown(),
+        "as long as held"
+    );
+
+    // The mouse's dwell is the theme's 800 ms, with a finger or without.
+    let mut m = hovering();
+    assert!(!frame(&mut m, 500, &[anchor("a", A)]).shown());
+    assert!(frame(&mut m, 800, &[anchor("a", A)]).shown());
+}
+
+#[test]
+fn the_tooltip_stays_1500_ms_after_the_lift_and_asks_for_that_frame() {
+    let mut h = finger();
+    frame(&mut h, 500, &[anchor("a", A)]);
+    let (x, y) = centre(A);
+    h.at_ms(700).input.touch_end(1, x, y);
+    let lift = frame(&mut h, 700, &[anchor("a", A)]);
+    assert!(lift.shown());
+    assert_eq!(lift.repaint, Repaint::At(ms(2200)), "asks for lift + 1.5 s");
+    assert!(frame(&mut h, 1500, &[anchor("a", A)]).shown());
+    assert!(frame(&mut h, 2199, &[anchor("a", A)]).shown());
+    // At lift + 1.5 s the dismiss fade starts (120 ms, as for the mouse) and it is gone after.
+    assert!(
+        frame(&mut h, 2200, &[anchor("a", A)]).shown(),
+        "the fade starts"
+    );
+    assert!(
+        !frame(&mut h, 2320, &[anchor("a", A)]).shown(),
+        "gone after the fade"
+    );
+    assert!(!frame(&mut h, 3000, &[anchor("a", A)]).shown());
+}
+
+#[test]
+fn a_tap_a_move_past_the_slop_and_a_cancel_never_show_or_hide_it_at_once() {
+    // A tap shorter than 500 ms shows nothing, even later.
+    let mut h = finger();
+    let (x, y) = centre(A);
+    h.at_ms(300).input.touch_end(1, x, y);
+    frame(&mut h, 300, &[anchor("a", A)]);
+    for t in [500, 900, 2000] {
+        assert!(!frame(&mut h, t, &[anchor("a", A)]).shown());
+    }
+
+    // A finger that left the slop never shows it.
+    let mut h = finger();
+    h.at_ms(100).input.touch_move(1, x + 30.0, y);
+    frame(&mut h, 100, &[anchor("a", A)]);
+    for t in [500, 900] {
+        assert!(!frame(&mut h, t, &[anchor("a", A)]).shown());
+    }
+
+    // A finger that was taken by a pan never shows it: the anchor sits in a scroll area.
+    let scrolled = |h: &mut UiHarness, t: u64| {
+        let (scene, _) = h.at_ms(t).frame(|ui| {
+            ui.painter().on(LayerId::Page);
+            ui.scroll_area(
+                "area",
+                Rect::new(0.0, 0.0, 800.0, 300.0),
+                &ScrollOptions::default(),
+                |ui, _| {
+                    let r = ui.interact(id("a"), A, Sense::CLICK_FOCUS);
+                    ui.tooltip(&r, TEXT);
+                    ((), Extent::new(800.0, 1500.0))
+                },
+            );
+        });
+        !scene.merged(LayerId::Popup).geometry.under.is_empty()
+    };
+    let mut h = UiHarness::new(WIN);
+    scrolled(&mut h, 0);
+    h.at_ms(0).input.touch_start(1, x, y);
+    scrolled(&mut h, 0);
+    h.at_ms(100).input.touch_move(1, x, y - 40.0);
+    for t in [100, 500, 900] {
+        assert!(!scrolled(&mut h, t), "a pan shows no tooltip at {t} ms");
+    }
+
+    // A cancel hides it at once.
+    let mut h = finger();
+    assert!(frame(&mut h, 500, &[anchor("a", A)]).shown());
+    h.at_ms(600).input.touch_cancel(1, x, y);
+    frame(&mut h, 600, &[anchor("a", A)]);
+    assert!(
+        !frame(&mut h, 720, &[anchor("a", A)]).shown(),
+        "gone after the fade, with no linger"
+    );
+}
+
+#[test]
+fn a_new_press_elsewhere_hides_a_lingering_tooltip_at_once() {
+    let mut h = finger();
+    frame(&mut h, 500, &[anchor("a", A)]);
+    let (x, y) = centre(A);
+    h.at_ms(700).input.touch_end(1, x, y);
+    assert!(frame(&mut h, 700, &[anchor("a", A)]).shown());
+    h.at_ms(900).input.touch_start(1, 600.0, 400.0);
+    frame(&mut h, 900, &[anchor("a", A)]);
+    assert!(
+        !frame(&mut h, 1020, &[anchor("a", A)]).shown(),
+        "gone after the fade, well before the linger ends"
+    );
+}
