@@ -301,11 +301,21 @@ if [ "$smoke" -eq 1 ]; then
   grep '^probe clipboard' "$OUT/stdout.log" || true
   written="$(grep '^probe clipboard_write ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard_write //')"
   readback="$(grep '^probe clipboard ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard //')"
-  pasted="$(xcrun simctl pbpaste "$UDID" 2>/dev/null | tr -d '\r\n')"
+  # On a device's first boot the host-side pasteboard sync can lag the demo's own write, so
+  # `pbpaste` prints '' (or an older text) for a moment: poll up to 10 s until it equals the
+  # written text, then compare once below. A wrong text or an empty one still fails after the wait.
+  pasted=""
+  pb_err=""
+  for _ in $(seq 1 20); do
+    pasted="$(xcrun simctl pbpaste "$UDID" 2>"$OUT/pbpaste.err" | tr -d '\r\n')"
+    [ -n "$written" ] && [ "$pasted" = "$written" ] && break
+    sleep 0.5
+  done
+  pb_err="$(head -c 300 "$OUT/pbpaste.err" 2>/dev/null | tr '\r\n' '  ')"
   echo "ios-sim: clipboard written '$written', read back '$readback', pbpaste '$pasted'"
   [ -n "$written" ] || fail "no 'probe clipboard_write' line"
   [ "$readback" = "$written" ] || fail "the clipboard read back '$readback', not '$written'"
-  [ "$pasted" = "$written" ] || fail "simctl pbpaste printed '$pasted', not '$written'"
+  [ "$pasted" = "$written" ] || fail "simctl pbpaste printed '$pasted', not '$written' after 10 s (stderr: '$pb_err')"
   # The frame the demo schedules 1 s after its frame 30 (`Repaint::At`) must arrive while the app
   # is idle: nothing else asks for frame 31 (D356).
   for _ in $(seq 1 40); do
