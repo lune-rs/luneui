@@ -177,10 +177,19 @@ fn paint_scrim<H: Copy + PartialEq>(p: &mut Painter<'_, H>, blur: bool) {
     p.fill(win, 0.0, t.dialog_backdrop);
 }
 
-/// The card's frost and its ring. The scrim's blur (when there is one) is already under it, so
-/// the card asks for none of its own.
-fn paint_card<H: Copy + PartialEq>(p: &mut Painter<'_, H>, card: Rect, glass: &DialogGlass) {
+/// The card's frost and its ring, after its own blur when `own_blur`. Under a blurred scrim the
+/// card asks for none (the page is blurred once, D261); under the plain scrim it asks for the
+/// frame's blur, as every menu does (D411).
+fn paint_card<H: Copy + PartialEq>(
+    p: &mut Painter<'_, H>,
+    card: Rect,
+    glass: &DialogGlass,
+    own_blur: bool,
+) {
     let t = p.theme;
+    if own_blur {
+        p.backdrop(card, 8.0);
+    }
     p.frost(card, 8.0, glass.fill, glass.noise);
     p.ring(card, 8.0, 1.0, t.menu_popup_border, false);
 }
@@ -212,7 +221,7 @@ pub fn dialog<H: Copy + PartialEq>(
     paint_scrim(p, true);
 
     let l = Layout::of(p, spec, CARD_W);
-    paint_card(p, l.card, glass);
+    paint_card(p, l.card, glass, false);
     p.hit(l.card, hits.block);
     paint_text(p, &l);
     body(p, l.body.0, l.body.1, l.body.2);
@@ -280,7 +289,8 @@ impl DialogWidth {
 pub struct DialogOptions {
     pub width: DialogWidth,
     /// Blur what is behind the scrim (sigma 8, saturation 1); the default. Off draws the plain
-    /// scrim, and the card frosts the sharp picture.
+    /// scrim, and the card blurs what is behind it itself (radius 8, the frame's blur) before it
+    /// frosts; the scrim around the card stays sharp.
     pub scrim_blur: bool,
     /// False draws the confirm button disabled: nothing activates it (Enter, Space, a click and
     /// the default action do nothing), and the open focus goes to Cancel, or nowhere.
@@ -367,9 +377,9 @@ pub(crate) struct ModalReport<R> {
 }
 
 /// The modal host: the overlay on the `Modal` layer (Escape dismisses, focus trapped), the
-/// scrim (blurred when asked) with its click, the card's frost with the open and close
-/// transform, the node (role `Dialog`, state `Modal`, actions Dismiss and, when offered, Default),
-/// and the exit painter of a closing surface. `content` draws on the card after the frost;
+/// scrim (blurred when asked) with its click, the card's blur (when the scrim is plain) and frost
+/// with the open and close transform, the node (role `Dialog`, state `Modal`, actions Dismiss and,
+/// when offered, Default), and the exit painter of a closing surface. `content` draws on the card after the frost;
 /// `exit_parts` draws the same on the card of a closing surface, from owned data, inside the
 /// card's transform. Stop calling to close.
 pub(crate) fn modal_host<'a, R>(
@@ -404,7 +414,7 @@ pub(crate) fn modal_host<'a, R>(
             1.0
         };
         p.push_xform(card_xform(card, scale, alpha));
-        paint_card(p, card, &glass);
+        paint_card(p, card, &glass, !blur);
         exit_parts(p);
         p.pop_xform();
     };
@@ -447,7 +457,7 @@ pub(crate) fn modal_host<'a, R>(
             }
             node.actions.insert(Action::Dismiss);
             let r = ui.node_container(node, |ui| {
-                paint_card(ui.painter(), card, &glass);
+                paint_card(ui.painter(), card, &glass, !blur);
                 content(ui)
             });
             if alpha.is_some() {

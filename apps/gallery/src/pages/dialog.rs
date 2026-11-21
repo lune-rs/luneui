@@ -494,7 +494,7 @@ const SCENES: &[UiScene] = &[
     // The scrim blurs what is behind it at sigma 8; the page behind has a heading, buttons and
     // a caption to show it.
     settled("dialog-scrim-blur", blur),
-    // `scrim_blur: false`: the plain scrim, no request anywhere (D26).
+    // `scrim_blur: false`: the plain scrim, and the card blurs what is behind it (D411).
     settled("dialog-scrim-plain", plain),
     settled("dialog-confirm-disabled", disabled),
     // The overlays below open in the dialog's body and draw above the dialog's own text.
@@ -646,9 +646,13 @@ mod tests {
         let (blur, _) = run("dialog-scrim-blur");
         assert_eq!(blur.merged(LayerId::Modal).backdrops[0].sigma, 8.0);
         let (plain, _) = run("dialog-scrim-plain");
-        assert!(
-            plain.backdrops().next().is_none(),
-            "the plain scrim asks for none"
+        let asks: Vec<_> = plain.backdrops().collect();
+        assert_eq!(asks.len(), 1, "the plain scrim: the card's one request");
+        // The scrim's fill is the first shape on the Modal layer and spans the window.
+        let window = plain.merged(LayerId::Modal).geometry.under[0].rect;
+        assert_ne!(
+            asks[0].rect, window,
+            "the request is the card's, not the window's"
         );
         let (_, out) = run("dialog-confirm-disabled");
         let confirm = out

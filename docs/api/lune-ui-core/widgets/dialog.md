@@ -33,7 +33,7 @@ pub struct Dialog<'s> {
 
 What [`Ui::dialog`](../ui.md#method.Ui.dialog) and [`Ui::dialog_with`](../ui.md#method.Ui.dialog_with) show.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:240`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:249`
 
 **Fields**
 
@@ -142,7 +142,7 @@ pub struct DialogOptions {
 
 How [`Ui::dialog_with`](../ui.md#method.Ui.dialog_with) differs from [`Ui::dialog`](../ui.md#method.Ui.dialog).
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:280`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:289`
 
 **Fields**
 
@@ -151,7 +151,8 @@ Source: `crates/lune-ui-core/src/widgets/dialog.rs:280`
 - <a id="structfield.DialogOptions.scrim_blur"></a>`pub scrim_blur: bool`
 
   Blur what is behind the scrim (sigma 8, saturation 1); the default. Off draws the plain
-  scrim, and the card frosts the sharp picture.
+  scrim, and the card blurs what is behind it itself (radius 8, the frame's blur) before it
+  frosts; the scrim around the card stays sharp.
 
 - <a id="structfield.DialogOptions.confirm_enabled"></a>`pub confirm_enabled: bool`
 
@@ -180,7 +181,7 @@ pub struct DialogResponse {
 
 What a frame of [`Ui::dialog`](../ui.md#method.Ui.dialog) reports; at most one is set.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:251`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:260`
 
 **Fields**
 
@@ -258,7 +259,7 @@ pub enum Cancel<'s> {
 
 How the cancel button is labelled.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:229`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:238`
 
 **Variants**
 
@@ -294,7 +295,7 @@ pub enum DialogWidth {
 
 The card's width.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:260`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:269`
 
 **Variants**
 
@@ -344,7 +345,7 @@ transforms; call it with none (the `Ui` overlays start with none). `body` draws 
 footer; it gets the painter, the card's content x, the y just below the message and the
 content width.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:202`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:211`
 
 ## Constants
 

@@ -856,14 +856,33 @@ fn the_scrim_blur_asks_for_the_window_at_sigma_eight_on_the_modal_layer() {
     let d = the_dialog(Cancel::Default, 0.0);
     let mut plain = opened_with(&d, &PLAIN);
     let (scene, _, _, _) = frame_with(&mut plain, Some((&d, &PLAIN)));
-    assert_eq!(blur_of(&scene), None, "no blur with `scrim_blur: false`");
+    assert_eq!(
+        scene.backdrops().count(),
+        1,
+        "`scrim_blur: false`: the card's own blur is the only one"
+    );
     let mut dflt = opened_with(&d, &DialogOptions::default());
     let (scene, _, _, _) = frame_with(&mut dflt, Some((&d, &DialogOptions::default())));
-    assert!(blur_of(&scene).is_some(), "the blur is the default");
+    let db = blur_of(&scene).expect("the blur is the default");
+    assert_eq!(
+        scene.backdrops().count(),
+        1,
+        "the default: the scrim's only"
+    );
+    assert_eq!(
+        db.rect,
+        [0.0, 0.0, WIN.0, WIN.1],
+        "the default: the window's"
+    );
 
     let mut h = opened_with(&d, &BLUR);
     let (scene, _, _, _) = frame_with(&mut h, Some((&d, &BLUR)));
     let b = blur_of(&scene).expect("the blur is asked for");
+    assert_eq!(
+        scene.backdrops().count(),
+        1,
+        "the scrim's only; the card asks for none"
+    );
     assert_eq!(scene.merged(LayerId::Modal).backdrops, [b], "on the dialog");
     assert_eq!((b.sigma, b.saturation), (8.0, 1.0));
     assert_eq!(b.rect, [0.0, 0.0, WIN.0, WIN.1]);
@@ -910,6 +929,90 @@ fn the_blur_fades_with_the_scrim_opening_and_closing() {
     assert!(b > 0.0 && b < 1.0, "closing: {b}");
     assert!((b - s).abs() < 1e-5, "{b} vs {s}");
     assert_eq!(scene.merged(LayerId::Modal).backdrops.len(), 1);
+    h.at_ms(3180);
+    let (scene, _, _, _) = frame_with(&mut h, None);
+    assert_eq!(blur_of(&scene), None, "gone with the dialog");
+}
+
+/// A card's rect as a blur request states it: `[x, y, w, h]`.
+fn rect_of(r: Rect) -> [f32; 4] {
+    [r.x, r.y, r.w, r.h]
+}
+
+#[test]
+fn the_plain_scrim_card_asks_for_a_blur_of_its_own() {
+    let d = the_dialog(Cancel::Default, 0.0);
+    for o in [PLAIN, FORM] {
+        let mut h = opened_with(&d, &o);
+        let (scene, out, _, _) = frame_with(&mut h, Some((&d, &o)));
+        let b = blur_of(&scene).expect("the card asks for a blur");
+        assert_eq!(scene.backdrops().count(), 1, "one request");
+        assert_eq!(scene.merged(LayerId::Modal).backdrops, [b], "on the dialog");
+        assert_eq!(b.rect, rect_of(card_bounds(&out)), "covers the card");
+        assert_eq!(b.radius, 8.0, "the card's radius");
+        assert_eq!((b.sigma, b.saturation), (0.0, 0.0), "the frame's blur");
+        assert_eq!(b.alpha, 1.0, "settled");
+    }
+}
+
+#[test]
+fn the_plain_scrim_card_blur_scales_and_fades_with_the_card_opening() {
+    let d = the_dialog(Cancel::Default, 0.0);
+    let rest = premul(DARK.dialog_backdrop)[3];
+    // The card's rest rect, from the settled frame: a node's bounds are drawn through the
+    // open transform, so they are the scaled card while it opens.
+    let mut settled = opened_with(&d, &PLAIN);
+    let (_, out, _, _) = frame_with(&mut settled, Some((&d, &PLAIN)));
+    let card = card_bounds(&out);
+    let mut h = UiHarness::new(WIN);
+    frame_with(&mut h, Some((&d, &PLAIN)));
+    h.at_ms(125);
+    let (scene, _, _, _) = frame_with(&mut h, Some((&d, &PLAIN)));
+    let b = blur_of(&scene).expect("the card asks for a blur");
+    assert_eq!(scene.backdrops().count(), 1, "one request");
+    assert!(b.alpha > 0.0 && b.alpha < 1.0, "opening: {}", b.alpha);
+    let s = scene.merged(LayerId::Modal).geometry.under[0].color[3] / rest;
+    assert!(
+        (b.alpha - s).abs() < 1e-5,
+        "the blur follows the scrim: {} vs {s}",
+        b.alpha
+    );
+    let [x, _, w, _] = b.rect;
+    assert!(
+        w > 0.96 * card.w && w < card.w,
+        "the card scales from 0.96: {w} of {}",
+        card.w
+    );
+    assert!(
+        (x + w / 2.0 - (card.x + card.w / 2.0)).abs() < 1e-3,
+        "the blur is centred on the card"
+    );
+}
+
+#[test]
+fn the_plain_scrim_card_blur_scales_and_fades_with_the_card_closing() {
+    let d = the_dialog(Cancel::Default, 0.0);
+    let mut h = opened_with(&d, &PLAIN);
+    let (_, out, _, _) = frame_with(&mut h, Some((&d, &PLAIN)));
+    let card = card_bounds(&out);
+    // The app stops calling; the exit painter draws the card, and its blur, faded.
+    h.at_ms(3000);
+    frame_with(&mut h, None);
+    h.at_ms(3090);
+    let (scene, _, _, _) = frame_with(&mut h, None);
+    let b = blur_of(&scene).expect("the closing card asks for a blur");
+    assert_eq!(scene.backdrops().count(), 1, "one request");
+    assert!(b.alpha > 0.0 && b.alpha < 1.0, "closing: {}", b.alpha);
+    let [x, _, w, _] = b.rect;
+    assert!(
+        w > 0.96 * card.w && w < card.w,
+        "the card scales to 0.96: {w} of {}",
+        card.w
+    );
+    assert!(
+        (x + w / 2.0 - (card.x + card.w / 2.0)).abs() < 1e-3,
+        "the blur is centred on the card"
+    );
     h.at_ms(3180);
     let (scene, _, _, _) = frame_with(&mut h, None);
     assert_eq!(blur_of(&scene), None, "gone with the dialog");
@@ -970,14 +1073,27 @@ fn a_glass_menu_above_a_blurred_scrim_keeps_a_blur_of_its_own() {
         raised_menu_fill(&scene),
         "the menu still draws its fill, on Raised"
     );
-    // Without the scrim blur the menu's own blur is the one, on its own layer.
+    // Without the scrim blur the card and the menu each ask for their own blur, on their own
+    // layers: the card's on Modal (D411), the menu's on Raised.
     let mut h = UiHarness::new(WIN);
     menu_frame(&mut h, &PLAIN);
     h.at_ms(1000);
     menu_frame(&mut h, &PLAIN);
     let scene = menu_frame(&mut h, &PLAIN);
-    assert_eq!(scene.backdrops().count(), 1, "the menu's blur");
+    assert_eq!(
+        scene.backdrops().count(),
+        2,
+        "the card's blur and the menu's"
+    );
+    let card = &scene.merged(LayerId::Modal).backdrops;
+    assert_eq!(card.len(), 1, "the card's blur, on Modal");
+    assert_eq!(
+        (card[0].radius, card[0].sigma, card[0].saturation),
+        (8.0, 0.0, 0.0),
+        "the card's blur: radius 8, the frame's sigma and saturation"
+    );
     let menu = &scene.merged(LayerId::Raised).backdrops;
+    assert_eq!(menu.len(), 1, "the menu's blur, on Raised");
     assert_eq!(menu[0].sigma, 0.0, "the frame's sigma");
     assert!(raised_menu_fill(&scene));
 }
