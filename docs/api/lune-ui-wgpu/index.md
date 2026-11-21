@@ -26,7 +26,7 @@ Source: `crates/lune-ui-wgpu/src/lib.rs:1`
 - [`blur`](blur.md) - Offscreen scene + backdrop blur, so a menu can show a blurred copy of what is under it (Luneium's context-menu glass: blur 30px, saturate 1.8, then acrylic on top).
 - [`custom`](custom.md) - Custom draw items: app-owned GPU drawing that sits inside a painted layer.
 - [`dump`](dump.md) - Offscreen render targets and GPU readback to PNG: the frame-dump building blocks.
-- [`frame`](frame.md) - The frame renderer of one target: its uniforms, viewport, text renderers and blur textures, and the scene → blur → target pass sequence.
+- [`frame`](frame.md) - The frame renderer of one target: its uniforms, viewport, text renderers and blur textures, and the pass sequence: a frame with no backdrop request draws straight into the target; a frame with one goe...
 - [`gpu`](gpu.md) - The shared GPU: device, queue, the noise texture and, per colour target format, the shape and stroke pipelines, the blur pipelines and one glyph atlas.
 - [`raster`](raster.md) - The glyph rasterizer: one glyph's coverage image for a cosmic-text cache key and the [`GlyphParams`](../lune-ui-core/text.md#struct.GlyphParams) (hinting and stem darkening) it is drawn with.
 - [`surface`](surface.md) - A window's swapchain: the surface, its configuration, and acquire / present.

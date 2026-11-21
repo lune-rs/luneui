@@ -1,5 +1,6 @@
 //! The frame renderer of one target: its uniforms, viewport, text renderers and blur textures,
-//! and the scene → blur → target pass sequence.
+//! and the pass sequence: a frame with no backdrop request draws straight into the target; a frame
+//! with one goes scene → blur → target through offscreen textures made on the first such frame.
 //!
 //! The app paints into a [`Painter`](lune_ui_core::paint::Painter) and hands the finished [`Scene`] to
 //! [`FrameRenderer::draw`], which renders it in the [`scene`](lune_ui_core::scene) module's draw order
@@ -34,8 +35,12 @@ pub struct FrameRenderer {
     /// One text renderer per layer of [`Scene::in_order`], so text interleaves correctly with
     /// shapes; grows to the longest list a frame has had.
     layers: Vec<TextRenderer>,
-    /// Offscreen scene + blur for glass menus.
+    /// Offscreen scene + blur for glass menus; its textures exist only after a frame with a
+    /// backdrop request and are freed by [`FrameRenderer::release_offscreen`].
     blur: Blur,
+    /// Test hook: take the offscreen path on a frame without backdrop requests.
+    #[cfg(test)]
+    force_offscreen: bool,
 }
 
 impl std::fmt::Debug for FrameRenderer {
@@ -107,6 +112,8 @@ impl FrameRenderer {
             viewport,
             layers,
             blur,
+            #[cfg(test)]
+            force_offscreen: false,
         }
     }
 
@@ -135,7 +142,7 @@ impl FrameRenderer {
     /// Nothing is done (and `false` returned) when its shared state already is the one for that
     /// format and dither amplitude. Otherwise its text renderers move to the new state's glyph
     /// atlas, and when the format differs its blur stage is made again (its textures are made
-    /// again on the next draw); returns `true` when the format differs. The state a switch leaves
+    /// again on the next frame with a backdrop request); returns `true` when the format differs. The state a switch leaves
     /// behind stays in the [`Gpu`] (no eviction), so switching back builds nothing.
     pub fn follow_target(
         &mut self,
@@ -162,15 +169,29 @@ impl FrameRenderer {
         changed
     }
 
-    /// The blur stage, for debug dumps of its intermediate textures.
+    /// The blur stage, for debug dumps of its intermediate textures. Its textures exist only after
+    /// a frame with a backdrop request (and not after [`release_offscreen`](Self::release_offscreen)).
     pub fn blur(&self) -> &Blur {
         &self.blur
     }
 
+    /// Frees the offscreen scene and the blur textures (about four bytes per target pixel and a
+    /// third as much again for the blur levels), which the first frame with a backdrop request
+    /// made and every later frame kept. The next frame with a backdrop request makes them again, a
+    /// one-time cost on that frame. Nothing else changes: frames without a backdrop request never
+    /// use them. Call it between frames, for example while the window is hidden; the toolkit reads
+    /// no clock, so it cannot tell by itself when the window has been idle. Calling it with no
+    /// textures made is a no-op.
+    pub fn release_offscreen(&mut self) {
+        self.blur.release();
+    }
+
     /// Draws one painted `scene` into `target`, in [`Scene::in_order`]'s order. Each layer with
     /// backdrop requests is a stop: what is drawn so far is blurred, the requests draw and the
-    /// layer follows. Up to the last stop, and at least to [`Scene::floor`], the frame renders
-    /// offscreen; that is blitted to `target` and the rest draws over it.
+    /// layer follows. A frame with no stop draws straight into `target` in one pass. A frame with
+    /// stops renders up to the last stop, and at least to [`Scene::floor`], offscreen; that is
+    /// blitted to `target` and the rest draws over it. The offscreen textures are made on the first
+    /// frame with a stop and kept ([`release_offscreen`](Self::release_offscreen) frees them).
     pub fn draw(
         &mut self,
         gpu: &mut Gpu,
@@ -300,10 +321,17 @@ impl FrameRenderer {
         let gpu: &Gpu = gpu;
         let fs = &gpu.formats[self.format_index];
         let uploaded = gpu.upload(&layers, rendering);
-        self.blur
-            .prepare(&gpu.device, &gpu.blur, size, limits.downsample);
-        self.blur
-            .plan(&gpu.device, &gpu.queue, &gpu.blur, s, limits, &plans);
+        // A frame with no backdrop request never reads the offscreen scene: it draws straight into
+        // `target`, and the offscreen targets are made on the first frame that needs them.
+        let offscreen = !stops.is_empty();
+        #[cfg(test)]
+        let offscreen = offscreen || self.force_offscreen;
+        if offscreen {
+            self.blur
+                .prepare(&gpu.device, &gpu.blur, size, limits.downsample);
+            self.blur
+                .plan(&gpu.device, &gpu.queue, &gpu.blur, s, limits, &plans);
+        }
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         let pass_desc = |target: &wgpu::TextureView,
                          load: wgpu::LoadOp<wgpu::Color>,
@@ -328,7 +356,6 @@ impl FrameRenderer {
             f(&mut pass)
         };
         let globals = &self.bind_group;
-        let scene_view = self.blur.scene_view().ok_or("no scene target")?;
         let clear = wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT);
         let span = |pass: &mut wgpu::RenderPass<'_>, from: usize, to: usize| {
             for (i, layer) in layers.iter().enumerate().take(to).skip(from) {
@@ -345,42 +372,52 @@ impl FrameRenderer {
                 self.blur.draw_request(pass, &fs.blur, blur, request);
             }
         };
-        let first = stops.first().map_or(floor, |s| s.at);
-        pass_desc(
-            scene_view,
-            clear,
-            &mut |pass| span(pass, 0, first),
-            &mut encoder,
-        )?;
-        for (k, stop) in stops.iter().enumerate() {
-            self.blur.downsample(&mut encoder, &fs.blur);
-            for blur in stop.blurs.clone() {
-                self.blur.blur(&mut encoder, &fs.blur, blur);
-            }
-            // The last stop's requests draw on the target, after the blit.
-            let Some(next) = stops.get(k + 1) else { break };
+        if offscreen {
+            let scene_view = self.blur.scene_view().ok_or("no scene target")?;
+            let first = stops.first().map_or(floor, |s| s.at);
             pass_desc(
                 scene_view,
-                wgpu::LoadOp::Load,
+                clear,
+                &mut |pass| span(pass, 0, first),
+                &mut encoder,
+            )?;
+            for (k, stop) in stops.iter().enumerate() {
+                self.blur.downsample(&mut encoder, &fs.blur);
+                for blur in stop.blurs.clone() {
+                    self.blur.blur(&mut encoder, &fs.blur, blur);
+                }
+                // The last stop's requests draw on the target, after the blit.
+                let Some(next) = stops.get(k + 1) else { break };
+                pass_desc(
+                    scene_view,
+                    wgpu::LoadOp::Load,
+                    &mut |pass| {
+                        requests(pass, stop);
+                        span(pass, stop.at, next.at)
+                    },
+                    &mut encoder,
+                )?;
+            }
+            pass_desc(
+                target,
+                clear,
                 &mut |pass| {
-                    requests(pass, stop);
-                    span(pass, stop.at, next.at)
+                    self.blur.blit_scene(pass, &fs.blur);
+                    if let Some(stop) = stops.last() {
+                        requests(pass, stop);
+                    }
+                    span(pass, stops.last().map_or(floor, |s| s.at), layers.len())
                 },
                 &mut encoder,
             )?;
+        } else {
+            pass_desc(
+                target,
+                clear,
+                &mut |pass| span(pass, 0, layers.len()),
+                &mut encoder,
+            )?;
         }
-        pass_desc(
-            target,
-            clear,
-            &mut |pass| {
-                self.blur.blit_scene(pass, &fs.blur);
-                if let Some(stop) = stops.last() {
-                    requests(pass, stop);
-                }
-                span(pass, stops.last().map_or(floor, |s| s.at), layers.len())
-            },
-            &mut encoder,
-        )?;
         gpu.queue.submit(Some(encoder.finish()));
         Ok(())
     }
@@ -468,8 +505,12 @@ mod tests {
     use super::*;
     use crate::dump;
     use lune_ui_core::paint::{LayerId, Painter, Rect};
+    use lune_ui_core::text::{Spec, Style};
     use lune_ui_core::theme::DARK;
-    use wgpu::TextureFormat::{Bgra8Unorm, Rgb10a2Unorm, Rgba16Float};
+    use wgpu::TextureFormat::{
+        Bgra8Unorm, Bgra8UnormSrgb, Rgb10a2Unorm, Rgba8Unorm, Rgba8UnormSrgb, Rgba16Float,
+        Rgba16Unorm,
+    };
 
     fn headless_gpu() -> Option<Gpu> {
         match pollster::block_on(Gpu::new(crate::gpu::instance(None), None)) {
@@ -558,5 +599,206 @@ mod tests {
         assert!(!r.follow_target(&mut gpu, Rgba16Float, None));
         assert_eq!(gpu.formats[r.format_index].dither, 0.0);
         assert_eq!(gpu.formats.len(), before + 1);
+    }
+
+    fn text_cache() -> TextCache {
+        let fonts: [&[u8]; 1] = [include_bytes!(
+            "../../../apps/gallery/assets/RznSans-Regular.ttf"
+        )];
+        TextCache::new(&fonts, "RznSans", "RznSans")
+    }
+
+    /// Whether the device renders to `Rgba16Unorm` the way a window surface needs it (as
+    /// `tests/surface_depth.rs` judges it).
+    fn unorm16_usable(gpu: &Gpu) -> bool {
+        let need = wgpu::Features::TEXTURE_FORMAT_16BIT_NORM
+            | wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES;
+        if !gpu.device.features().contains(need) {
+            return false;
+        }
+        let f = gpu.adapter.get_texture_format_features(Rgba16Unorm);
+        f.allowed_usages
+            .contains(wgpu::TextureUsages::RENDER_ATTACHMENT)
+            && f.flags.contains(
+                wgpu::TextureFormatFeatureFlags::BLENDABLE
+                    | wgpu::TextureFormatFeatureFlags::FILTERABLE,
+            )
+    }
+
+    const SIZE: (u32, u32) = (101, 67);
+    const SCALE: f32 = 1.5;
+
+    /// A scene of smoothed text, a translucent fill, a linear gradient, an acrylic on `Base` and a
+    /// fill on `Popup`, above the floor; `plain` leaves the text and the gradient out; `backdrop`
+    /// adds a backdrop request on `Popup`.
+    fn scene(text: &mut TextCache, plain: bool, backdrop: bool) -> Scene {
+        let win = Rect::new(0.0, 0.0, SIZE.0 as f32 / SCALE, SIZE.1 as f32 / SCALE);
+        let mut p: Painter<'_, u8> = Painter::new(SCALE, win, text, None, DARK);
+        p.on(LayerId::Base);
+        p.fill(win, 0.0, [0x1c, 0x1e, 0x28, 0xff]);
+        p.fill(
+            Rect::new(4.0, 4.0, 40.0, 20.0),
+            5.0,
+            [0xc4, 0x4a, 0x24, 0x80],
+        );
+        if !plain {
+            p.linear(
+                Rect::new(8.0, 28.0, 50.0, 12.0),
+                3.0,
+                [0x0d, 0x0f, 0x1a, 0xff],
+                [0xf5, 0x87, 0x22, 0xff],
+                0.3,
+            );
+            p.text(
+                &Spec::plain("Direct path", Style::ui(11.0, DARK.fg_primary)),
+                6.0,
+                6.0,
+            );
+        }
+        p.acrylic(
+            Rect::new(30.0, 10.0, 30.0, 25.0),
+            4.0,
+            lune_ui_core::color::premul(DARK.menu_glass),
+            [0.0; 4],
+            true,
+        );
+        p.on(LayerId::Popup);
+        let menu = Rect::new(20.0, 22.0, 40.0, 18.0);
+        if backdrop {
+            p.backdrop(menu, 4.0);
+        }
+        p.fill(menu, 4.0, [0x30, 0x90, 0x50, 0xa0]);
+        p.scene
+    }
+
+    /// `scene` drawn with `renderer` into a fresh `format` target of [`SIZE`], read at full
+    /// precision (the stored values, not decoded).
+    fn render(
+        gpu: &mut Gpu,
+        renderer: &mut FrameRenderer,
+        text: &mut TextCache,
+        scene: &Scene,
+        format: wgpu::TextureFormat,
+    ) -> Vec<f32> {
+        let texture = dump::target(&gpu.device, format, SIZE);
+        let view = texture.create_view(&Default::default());
+        let params = FrameParams {
+            size: SIZE,
+            scale: SCALE,
+            blur_sigma: 4.0,
+            saturation: 1.0,
+            ..FrameParams::default()
+        };
+        renderer
+            .draw(gpu, text, scene, &view, params)
+            .expect("draw");
+        dump::read_rgba_f32(&gpu.device, &gpu.queue, &texture).expect("readback")
+    }
+
+    #[test]
+    fn a_frame_without_backdrops_makes_no_offscreen_targets() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut text = text_cache();
+        let plain = scene(&mut text, false, false);
+        let glass = scene(&mut text, false, true);
+        let mut r = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        render(&mut gpu, &mut r, &mut text, &plain, Bgra8Unorm);
+        assert!(
+            r.blur().scene_view().is_none(),
+            "a stop-free frame made targets"
+        );
+        render(&mut gpu, &mut r, &mut text, &glass, Bgra8Unorm);
+        assert!(
+            r.blur().scene_view().is_some(),
+            "a frame with a backdrop made none"
+        );
+        render(&mut gpu, &mut r, &mut text, &plain, Bgra8Unorm);
+        assert!(
+            r.blur().scene_view().is_some(),
+            "a stop-free frame dropped them"
+        );
+        r.release_offscreen();
+        assert!(r.blur().scene_view().is_none());
+        r.release_offscreen();
+        render(&mut gpu, &mut r, &mut text, &plain, Bgra8Unorm);
+        assert!(r.blur().scene_view().is_none());
+        render(&mut gpu, &mut r, &mut text, &glass, Bgra8Unorm);
+        assert!(r.blur().scene_view().is_some());
+        // Before any frame: a no-op.
+        let mut fresh = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        fresh.release_offscreen();
+        assert!(fresh.blur().scene_view().is_none());
+    }
+
+    #[test]
+    fn the_direct_path_matches_the_offscreen_path() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut text = text_cache();
+        let scene_a = scene(&mut text, false, false);
+        let scene_b = scene(&mut text, true, false);
+        let mut formats = vec![
+            Bgra8Unorm,
+            Rgba8Unorm,
+            Rgb10a2Unorm,
+            Rgba16Float,
+            Bgra8UnormSrgb,
+            Rgba8UnormSrgb,
+        ];
+        if unorm16_usable(&gpu) {
+            formats.push(Rgba16Unorm);
+        } else {
+            println!("skipped: Rgba16Unorm is not usable on this device");
+        }
+        for format in formats {
+            let mut direct = FrameRenderer::new(&mut gpu, format);
+            let mut forced = FrameRenderer::new(&mut gpu, format);
+            forced.force_offscreen = true;
+            let a = render(&mut gpu, &mut direct, &mut text, &scene_a, format);
+            let a_forced = render(&mut gpu, &mut forced, &mut text, &scene_a, format);
+            assert!(direct.blur().scene_view().is_none(), "{format:?}");
+            assert!(forced.blur().scene_view().is_some(), "{format:?}");
+            let covered = a.chunks_exact(4).filter(|p| p[3] > 0.0).count();
+            assert!(
+                covered > 1000,
+                "{format:?}: the scene is nearly empty ({covered})"
+            );
+            let differing = a.iter().zip(&a_forced).filter(|(x, y)| x != y).count();
+            let delta = a
+                .iter()
+                .zip(&a_forced)
+                .map(|(x, y)| (x - y).abs())
+                .fold(0.0f32, f32::max);
+            println!("{format:?}: {differing} values differ, max delta {delta}");
+            assert_eq!(
+                a, a_forced,
+                "{format:?}: {differing} values differ, max {delta}"
+            );
+            // The instrument: another scene through the same paths must read differently.
+            let b = render(&mut gpu, &mut direct, &mut text, &scene_b, format);
+            assert_ne!(
+                a, b,
+                "{format:?}: the comparison cannot tell two scenes apart"
+            );
+        }
+    }
+
+    #[test]
+    fn release_then_a_stop_frame_draws_as_a_fresh_renderer() {
+        let Some(mut gpu) = headless_gpu() else {
+            return;
+        };
+        let mut text = text_cache();
+        let glass = scene(&mut text, false, true);
+        let mut a = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        render(&mut gpu, &mut a, &mut text, &glass, Bgra8Unorm);
+        a.release_offscreen();
+        let again = render(&mut gpu, &mut a, &mut text, &glass, Bgra8Unorm);
+        let mut b = FrameRenderer::new(&mut gpu, Bgra8Unorm);
+        let first = render(&mut gpu, &mut b, &mut text, &glass, Bgra8Unorm);
+        assert_eq!(again, first);
     }
 }
