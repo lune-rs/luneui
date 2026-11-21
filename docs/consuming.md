@@ -365,7 +365,9 @@ D408 to D410. Additive, hence 0.7.2: no struct gains a field, no trait a require
 
 ## 0.7.2 to 0.7.3: iOS platform layer
 
-D353 to D360. Additive, hence 0.7.3: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and a desktop app needs nothing changed. Off iOS every new item answers its neutral value: `attach_to_scene` answers `NotNeeded`, `safe_area` and `KeyboardInset` read zero, `Pasteboard` answers `Err`, and `PopoverWindow::wrap` is unchanged on macOS, Windows and Linux (D354, D355, D357, D358, D359). A desktop app keeps `Clipboard::new()`.
+D353 to D360, and D411. Additive, hence 0.7.3: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and a desktop app needs nothing changed. Off iOS every new item answers its neutral value: `attach_to_scene` answers `NotNeeded`, `safe_area` and `KeyboardInset` read zero, `Pasteboard` answers `Err`, and `PopoverWindow::wrap` is unchanged on macOS, Windows and Linux (D354, D355, D357, D358, D359). A desktop app keeps `Clipboard::new()`.
+
+**The dialog card under a plain scrim (D411).** 0.7.3 is the first release with it. With `DialogOptions { scrim_blur: false, .. }` the card now asks for a blur of its own (`backdrop(card, 8.0)`, the frame's sigma and saturation, as every menu does) before its frost, so it blurs the page under it instead of frosting the sharp page; the scrim around the card stays sharp. With `scrim_blur: true` (the default, and `Ui::dialog`) nothing changes. No API changes, so an app needs no edit (`check-compat.sh --api-only` holds); an app that turns the scrim blur off sees the card's rect look different, and the pixel part of the compatibility check (part 3) moves the `dialog-scrim-plain` scene for that reason.
 
 An iOS app is a new target. `apps/demo` is the reference wiring, and the iOS-only dependencies (`objc2` 0.6, `objc2-foundation`, `block2`, `objc2-ui-kit`, `objc2-core-foundation`, D353 and D357) are compiled only for an iOS target. What an iOS app adds:
 
