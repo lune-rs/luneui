@@ -34,6 +34,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("luneui.text-field.clear", "Clear"),
     ("luneui.tab-strip.new", "New tab"),
     ("luneui.tab-strip.close", "Close tab"),
+    ("luneui.tab-bar.name", "Tabs"),
     ("luneui.verdict-row.ok", "OK"),
     ("luneui.verdict-row.warn", "WARN"),
     ("luneui.verdict-row.no", "NO"),

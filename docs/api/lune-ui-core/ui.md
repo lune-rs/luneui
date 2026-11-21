@@ -963,6 +963,16 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.nav_bar"></a>`pub fn nav_bar(&mut self, key: impl Hash, rect: Rect, bar: &NavBar<'_>) -> NavBarResponse`
+
+  A navigation bar under `key` over `rect`: the background fills the whole rect, a hairline
+  closes its bottom edge, and the [`HEIGHT`](widgets/nav_bar.md#constant.HEIGHT) px row at the bottom holds the back button, the
+  title and the actions (a rect shorter than the row lays it from the top and clips). The
+  node is a `Toolbar` named by the title, the buttons its children. Colours come from the
+  theme.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.nav_list"></a>
 
   ```rust
@@ -1340,6 +1350,25 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   [`Ui::steps`](ui.md#method.Ui.steps) with a lead line below the rows (13 on a 20 px line, tertiary, wrapping).
   The node is a `Navigation` over a `List` of one `ListItem` per step named by its full
   label: `Selected` and `Current` on the current one, `Checked` on a done one.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.tab_bar"></a>
+
+  ```rust
+  pub fn tab_bar(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      items: &[TabBarItem<'_>],
+      selected: &mut usize,
+  ) -> TabBarResponse
+  ```
+
+  A bottom tab bar under `key` over `rect`: the background fills the whole rect, a hairline
+  closes its top edge and the [`HEIGHT`](widgets/tab_bar.md#constant.HEIGHT) px row at the top holds the `items`, equally wide.
+  `*selected` is the selected item; it is clamped for drawing and left alone while out of
+  range. The node is a `TabList`, the items `Tab` nodes, the selected one marked selected.
 
 `impl Ui<'_>`
 

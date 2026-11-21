@@ -46,6 +46,7 @@ mod locale;
 mod markdown;
 mod menu;
 pub(crate) mod motion;
+mod nav_bar;
 mod nav_item;
 mod panel;
 mod pie_chart;
@@ -72,6 +73,7 @@ mod stat;
 mod status_dot;
 mod stepper;
 mod steps;
+mod tab_bar;
 mod tab_strip;
 mod table;
 mod text_edit;
@@ -188,6 +190,8 @@ pub(crate) static PAGES: &[&Page] = &[
     &crate::showcase::labs::banding::PAGE,
     &recipes::PAGE,
     &touch_widgets::PAGE,
+    &nav_bar::PAGE,
+    &tab_bar::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

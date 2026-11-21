@@ -149,6 +149,11 @@ pub(crate) const GROUPS: &[Group] = &[
             "lab-banding",
         ],
     },
+    // The phone components (milestone 6): a group of its own after Labs, so no row above moves.
+    Group {
+        name: "Mobile",
+        pages: &["nav-bar", "tab-bar"],
+    },
 ];
 
 /// The index in [`PAGES`] of the page with `id`.

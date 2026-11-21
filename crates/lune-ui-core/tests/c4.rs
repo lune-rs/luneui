@@ -3994,11 +3994,13 @@ mod m10 {
     use lune_ui_core::widgets::kanban_board::{BoardOptions, KanbanCard, KanbanColumn};
     use lune_ui_core::widgets::markdown::{MdBlock, MdInline, MdOptions};
     use lune_ui_core::widgets::menu::{MenuItem, MenuRow};
+    use lune_ui_core::widgets::nav_bar::{NavAction, NavBar};
     use lune_ui_core::widgets::page::PageOptions;
     use lune_ui_core::widgets::popover::{PlaceAlign, PopoverOptions, Side, Surface};
     use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
     use lune_ui_core::widgets::settings_page::SettingsPage;
     use lune_ui_core::widgets::stat::StatOptions;
+    use lune_ui_core::widgets::tab_bar::TabBarItem;
     use lune_ui_core::widgets::table::{Cell, ColumnWidth, TableColumn, TableOptions};
     use lune_ui_core::widgets::toolbar::ToolbarOptions;
     use lune_ui_core::widgets::virtual_list::{RowKey, SelectionMode};
@@ -4467,6 +4469,26 @@ mod m10 {
                     &rail,
                     &[],
                     "Rail",
+                );
+                // The phone chrome (D370): a navigation bar with a back button and an action, and
+                // a bottom tab bar with a badge on the item that is not selected.
+                let nav_actions = [NavAction::new(icon::SEARCH, "Search")];
+                ui.nav_bar(
+                    "nav",
+                    Rect::new(340.0, 200.0, 400.0, 106.0),
+                    &NavBar::new("Title")
+                        .with_back("Back")
+                        .with_actions(&nav_actions),
+                );
+                let mut tab = 0;
+                ui.tab_bar(
+                    "tabs",
+                    Rect::new(340.0, 400.0, 400.0, 83.0),
+                    &[
+                        TabBarItem::new(icon::SEARCH, "One"),
+                        TabBarItem::new(icon::GEAR, "Two").with_badge("3"),
+                    ],
+                    &mut tab,
                 );
                 let o = ScrollOptions {
                     extent: Some((300.0, 900.0)),

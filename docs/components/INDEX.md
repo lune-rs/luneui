@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 103 |
+| done | 105 |
 | external | 4 |
-| **total** | **109** |
+| **total** | **111** |
 
 ## core
 
@@ -78,6 +78,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [widget.form-field](widget/form-field.md) | Form field (label, control, hint) | done | wane | Form field: label above a control, hint below; error state rings the control and colours the hint in err |
 | [widget.label](widget/label.md) | Label | done | luneterm, wane | Label: UI-font text at the theme base size; colour from the caller; section and title roles from the font scale |
 | [widget.list-row-badge](widget/list-row-badge.md) | List rows with status badges | done | lunegit, wane | Master list row: name, value and sub-line with a badge in the head; rest transparent, hover surface-hover, selected surface-selected |
+| [widget.nav-bar](widget/nav-bar.md) | Navigation bar | done | any | Navigation bar of a phone screen: a 44 px row at the bottom of the rect the app gives it, with a back button, an elided title and up to three action buttons |
 | [widget.nav-item](widget/nav-item.md) | Navigation item | done | wane | Navigation item: 32 px row, secondary text at rest, surface-selected fill and bright text when active, no accent bar |
 | [widget.radio-group](widget/radio-group.md) | Radio group | done | wane | Radio group: vertical 16 px rings, accent ring and 6 px dot when selected; arrow keys move the selection inside the group |
 | [widget.row](widget/row.md) | Row (setting row, list item row) | done | wane | Row: setting row (title, description, control at right, min 56 high) or compact item row (32 high, four columns); hover tints the row; rows are not clickable |
@@ -89,6 +90,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [widget.status-dot](widget/status-dot.md) | Status dot | done | wane | Status dot: static 8 px circle in ok, warn, err, data or paused tone; never alone, a word beside it carries the meaning |
 | [widget.stepper](widget/stepper.md) | Numeric stepper | done | luneterm, wane | Numeric stepper: value with minus and plus buttons; clamping and step size belong to the app |
 | [widget.steps](widget/steps.md) | Wizard steps | done | wane | Wizard steps: four 32 px rows in the sidebar slot with upcoming, current and done states; not clickable |
+| [widget.tab-bar](widget/tab-bar.md) | Bottom tab bar | done | any | Bottom tab bar of a phone screen: a 49 px row of equal items (glyph, label, optional badge) at the top of the rect the app gives it, one tab stop with roving focus |
 | [widget.tab-strip](widget/tab-strip.md) | Tab strip | done | luneterm, lunegit | Tab strip: tabs with close, new-tab button, overflow scrolling, drag reorder, and the connected tab outline with a running cue |
 | [widget.text-field](widget/text-field.md) | Text field | done | luneterm, wane | Single-line text box: 32 px, radius 6, placeholder, caret when focused; variants fill, small, mono, password, search and date; editing engine from text.text-edit |
 | [widget.toggle](widget/toggle.md) | Toggle switch | done | luneterm, wane | On/off switch: 40x20 track, accent fill when on, knob slides between ends |

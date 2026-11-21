@@ -51,6 +51,10 @@ const UNCITED: &[(&str, &str)] = &[
 #[cfg(test)]
 const SHARED_WIDGET_HELPERS: &[(&str, &str)] = &[
     (
+        "gesture_track.rs",
+        "the motion core of the mobile components: a track that follows a finger and settles, and the pan region (D369)",
+    ),
+    (
         "input_box.rs",
         "the private chrome shared by the combo box, the stepper and the field",
     ),

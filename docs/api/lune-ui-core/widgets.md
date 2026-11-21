@@ -38,6 +38,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`list_row`](widgets/list_row.md) - A list row with a trailing badge, drawn inside the virtual list (`widget.list-row-badge`).
 - [`markdown`](widgets/markdown.md) - The markdown preview (`text.markdown-preview`, D12): a block model drawn in a window.
 - [`menu`](widgets/menu.md) - Luneium's glass context menu (`ContextMenu.css`, `Popup.css`) and its motion, with the row variants (header, danger, disabled, chevron), the keys and the one highlight they share with the pointer, and...
+- [`nav_bar`](widgets/nav_bar.md) - The navigation bar of a phone screen (`widget.nav-bar`, D370): a back button, a title and up to three action buttons on a 44 px row.
 - [`nav_item`](widgets/nav_item.md) - A navigation item and the list that owns the group (`widget.nav-item`, D121).
 - [`page`](widgets/page.md) - The page card (`layout.page`, D148): header, a vertically scrolling body and an optional pinned footer, with a keyed swap of the body.
 - [`panel`](widgets/panel.md) - The panel (`layout.panel`, D148): an outlined group box with a title and a meta line, a body in one of five kinds and an optional action footer.
@@ -63,6 +64,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`status_dot`](widgets/status_dot.md) - A small filled dot in a status tone (`widget.status-dot`): 8 px, no glow, ring or pulse.
 - [`stepper`](widgets/stepper.md) - NumericUpDown control: a value with − and + buttons in an input box.
 - [`steps`](widgets/steps.md) - A numbered sequence of steps with a done state (`widget.steps`).
+- [`tab_bar`](widgets/tab_bar.md) - The bottom tab bar of a phone screen (`widget.tab-bar`, D370): equal-width items of a glyph, a label and an optional badge on a 49 px row.
 - [`tab_strip`](widgets/tab_strip.md) - Tabs with close, overflow, drag reorder, the outline and a busy cue (`widget.tab-strip`).
 - [`table`](widgets/table.md) - The data table (`data.table`, D162): a sortable header over a virtualized body on the list frame (`ListStyle`, D161).
 - [`text_area`](widgets/text_area.md) - The multi-line text box: the [field](widgets/field.md#fn.field)'s box and engine over a [scroll area](widgets/scroll_area.md).
