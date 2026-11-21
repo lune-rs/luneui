@@ -993,6 +993,34 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.nav_stack"></a>
+
+  ```rust
+  pub fn nav_stack(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      depth: usize,
+      page: impl FnMut(&mut Ui<'_>, usize, Rect),
+  ) -> NavStackResponse
+  ```
+
+  A navigation stack under `key` over `rect`: call it every frame with the number of levels
+  the app has (`depth`) and a `page` that draws level `level` (0 the root) in the rect it is
+  given, which moves while the stack does. Depth 0 draws nothing. See the module docs for the
+  motion, and for what a level must draw (an opaque background over its whole rect).
+
+- <a id="method.Ui.nav_stack_pop"></a>`pub fn nav_stack_pop(&mut self, key: impl Hash)`
+
+  Asks the navigation stack under `key` to pop its top level with the reverse of a push: its
+  next call takes the request. `key` is the one the stack was called with, in the same id
+  scope as the stack's own call (so a page that draws its own back button reports the tap
+  and the app calls this after the stack call, not from inside the `page` closure, whose
+  scope is the level's). Ignored while `depth` is below 2, and while a pop or a finger is
+  already moving the stack. The pop is over when [`NavStackResponse::popped`](widgets/nav_stack.md#structfield.NavStackResponse.popped) is set.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.page"></a>
 
   ```rust

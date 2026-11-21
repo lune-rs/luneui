@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-97 modules, 1133 items. Left out and counted: 3539 blanket impls, 3 intra-doc links left unlinked (private or unresolvable target), 5099 items of the omitted impls, 1365 items of the trait impls shown as one line, 2370 synthetic impls.
+98 modules, 1134 items. Left out and counted: 3548 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5112 items of the omitted impls, 1369 items of the trait impls shown as one line, 2376 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -75,6 +75,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::menu`](lune-ui-core/widgets/menu.md) | 23 |
 | [`lune_ui_core::widgets::nav_bar`](lune-ui-core/widgets/nav_bar.md) | 4 |
 | [`lune_ui_core::widgets::nav_item`](lune-ui-core/widgets/nav_item.md) | 14 |
+| [`lune_ui_core::widgets::nav_stack`](lune-ui-core/widgets/nav_stack.md) | 1 |
 | [`lune_ui_core::widgets::page`](lune-ui-core/widgets/page.md) | 16 |
 | [`lune_ui_core::widgets::panel`](lune-ui-core/widgets/panel.md) | 15 |
 | [`lune_ui_core::widgets::pie_chart`](lune-ui-core/widgets/pie_chart.md) | 6 |
@@ -882,6 +883,7 @@ Every top-level item of the four owning crates, by name.
 - [`NavEntry`](lune-ui-core/widgets/nav_item.md#struct.NavEntry) - struct, `lune_ui_core::widgets::nav_item`
 - [`NavLook`](lune-ui-core/widgets/nav_item.md#struct.NavLook) - struct, `lune_ui_core::widgets::nav_item`
 - [`NavResponse`](lune-ui-core/widgets/nav_item.md#struct.NavResponse) - struct, `lune_ui_core::widgets::nav_item`
+- [`NavStackResponse`](lune-ui-core/widgets/nav_stack.md#struct.NavStackResponse) - struct, `lune_ui_core::widgets::nav_stack`
 - [`NavState`](lune-ui-core/widgets/nav_item.md#struct.NavState) - struct, `lune_ui_core::widgets::nav_item`
 - [`NEW_GLYPH`](lune-ui-core/widgets/tab_strip.md#constant.NEW_GLYPH) - constant, `lune_ui_core::widgets::tab_strip`
 - [`NEW_SIZE`](lune-ui-core/widgets/tab_strip.md#constant.NEW_SIZE) - constant, `lune_ui_core::widgets::tab_strip`

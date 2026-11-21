@@ -4,10 +4,10 @@
 //!
 //! [`Ui::bottom_sheet`] is an overlay ([`Ui::overlay`]) the app calls every frame while its `open`
 //! flag is set and for as long as the sheet slides out after it is cleared. It draws a scrim over
-//! the window, then a frosted surface ([`popover::glass_surface`]) the width of the window whose
+//! the window, then a frosted surface (`popover::glass_surface`) the width of the window whose
 //! top edge is the one moving part, then the app's content under a grabber band.
 //!
-//! The sheet moves by its own track ([`Track`]), not by the overlay's open and close motions
+//! The sheet moves by its own track (`Track`), not by the overlay's open and close motions
 //! (those are none): opening and an app close are a programmatic move under [`Kind::Drawer`]
 //! (D3), a release after a finger continues by the track's spring at every motion tier. Under
 //! the Reduced tier the slide is replaced by a fade, and under Off the sheet snaps.
