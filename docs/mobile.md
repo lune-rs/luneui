@@ -115,7 +115,7 @@ What the values say:
 - The order matters for the safe area: winit sets its root view controller before the window has a scene, so the controller keeps the portrait orientation (R6, first run). `attach_to_scene` sets the root view controller to none and back after setting the scene, and the landscape insets come out right; portrait is unchanged (R1). The re-seat makes UIKit print `Unbalanced calls to begin/end appearance transitions for <WinitUIViewController …>` twice on stderr; nothing else follows from it in these runs.
 - With the manifest a first `Resized` 0x0 arrives before the 1206x2622 one (without it only 1206x2622 arrives): an app skips a 0 size (the demo does; `WindowSurface::resize` would clamp it to 1x1).
 - winit's `resumed` and `suspended` keep arriving under the manifest, at launch and across the background round trip (R3), so the life cycle stays winit's (D356's branch: no `mobile::Lifecycle`).
-- Not driven here: a scene the OS discards and reconnects (the observer attaches the window to each scene that connects, by design; the simulator gives no way to force it) and rotation at run time.
+- Not driven here: a scene the OS discards and reconnects (`attach_to_scene` registers its one observer on every path, so the window is handed to a scene that connects while it has none; the simulator gives no way to force a discard, so the reconnect itself was not seen: the observer registration on the attach-at-once path is by construction, not observed) and rotation at run time.
 
 ## M4 reading: safe area and life cycle
 

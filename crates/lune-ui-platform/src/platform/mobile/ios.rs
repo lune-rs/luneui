@@ -1,7 +1,7 @@
 //! iOS: the window scene attach, through UIKit's typed bindings (`objc2-ui-kit`). winit 0.30
 //! creates its `UIWindow` without a scene; under a scene manifest UIKit shows only windows that
-//! belong to a `UIWindowScene`, so the window is handed to the connected one, or to the next one
-//! that connects.
+//! belong to a `UIWindowScene`, so the window is handed to the connected one, and to each one that
+//! connects later while the window has none (the observer is registered on every attach path).
 //!
 //! Every UIKit call runs on the main thread: each entry checks it with `MainThreadMarker::new` and
 //! does nothing elsewhere.
@@ -35,7 +35,7 @@ use crate::mobile::SceneAttach;
 #[derive(Default)]
 struct Observer {
     /// The window to attach to a scene that connects: the last one `attach_to_scene` was given
-    /// without a scene. Weak, so the observer never keeps a window winit dropped alive.
+    /// (a scene it already has is checked when the notification arrives). Weak, so the observer never keeps a window winit dropped alive.
     window: Option<Weak<UIWindow>>,
     /// The registration's token, held for the life of the process: the observer is never
     /// removed, because a scene the OS discards in the background reconnects as a new one.
@@ -96,7 +96,9 @@ fn scene_connected(note: NonNull<NSNotification>) {
         return;
     };
     let window = OBSERVER.with(|o| o.borrow().window.as_ref().and_then(Weak::load));
-    if let Some(window) = window {
+    // A window that still has a scene stays there: with several scenes enabled, a second
+    // scene connecting must not take the window from the first.
+    if let Some(window) = window.filter(|w| w.windowScene().is_none()) {
         attach(&window, &scene);
     }
 }
@@ -134,6 +136,10 @@ pub(crate) fn attach_to_scene(window: &Window) -> SceneAttach {
     let Some(ui_window) = ui_window(window, mtm) else {
         return SceneAttach::Waiting;
     };
+    // The window is remembered and the observer registered on every path, not only while no
+    // scene is connected: a scene the OS discards in the background reconnects as a new one,
+    // and the observer is the only thing that hands it the window again.
+    wait_for_scene(&ui_window);
     if ui_window.windowScene().is_some() {
         return SceneAttach::Attached;
     }
@@ -141,7 +147,6 @@ pub(crate) fn attach_to_scene(window: &Window) -> SceneAttach {
         attach(&ui_window, &scene);
         return SceneAttach::Attached;
     }
-    wait_for_scene(&ui_window);
     SceneAttach::Waiting
 }
 

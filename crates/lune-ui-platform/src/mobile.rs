@@ -28,12 +28,15 @@ pub enum SceneAttach {
 
 /// Puts `window` in the app's window scene, so UIKit shows it under the scene life cycle (iOS).
 ///
-/// On iOS, called on the main thread (the event loop's): when the window already has a scene it
-/// answers [`SceneAttach::Attached`]; otherwise it attaches the window to the first connected
-/// `UIWindowScene`, or registers one observer for the life of the process that attaches it to
-/// every scene that connects later (a scene the OS discards in the background reconnects as a
-/// new one), and answers [`SceneAttach::Waiting`]. A later call never registers a second observer,
-/// so calling again is how an app asks for the state. An attach makes the window key and visible
+/// On iOS, called on the main thread (the event loop's): it remembers the window and registers
+/// one observer for the life of the process that attaches the window to each scene that connects
+/// later, while the window has none (a scene the OS discards in the background reconnects as a
+/// new one). It does this on every path, so the one call at start-up also covers a reconnect. Then,
+/// when the window already has a scene it answers [`SceneAttach::Attached`]; otherwise it
+/// attaches the window to the first connected `UIWindowScene` and answers
+/// [`SceneAttach::Attached`], or, with none connected yet, answers [`SceneAttach::Waiting`]. A
+/// later call never registers a second observer, so calling again is how an app asks for the
+/// state. An attach makes the window key and visible
 /// only when it is not hidden: an app that keeps it hidden (to create its accessibility bridge
 /// first) shows it itself.
 ///

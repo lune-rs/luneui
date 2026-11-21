@@ -37,7 +37,7 @@ observers. It is `!Send`: create and read it on the main thread.
 Elsewhere it is inert: [`inset`](mobile.md#method.KeyboardInset.inset) is always [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO) and `on_change` never
 runs.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:74`
+Source: `crates/lune-ui-platform/src/mobile.rs:77`
 
 **Methods and associated items**
 
@@ -76,7 +76,7 @@ text another app put there can raise the system's "Allow Paste" prompt. `!Send`.
 
 Off iOS both calls answer `Err(())`: a desktop app uses `Clipboard::new()`.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:102`
+Source: `crates/lune-ui-platform/src/mobile.rs:105`
 
 **Methods and associated items**
 
@@ -146,18 +146,21 @@ pub fn attach_to_scene(window: &winit::window::Window) -> SceneAttach
 
 Puts `window` in the app's window scene, so UIKit shows it under the scene life cycle (iOS).
 
-On iOS, called on the main thread (the event loop's): when the window already has a scene it
-answers [`SceneAttach::Attached`](mobile.md#variant.SceneAttach.Attached); otherwise it attaches the window to the first connected
-`UIWindowScene`, or registers one observer for the life of the process that attaches it to
-every scene that connects later (a scene the OS discards in the background reconnects as a
-new one), and answers [`SceneAttach::Waiting`](mobile.md#variant.SceneAttach.Waiting). A later call never registers a second observer,
-so calling again is how an app asks for the state. An attach makes the window key and visible
+On iOS, called on the main thread (the event loop's): it remembers the window and registers
+one observer for the life of the process that attaches the window to each scene that connects
+later, while the window has none (a scene the OS discards in the background reconnects as a
+new one). It does this on every path, so the one call at start-up also covers a reconnect. Then,
+when the window already has a scene it answers [`SceneAttach::Attached`](mobile.md#variant.SceneAttach.Attached); otherwise it
+attaches the window to the first connected `UIWindowScene` and answers
+[`SceneAttach::Attached`](mobile.md#variant.SceneAttach.Attached), or, with none connected yet, answers [`SceneAttach::Waiting`](mobile.md#variant.SceneAttach.Waiting). A
+later call never registers a second observer, so calling again is how an app asks for the
+state. An attach makes the window key and visible
 only when it is not hidden: an app that keeps it hidden (to create its accessibility bridge
 first) shows it itself.
 
 Off iOS it does nothing and answers [`SceneAttach::NotNeeded`](mobile.md#variant.SceneAttach.NotNeeded).
 
-Source: `crates/lune-ui-platform/src/mobile.rs:41`
+Source: `crates/lune-ui-platform/src/mobile.rs:44`
 
 <a id="fn.safe_area"></a>
 ### Function `safe_area`
@@ -178,5 +181,5 @@ that cannot be read, a non-finite one or a failed position query gives [`Insets:
 Everywhere else it is [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO): a desktop window's frame (a title bar) is not an area the
 content must keep clear of.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:56`
+Source: `crates/lune-ui-platform/src/mobile.rs:59`
 
