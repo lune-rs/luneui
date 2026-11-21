@@ -126,7 +126,7 @@ pub struct PopoverOptions {
 
 Where a popover goes and how it looks.
 
-Source: `crates/lune-ui-core/src/widgets/popover.rs:171`
+Source: `crates/lune-ui-core/src/widgets/popover.rs:188`
 
 **Fields**
 
@@ -254,7 +254,7 @@ pub enum Surface {
 
 What a popover draws behind its content.
 
-Source: `crates/lune-ui-core/src/widgets/popover.rs:140`
+Source: `crates/lune-ui-core/src/widgets/popover.rs:157`
 
 **Variants**
 

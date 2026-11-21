@@ -1127,12 +1127,14 @@ impl Ui<'_> {
             edit_pointer_with(ui, &mut host, &mut st, &r, origin);
 
             let focused = enabled && ui.focus_state().0 == Some(id);
+            // The selection and its handles show while the app's edit menu holds it (D364).
+            let selecting = focused || ui.held_by_overlay(id);
             let draw = Draw {
                 opts,
                 viewport,
                 cols,
                 view,
-                selection: if focused { st.edit.selection() } else { 0..0 },
+                selection: if selecting { st.edit.selection() } else { 0..0 },
                 caret: st.edit.caret(),
                 compose: composing.as_ref(),
                 caret_on: focused && !opts.read_only,
@@ -1148,7 +1150,7 @@ impl Ui<'_> {
                 clip_x: Some((viewport.x + cols.gutter, viewport.right())),
                 ink: ui.theme().fg_primary,
             };
-            edit_handles_with(ui, id, &mut host, &mut st, space, focused);
+            edit_handles_with(ui, id, &mut host, &mut st, space, selecting);
             if host.tops.shift != 0.0 {
                 ui.scroll_shift(AREA, std::mem::take(&mut host.tops.shift));
             }

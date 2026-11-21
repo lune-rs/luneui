@@ -683,7 +683,7 @@ pub fn polyline_length(pts: &[[f32; 2]]) -> f32
 
 The length of the closed loop through `pts`, the closing segment included.
 
-Source: `crates/lune-ui-core/src/paint.rs:1563`
+Source: `crates/lune-ui-core/src/paint.rs:1577`
 
 ## Re-exports
 

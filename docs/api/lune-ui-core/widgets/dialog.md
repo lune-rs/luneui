@@ -33,7 +33,7 @@ pub struct Dialog<'s> {
 
 What [`Ui::dialog`](../ui.md#method.Ui.dialog) and [`Ui::dialog_with`](../ui.md#method.Ui.dialog_with) show.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:249`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:251`
 
 **Fields**
 
@@ -142,7 +142,7 @@ pub struct DialogOptions {
 
 How [`Ui::dialog_with`](../ui.md#method.Ui.dialog_with) differs from [`Ui::dialog`](../ui.md#method.Ui.dialog).
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:289`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:291`
 
 **Fields**
 
@@ -181,7 +181,7 @@ pub struct DialogResponse {
 
 What a frame of [`Ui::dialog`](../ui.md#method.Ui.dialog) reports; at most one is set.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:260`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:262`
 
 **Fields**
 
@@ -259,7 +259,7 @@ pub enum Cancel<'s> {
 
 How the cancel button is labelled.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:238`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:240`
 
 **Variants**
 
@@ -295,7 +295,7 @@ pub enum DialogWidth {
 
 The card's width.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:269`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:271`
 
 **Variants**
 
@@ -345,7 +345,7 @@ transforms; call it with none (the `Ui` overlays start with none). `body` draws 
 footer; it gets the painter, the card's content x, the y just below the message and the
 content width.
 
-Source: `crates/lune-ui-core/src/widgets/dialog.rs:211`
+Source: `crates/lune-ui-core/src/widgets/dialog.rs:213`
 
 ## Constants
 

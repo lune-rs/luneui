@@ -488,7 +488,7 @@ functions; mid-transition and interaction scenes are live scripted `Ui` frames. 
 `flyout`, `toast-notifications`, `command-palette`, `page`, `panel`, `sidebar`, `side-panel`, `icon-rail`, `split-panes`,
 `tree-view` and `settings-page`, from M8 `table`, `bar-chart`, `pie-chart`, `kanban-board` and `lane-graph`, and from M9 `code-block`,
 `code-editor-view`, `markdown-preview` and `diff-view`, from M10 `theme`, `tray` and `file-drop`, from M11 `window`, and from mobile M3 `touch` and M5 `touch-widgets`
-(89 pages in all, the showcase's nine labs and its shell page among them, 463 scene names, one of them at scale 1.5, `ui-controls@1.5x`, D243; every page of the same pattern: a live state, scripted scenes, a bench timeline).
+(89 pages in all, the showcase's nine labs and its shell page among them, 481 scene names, one of them at scale 1.5, `ui-controls@1.5x`, D243; every page of the same pattern: a live state, scripted scenes, a bench timeline).
 The `touch` page lays out for a phone and honours `Ui::safe_area`; its ten `phone-touch-*` scenes run in `page::PHONE`, a 402 by 874 logical window (the iPhone 16 Pro simulator's, 62 pt above and 34 pt below for the bars) at scale 3, chosen by the `phone-` prefix of the scene id (`UiScene::window`), with the safe area told by `Ev::SafeArea` and the finger by `Ev::TouchStart`, `TouchMove`, `TouchEnd`, `TouchCancel` and `TouchOn` (D351); the `touch-widgets` page (mobile M5, D366) is the same kind of phone page after `touch`, with eleven `phone-widgets-*` scenes in `page::PHONE`, the existing widgets under a finger and the app's edit menu on `Ui::edit_actions` and `Ui::edit_command` (D364); `apps/gallery/src/pages/controls_ui.rs` is the shared composition of every M4 widget that the
 core pages draw. Window mode builds a `Ui` per frame over the page's live state; dump and bench
 drive the same state through a `Player` (a scripted input, the retained store and the page state). A scene's `Expect` is `Settled` (`Idle`),
@@ -605,7 +605,7 @@ On the branch after 0.7.3 (mobile support M5, touch-ready widgets, D361 to D366;
 
 - `lune_ui_core::text_edit`: `EditActions` (`#[non_exhaustive]`, `cut`, `copy`, `paste`, `select_all`; D364);
 - `lune_ui_core::ui`: `Ui::edit_command` (queues an `EditCommand` for a text widget, applied by its next call through that widget's own path; D364) and `Ui::edit_actions` (what a text widget allows; D364); the slider, the scrollbar thumb and the split divider claim their axes with `Ui::set_drag_axes` (D362);
-- the touch rules, read only for a touch press (the 44 pt target, focus on tap, the long-press drag, the act on tap, the tooltip under a resting finger, the tap caret, word and handles of a text widget; D361 to D364), in `ui/pointer.rs`, `ui/touch.rs` and the text widgets;
+- the touch rules, read only for a touch press (the 44 pt target, focus on tap, the long-press drag, the act on tap, the tooltip under a resting finger, the tap caret, word and handles of a text widget; D361 to D364), in `ui/pointer.rs`, `ui.rs`, the widgets (the text widgets among them) and `tooltip.rs`;
 - the scroll area under the on-screen keyboard extends its y range by the covered part and reveals the focused field (D365); the overlays place inside `Ui::safe_area` and above `Ui::keyboard_inset` (`Ui::overlay_bounds`, crate-private; D365);
 - the gallery: the `touch-widgets` page and eleven `phone-widgets-*` scenes (D366).
 

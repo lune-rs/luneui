@@ -17,6 +17,7 @@ use lune_ui_core::theme::DARK;
 use lune_ui_core::ui::{Response, Ui, WidgetId};
 use lune_ui_core::widgets::code_editor::CodeOptions;
 use lune_ui_core::widgets::field::{FieldOptions, Variant};
+use lune_ui_core::widgets::menu::MenuRow;
 use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
 use lune_ui_core::widgets::text_area::AreaOptions;
 
@@ -912,4 +913,271 @@ fn positioned_selectable_text_places_the_caret_on_a_tap_and_a_pan_selects_nothin
     let (r, out, _) = selectable(&mut h, text, text, None);
     assert!(r.clicked && r.focused);
     assert_eq!(selection(&out, sel_id()), (3, 3));
+}
+
+// The app's edit menu, a real `Ui::menu` as the gallery builds it (D364): while it has the key
+// focus the text widget keeps its selection, handles and actions; Copy from it works.
+
+/// Where the app's menu opens.
+const MENU_AT: (f32, f32) = (300.0, 250.0);
+
+/// The app's side of the recipe: a long press (`secondary_clicked`) opens a menu of what
+/// `edit_actions` allows; a pick runs `edit_command`.
+#[derive(Default)]
+struct AppMenu {
+    open: bool,
+}
+
+impl AppMenu {
+    /// One frame of `draw` and then the menu: the widget's response, the output, its actions as
+    /// the menu saw them (`None` with the menu closed) and the row picked.
+    fn frame(
+        &mut self,
+        h: &mut UiHarness,
+        id: WidgetId,
+        draw: &mut dyn FnMut(&mut Ui<'_>) -> Response,
+    ) -> (
+        Response,
+        FrameOutput,
+        Option<EditActions>,
+        Option<EditCommand>,
+    ) {
+        let mut got = None;
+        let (_, out) = h.frame(|ui| {
+            let r = draw(ui);
+            if r.secondary_clicked {
+                self.open = true;
+            }
+            let mut actions = None;
+            let mut cmd = None;
+            if self.open {
+                let a = ui.edit_actions(id).unwrap_or_default();
+                actions = Some(a);
+                let all = [
+                    (a.cut, "Cut", EditCommand::Cut),
+                    (a.copy, "Copy", EditCommand::Copy),
+                    (a.paste, "Paste", EditCommand::Paste),
+                    (a.select_all, "Select all", EditCommand::SelectAll),
+                ];
+                let shown: Vec<(&str, EditCommand)> = all
+                    .into_iter()
+                    .filter(|(takes, ..)| *takes)
+                    .map(|(_, text, cmd)| (text, cmd))
+                    .collect();
+                let rows: Vec<MenuRow<'_>> = shown
+                    .iter()
+                    .map(|(text, _)| MenuRow::Item {
+                        glyph: None,
+                        text,
+                        shortcut: "",
+                    })
+                    .collect();
+                let resp = ui.menu("edit-menu", &rows, MENU_AT);
+                if let Some(i) = resp.picked {
+                    cmd = Some(shown[i].1.clone());
+                    ui.edit_command(id, shown[i].1.clone());
+                }
+                if resp.picked.is_some() || resp.dismissed {
+                    self.open = false;
+                }
+            }
+            got = Some((r, actions, cmd));
+        });
+        let (r, actions, cmd) = got.expect("ran");
+        (r, out, actions, cmd)
+    }
+}
+
+/// Presses `key` and runs a frame of `step`.
+fn press_key<T>(h: &mut UiHarness, key: NamedKey, step: impl FnOnce(&mut UiHarness) -> T) -> T {
+    h.input.key_down(Key::Named(key), None);
+    step(h)
+}
+
+#[test]
+fn a_real_edit_menu_keeps_the_selection_handles_and_actions_and_copy_works_on_every_editor() {
+    for kind in KINDS {
+        let mut e = Edit::new(kind);
+        let id = e.id();
+        let mut h = ready(&mut e);
+        let mut app = AppMenu::default();
+        let mut draw = |ui: &mut Ui<'_>| e.draw(ui);
+        let at = {
+            let probe = Edit::new(kind);
+            probe.at(1)
+        };
+        h.at_ms(0).input.touch_start(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        h.at_ms(600);
+        let (r, out, actions, _) = app.frame(&mut h, id, &mut draw);
+        assert!(r.secondary_clicked && app.open, "{kind:?}");
+        assert_eq!(range(&out, id), (0, 5), "{kind:?}");
+        assert!(actions.expect("menu").copy, "{kind:?}");
+        h.at_ms(700).input.touch_end(1, at.0, at.1);
+        for k in 0..3 {
+            h.at_ms(800 + 100 * k);
+            let (_, out, actions, _) = app.frame(&mut h, id, &mut draw);
+            assert_eq!(
+                range(&out, id),
+                (0, 5),
+                "{kind:?}: frame {k} with the menu open"
+            );
+            let a = actions.expect("the menu stays open");
+            assert!(a.copy && a.cut && a.paste && a.select_all, "{kind:?}");
+            assert_eq!(
+                handles(&h, id).len(),
+                2,
+                "{kind:?}: handles stay while the menu is open (frame {k})"
+            );
+        }
+        // Copy is the second row: Cut, Copy, Paste, Select all. The first Down lights the first.
+        for k in 0..2 {
+            h.at_ms(1200 + 20 * k);
+            press_key(&mut h, NamedKey::ArrowDown, |h| app.frame(h, id, &mut draw));
+        }
+        h.at_ms(1300);
+        let (mut out, mut cmd) = press_key(&mut h, NamedKey::Enter, |h| {
+            let (_, out, _, cmd) = app.frame(h, id, &mut draw);
+            (out, cmd)
+        });
+        let mut written = out.clipboard.clone();
+        assert_eq!(cmd.take(), Some(EditCommand::Copy), "{kind:?}: Copy picked");
+        for k in 0..3 {
+            h.at_ms(1400 + 100 * k);
+            let (_, o, ..) = app.frame(&mut h, id, &mut draw);
+            written.extend(o.clipboard.clone());
+            out = o;
+        }
+        assert_eq!(
+            written,
+            [ClipboardRequest::Write("hello".to_owned())],
+            "{kind:?}: Copy from the menu writes the selection"
+        );
+        assert!(!app.open, "{kind:?}");
+        // The menu closed: the selection is as it was and the handles are back.
+        assert_eq!(range(&out, id), (0, 5), "{kind:?}");
+        assert_eq!(handles(&h, id).len(), 2, "{kind:?}: handles after the menu");
+    }
+}
+
+/// Runs the long press on selectable text (`shown` over `full`, pressed at `at`), the lift and
+/// two frames with the app's menu open; returns the menu's state and the harness.
+fn selectable_with_menu(shown: &str, full: &str, at: (f32, f32)) -> (UiHarness, AppMenu) {
+    let mut h = UiHarness::new(WIN);
+    let mut app = AppMenu::default();
+    let spec = Spec::plain(shown, Style::ui(13.0, DARK.fg_primary));
+    let mut draw = |ui: &mut Ui<'_>| ui.selectable_text("s", VALUE, &spec, full);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(0).input.touch_start(1, at.0, at.1);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(600);
+    let (r, ..) = app.frame(&mut h, sel_id(), &mut draw);
+    assert!(r.secondary_clicked && app.open);
+    h.at_ms(700).input.touch_end(1, at.0, at.1);
+    for k in 0..2 {
+        h.at_ms(800 + 100 * k);
+        let (_, out, actions, _) = app.frame(&mut h, sel_id(), &mut draw);
+        let a = actions.expect("the menu stays open");
+        assert!(a.copy, "the menu keeps its Copy row (frame {k})");
+        let n = out.tree.get(sel_id()).and_then(|n| n.text.as_ref());
+        assert!(
+            n.is_some_and(|t| t.selection.0 != t.selection.1),
+            "the selection is still drawn (frame {k})"
+        );
+    }
+    // Copy is the first row of a read-only text: the first Down lights it, Enter picks it.
+    h.at_ms(1000);
+    press_key(&mut h, NamedKey::ArrowDown, |h| {
+        app.frame(h, sel_id(), &mut draw)
+    });
+    h.at_ms(1100);
+    let (_, out, _, cmd) = press_key(&mut h, NamedKey::Enter, |h| {
+        app.frame(h, sel_id(), &mut draw)
+    });
+    assert_eq!(cmd, Some(EditCommand::Copy));
+    let mut written = out.clipboard;
+    for k in 0..3 {
+        h.at_ms(1200 + 100 * k);
+        let (_, o, ..) = app.frame(&mut h, sel_id(), &mut draw);
+        written.extend(o.clipboard);
+    }
+    assert_eq!(written, [ClipboardRequest::Write(copied(full, shown))]);
+    assert!(!app.open);
+    (h, app)
+}
+
+/// What Copy writes: the whole value when the text is elided, else the word `beta`.
+fn copied(full: &str, shown: &str) -> String {
+    if full == shown { "beta" } else { full }.to_owned()
+}
+
+#[test]
+fn a_real_edit_menu_keeps_whole_selectable_text_selected_and_copy_writes_it() {
+    selectable_with_menu("ab\u{2026}", "abcdef", (24.0, 40.0));
+}
+
+#[test]
+fn a_real_edit_menu_keeps_positioned_selectable_text_selected_and_copy_writes_the_word() {
+    let text = "alpha beta gamma";
+    let at = (20.0 + GLYPH * 7.0 + 1.0, 40.0);
+    selectable_with_menu(text, text, at);
+}
+
+#[test]
+fn focus_moving_to_another_widget_ends_the_hold_of_the_menu() {
+    // The whole-text selectable is selected by a long press; a tap on another field dismisses its
+    // menu, and the next tap on that field moves the focus: the selection goes as a focus loss does.
+    let (shown, full) = ("ab\u{2026}", "abcdef");
+    let mut h = UiHarness::new(WIN);
+    let mut app = AppMenu::default();
+    let mut text = String::new();
+    let spec = Spec::plain(shown, Style::ui(13.0, DARK.fg_primary));
+    let mut draw = |ui: &mut Ui<'_>| {
+        ui.text_field_with(
+            "g",
+            Rect::new(20.0, 100.0, 200.0, 32.0),
+            &mut text,
+            &FieldOptions::default(),
+        );
+        ui.selectable_text("s", VALUE, &spec, full)
+    };
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(0).input.touch_start(1, 24.0, 40.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(600);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(700).input.touch_end(1, 24.0, 40.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    let (_, _, a, _) = app.frame(&mut h, sel_id(), &mut draw);
+    assert!(a.expect("menu open").copy);
+    // A press outside dismisses the menu and reaches nothing: focus returns, the selection stays.
+    h.at_ms(1000).input.touch_start(1, 40.0, 116.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(1040).input.touch_end(1, 40.0, 116.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(1100);
+    let (_, _, a, _) = app.frame(&mut h, sel_id(), &mut draw);
+    assert!(!app.open && a.is_none());
+    let mut copy = None;
+    h.at_ms(1150);
+    h.frame(|ui| {
+        draw(ui);
+        copy = ui.edit_actions(sel_id()).map(|a| a.copy);
+    });
+    assert_eq!(copy, Some(true), "the dismissed menu hands focus back");
+    // A tap on the field moves the focus for real: the selection goes.
+    h.at_ms(1500).input.touch_start(1, 40.0, 116.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(1540).input.touch_end(1, 40.0, 116.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(1600);
+    h.frame(|ui| {
+        draw(ui);
+        copy = ui.edit_actions(sel_id()).map(|a| a.copy);
+    });
+    assert_eq!(
+        copy,
+        Some(false),
+        "a tap on another widget ends the selection"
+    );
 }

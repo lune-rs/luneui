@@ -430,7 +430,7 @@ For an app that turned touch on, the touch rules (each read only for a touch pre
 - A drag that grows out of a long press dismisses the menu that long press opened (D361).
 - The slider, the scrollbar thumb and the split divider claim their axes, so a pan on the other axis scrolls the area around them; tabs and board cards claim none. A tap does what a mouse press does where that changes app state (D362).
 - A finger resting 500 ms on a tooltip's anchor shows the tooltip; it stays 1.5 s after the lift (D363).
-- A text widget: a tap places the caret, a double tap or a long press selects a word, a drag after a long press extends, and selection handles show (D364).
+- A text widget: a tap places the caret, a double tap or a long press selects a word, a drag after a long press extends, and selection handles show (D364). While the app's edit menu (opened from that `context`) has the key focus, the widget keeps its selection, its handles and its `edit_actions`, and focus returns to it when the menu closes (D367).
 - A scroll area under the on-screen keyboard extends its range by the covered part and reveals the focused field; menus, popovers, tooltips, toasts, the dialog card and the palette place inside the safe area and above the keyboard (D365).
 
 To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary_clicked` (D292), offer the rows `Ui::edit_actions` allows, and run the chosen one as `Ui::edit_command`. No migration map: nothing an app already calls changes.

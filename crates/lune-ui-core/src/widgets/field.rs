@@ -577,7 +577,10 @@ pub(super) fn begin_edit_with(
         st.edit.set_selection(first, first);
     }
     host.sync(ui, &mut st.edit);
-    if !focused || !drawn {
+    // A touch's edit menu holds the widget while it has the key focus: the selection and its
+    // handles stay for when focus returns (D364).
+    let held = focused || ui.held_by_overlay(id);
+    if !held || !drawn {
         st.paste_pending = false;
         st.handles = false;
         if st.edit.preedit().is_some() {
@@ -1388,7 +1391,9 @@ impl Ui<'_> {
             paint_box(self.painter(), rect, &look);
         }
 
-        let shown = Shown::new(&cfg, &st.edit, text, r.focused);
+        // The selection and its handles show while the app's edit menu holds the field (D364).
+        let selecting = r.focused || self.held_by_overlay(id);
+        let shown = Shown::new(&cfg, &st.edit, text, selecting);
         let right = match opts.variant {
             Variant::Date => DATE_PADDING,
             _ if clearing => side + CLEAR + CLEAR_GAP,
@@ -1431,7 +1436,7 @@ impl Ui<'_> {
             clip_x: Some((clip.x, clip.right())),
             ink: caret_ink,
         };
-        edit_handles(self, id, &cfg, &mut st, text, space, r.focused);
+        edit_handles(self, id, &cfg, &mut st, text, space, selecting);
 
         let (name, color) = (opts.label.unwrap_or(opts.placeholder), t.fg_secondary);
         match opts.variant {

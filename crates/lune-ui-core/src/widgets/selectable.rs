@@ -10,7 +10,8 @@
 //! of `full`. Navigation keys do nothing there, so a partial selection cannot exist.
 //!
 //! A value is no tab stop (`skip_tab`): a press or an assistive technology focuses it. The
-//! selection fill draws only while it is focused, and a focus loss clears the selection.
+//! selection fill draws only while it is focused, and a focus loss clears the selection, except to
+//! the app's edit menu that a touch opened from it, which holds it until focus returns (D364).
 
 use std::hash::Hash;
 use std::ops::Range;
@@ -78,19 +79,22 @@ impl Ui<'_> {
         let r = self.interact(id, hit, SELECT_SENSE);
         // The text claims no axis: a touch drag on it is a pan of what holds it (D364).
         self.set_drag_axes(id, false, false);
-        let focused = r.focused;
         // The key focus, kept in a disabled scope: the keys are taken there and nothing acts (D140).
         let held = self.focus_state().0 == Some(id);
+        // The app's edit menu holds the text while it has the key focus: the selection stays for
+        // Copy and is drawn, as focus returns to the text when the menu closes (D364).
+        let kept = self.held_by_overlay(id);
+        let focused = r.focused || kept;
         // Positional whenever the runs join to `full`, one run or many (D11); only a text that
         // differs from it (an elided one) is selected whole.
         let positioned = !spec.runs.is_empty() && joined_text(spec) == full;
         let ink = t.text_selection;
 
         if positioned {
-            let held = (focused, held);
+            let held = (focused, held || kept);
             self.selectable_positional(id, hit, &r, rect, spec, full, name, &[], held, false);
         } else {
-            let mut selected = self.persistent::<WholeSelection>(id).0 && held;
+            let mut selected = self.persistent::<WholeSelection>(id).0 && (held || kept);
             // A mouse selects at the press; a finger at the tap or the long press, so a pan
             // selects nothing (D364).
             let touch = self.pointer_kind() == PointerKind::Touch;
@@ -191,7 +195,8 @@ impl Ui<'_> {
         if spec.runs.is_empty() {
             return r;
         }
-        let held = (r.focused, held);
+        let kept = self.held_by_overlay(id);
+        let held = (r.focused || kept, held || kept);
         self.selectable_positional(id, hit, &r, rect, spec, &full, &name, pads, held, true);
         if r.hovered || r.pressed {
             self.set_cursor(CursorIcon::Text);

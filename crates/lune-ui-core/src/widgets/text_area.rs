@@ -141,7 +141,9 @@ impl Ui<'_> {
                 let origin = (viewport.x + PAD_X, viewport.y + PAD_Y);
                 edit_pointer(ui, &cfg, &mut st, &resp, text, origin);
 
-                let shown = Shown::new(&cfg, &st.edit, text, focused);
+                // The selection and its handles show while the app's edit menu holds the area (D364).
+                let selecting = focused || ui.held_by_overlay(id);
+                let shown = Shown::new(&cfg, &st.edit, text, selecting);
                 if shown.empty {
                     let hint = cfg.placeholder(opts.placeholder, t.fg_tertiary);
                     ui.painter().text(&hint, origin.0, origin.1);
@@ -156,7 +158,7 @@ impl Ui<'_> {
                     clip_x: None,
                     ink: t.fg_primary,
                 };
-                edit_handles(ui, id, &cfg, &mut st, text, space, focused);
+                edit_handles(ui, id, &cfg, &mut st, text, space, selecting);
                 let facts = NodeFacts {
                     role: Role::MultilineText,
                     name: opts.label.unwrap_or(opts.placeholder),

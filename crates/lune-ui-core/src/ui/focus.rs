@@ -181,6 +181,48 @@ impl Ui<'_> {
         }
     }
 
+    /// Whether `id` is under an overlay it opened that has the key focus, as a touch's edit menu
+    /// does (D364): the focused widget is in an active overlay whose saved focus is `id`, or in
+    /// one whose saved focus is in such an overlay, and the last press was a touch. A text widget
+    /// that is held this way keeps its selection, its handles and its edit actions, because focus
+    /// returns to it when the overlay closes. A mouse never holds: its focus loss ends them as
+    /// before. False in a disabled scope.
+    pub(crate) fn held_by_overlay(&self, id: WidgetId) -> bool {
+        if !self.enabled || self.pointer_kind() != crate::input::PointerKind::Touch {
+            return false;
+        }
+        let tag_of = |w: WidgetId| {
+            self.store
+                .prev_hits
+                .iter()
+                .filter(|h| h.id == w)
+                .map(|h| h.tag)
+                .max()
+        };
+        let Some(mut at) = self.store.focus.focused.filter(|f| *f != id) else {
+            return false;
+        };
+        for _ in 0..=self.store.overlays.len() {
+            let Some(tag) = tag_of(at) else {
+                return false;
+            };
+            let Some(rec) = self
+                .store
+                .overlays
+                .iter()
+                .find(|o| o.active() && o.tag == tag)
+            else {
+                return false;
+            };
+            match rec.saved_focus {
+                Some(s) if s == id => return true,
+                Some(s) => at = s,
+                None => return false,
+            }
+        }
+        false
+    }
+
     /// Whether the focused widget is composing, so the keys left in the queue are the input
     /// method's.
     pub(crate) fn composing(&self) -> bool {
