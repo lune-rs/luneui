@@ -44,5 +44,36 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 ] }
 raw-window-handle = "0.6"
 
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "std",
+    "block2",
+    "NSDictionary",
+    "NSEnumerator",
+    "NSNotification",
+    "NSObject",
+    "NSOperation",
+    "NSSet",
+    "NSString",
+    "NSValue",
+] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std"] }
+block2 = { version = "0.6", default-features = false, features = ["std"] }
+objc2-ui-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "UIApplication",
+    "UIGeometry",
+    "UIPasteboard",
+    "UIResponder",
+    "UIScene",
+    "UIScreen",
+    "UIView",
+    "UIViewController",
+    "UIWindow",
+    "UIWindowScene",
+    "objc2-core-foundation",
+] }
+
 [lints]
 workspace = true

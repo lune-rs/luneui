@@ -12,6 +12,7 @@ Source: `crates/lune-ui/src/lib.rs:64`
 
 | Name | Kind | Defined at |
 | --- | --- | --- |
+| `ClipboardBackend` | Trait | [`lune_ui_core::input::ClipboardBackend`](../lune-ui-core/input.md#trait.ClipboardBackend) |
 | `ClipboardRequest` | Enum | [`lune_ui_core::input::ClipboardRequest`](../lune-ui-core/input.md#enum.ClipboardRequest) |
 | `CursorIcon` | Enum | [`lune_ui_core::input::CursorIcon`](../lune-ui-core/input.md#enum.CursorIcon) |
 | `Event` | Enum | [`lune_ui_core::input::Event`](../lune-ui-core/input.md#enum.Event) |

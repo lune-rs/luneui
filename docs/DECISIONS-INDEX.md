@@ -369,7 +369,7 @@ One line per row of `docs/DECISIONS.md` (372 rows), oldest first. The file is ge
 | D357 | 2026-11-21 | The soft keyboard reaches the frame as a bottom inset: `lune_ui_platform::mobile::KeyboardInset` (re-exported as `lune_ui::mobile::KeyboardInset`), … | in force |
 | D358 | 2026-11-21 | The OS clipboard is a core trait, so an iOS app can give the adapter a backend that needs `unsafe`. | in force |
 | D359 | 2026-11-21 | Accessibility and the desktop-only modules on a phone. | in force |
-| D360 | 2026-11-21 | Release 0.7.3: the workspace version goes from 0.7.2 to 0.7.3 for the iOS platform layer (D353 to D359). | in force |
+| D360 | 2026-11-21 | Release 0.7.3: the workspace version goes from 0.7.2 to 0.7.3 for the iOS platform layer (D353 to D359), and it is the first release with D411 (the dialog card … | in force |
 | D400 | 2026-11-20 | A generated decisions index, `docs/DECISIONS-INDEX.md`, one line per row of `docs/DECISIONS.md` (id, date, title, status), written by `tools/decisions-index` … | in force |
 | D401 | 2026-11-20 | `gallery --dump <dir> --only <name> [--window <W>x<H>] [--scale <S>]` dumps one scene or a few, at any window size and scale (task `luneui-rs/ai-usability`, … | in force |
 | D402 | 2026-11-20 | The toolkit's example app is `apps/starter`, a bin crate (task `luneui-rs/ai-usability`, plan D5): `src/screen.rs` (at most 60 lines, the part to copy) is a … | in force |

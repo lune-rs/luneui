@@ -12,8 +12,9 @@ Pasted text comes from outside the process, so it is capped at [`MAX_PASTE_BYTES
 text is refused whole (a read answers `ClipboardUnavailable`, a write is dropped). Nothing is
 ever truncated. A failed write is silent. The OS backend is opened on first use,
 so a process that never copies or pastes opens nothing; a backend that cannot open answers
-`ClipboardUnavailable` to a read and drops a write. iOS and Android have no OS clipboard yet: there
-every read answers `ClipboardUnavailable` and every write is dropped.
+`ClipboardUnavailable` to a read and drops a write. [`Clipboard::new`](clipboard.md#method.Clipboard.new) has no OS clipboard on iOS and
+Android: there every read answers `ClipboardUnavailable` and every write is dropped. An iOS app
+gives the clipboard its backend with [`Clipboard::with_backend`](clipboard.md#method.Clipboard.with_backend) (`lune_ui_platform::mobile::Pasteboard`).
 
 Source: `crates/lune-ui-winit/src/clipboard.rs:1`
 
@@ -30,7 +31,7 @@ pub struct Clipboard {
 
 The app's clipboard service. See the module note.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:36`
+Source: `crates/lune-ui-winit/src/clipboard.rs:29`
 
 **Methods and associated items**
 
@@ -46,6 +47,12 @@ Source: `crates/lune-ui-winit/src/clipboard.rs:36`
   a frame the last stays), unless it is over the cap. A `Read` queues exactly one reply on
   `translator`: the text, or `ClipboardUnavailable` when there is none, it cannot be read or
   it is over the cap. The reply reaches the app in the translator's next `take`.
+
+- <a id="method.Clipboard.with_backend"></a>`pub fn with_backend(backend: Box<dyn ClipboardBackend>) -> Self`
+
+  A clipboard over `backend` instead of the OS one: a phone app's
+  `lune_ui_platform::mobile::Pasteboard`, or a fake in a test. The cap [`MAX_PASTE_BYTES`](clipboard.md#constant.MAX_PASTE_BYTES) and
+  the replies are the same for every backend.
 
 **Trait implementations**
 
@@ -66,5 +73,11 @@ times the 11 MB document the code view measured (D213). It bounds the adapter, n
 text field and the text area refuse any insert over 1 MiB themselves (`text_edit::MAX_SHAPED_INSERT`, D232, D233);
 only the code view, which draws just the lines in view, takes what the adapter lets through.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:21`
+Source: `crates/lune-ui-winit/src/clipboard.rs:22`
+
+## Re-exports
+
+| Name | Kind | Defined at |
+| --- | --- | --- |
+| `Backend` | Trait | [`lune_ui_core::input::ClipboardBackend`](../lune-ui-core/input.md#trait.ClipboardBackend) |
 

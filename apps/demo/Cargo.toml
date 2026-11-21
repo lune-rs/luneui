@@ -13,6 +13,10 @@ winit = "0.30"
 wgpu = "30"
 pollster = "0.4"
 
+[features]
+# The accessibility bridge (the facade's `accesskit`): a feature, not a dependency of its own.
+access = ["lune-ui/accesskit"]
+
 [target.'cfg(target_os = "android")'.dependencies]
 winit = { version = "0.30", features = ["android-native-activity"] }
 

@@ -1,13 +1,14 @@
-//! iOS and Android: no OS clipboard backend yet. A read answers `Err` (the service turns it into
+//! iOS and Android: no OS clipboard backend in this crate (an iOS app gives the clipboard
+//! `lune_ui_platform::mobile::Pasteboard`, which calls UIKit directly, with `Clipboard::with_backend`). A read answers `Err` (the service turns it into
 //! `ClipboardUnavailable`) and a write is dropped.
 
-use crate::clipboard::Backend;
+use lune_ui_core::input::ClipboardBackend;
 
 /// No backend: every read and write fails.
 #[derive(Default)]
 pub(crate) struct Os(());
 
-impl Backend for Os {
+impl ClipboardBackend for Os {
     fn read(&mut self) -> Result<String, ()> {
         Err(())
     }

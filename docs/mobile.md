@@ -13,13 +13,20 @@ The phone targets are a rustup target each: `rustup target add aarch64-apple-ios
 - `lune-ui-winit --features accesskit` also passes clippy for `aarch64-apple-ios-sim` (`accesskit_ios` 0.2.0 is pulled in); input for M4's accessibility bridge.
 - An iOS binary is built with `IPHONEOS_DEPLOYMENT_TARGET=17.0` (the simulator script sets it). Nothing here signs for a real device.
 
+## Wiring an iOS app
+
+What an app adds to the toolkit's iOS layer, with the demo's code as the reference: `docs/consuming.md`, "0.7.2 to 0.7.3: iOS platform layer" (D353 to D360). The readings below are the demo's, on the simulator.
+
 ## `scripts/ios-sim.sh`
 
 Builds `apps/demo` for `aarch64-apple-ios-sim`, assembles `target/ios-sim/Demo.app` (the binary and `apps/demo/ios/Info.plist`, ad-hoc signed), runs it on one simulator device of its own and checks that a frame was presented.
 
-- Device: `luneui-demo-iphone`, type `iPhone-16-Pro`, runtime `iOS-18-0` (override with `LUNEUI_IOS_DEVICE_TYPE`, `LUNEUI_IOS_RUNTIME`); found by exact name, created when missing, shut down at the end (`--keep-booted` leaves it booted, `--delete-device` deletes it).
+- Device: `luneui-demo-iphone`, type `iPhone-16-Pro`, runtime `iOS-18-0` (override with `LUNEUI_IOS_DEVICE_TYPE`, `LUNEUI_IOS_RUNTIME`; any other runtime gets a device of its own, `luneui-demo-iphone-<runtime>`, as `luneui-demo-iphone-iOS-27-2`); found by exact name, created when missing, shut down at the end (`--keep-booted` leaves it booted, `--delete-device` deletes it).
 - Default mode: waits up to 60 s for `presented 1` in `target/ios-sim/stdout.log`, takes one screenshot (`shot-1.png`), exits 0 on `ios-sim: passed`. Exit 1 a check failed, 2 setup (tool, rustup target or runtime missing).
 - `--probe`: launches the demo with `--probe`, screenshot `shot-1.png` 2 s after `presented 1`, launches the Settings app (`com.apple.Preferences`, by `simctl launch`) to send the demo to the background, launches the demo again (no `--terminate-running-process`), screenshot `shot-2.png`, and writes the `probe`/`presented` lines of both launches to `target/ios-sim/probe.txt`. Two screenshots in all.
+- `--keyboard`: launches the demo with `--probe --focus-field`, requires `probe keyboard_inset 0,0,0,<b>` with `<b>` above 200, takes one screenshot 2 s later (`shot-1.png`; `shot-nokeyboard.png` when no keyboard showed) and stops (no Settings round trip). In a `--smoke` run the same launch is the last step and its screenshot `shot-2.png` is the run's second one (the resume screenshot is not taken). `LUNEUI_IOS_DEVICE_NAME` picks a device name of its own.
+- `--smoke`: `--probe`, and also requires the clipboard probe to read back its write and `xcrun simctl pbpaste <udid>` to print the same text, `probe scene attached` as the demo's third `probe scene` line (frame 30) and, in launch 1's output, `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip. Two screenshots in all. It also requires every `probe safe_area_event` line (frames 1 and 30) to be `0,62,0,34`, the iOS 18.0 portrait safe area (printed and not judged with `--landscape`), and no `presented` line between `probe lifecycle suspended` and the next `probe lifecycle resumed`, with one after it (a `--probe` run prints a `presented` line for every frame; `--demo-arg --draw-while-suspended` is the control run that must make this check fail).
+- Control flags, which edit only the bundle copy `target/ios-sim/Demo.app/Info.plist` (with `/usr/libexec/PlistBuddy`), never `apps/demo/ios/Info.plist`: `--no-manifest` deletes `UIApplicationSceneManifest` (the app without the scene life cycle); `--landscape` sets `UISupportedInterfaceOrientations` to `UIInterfaceOrientationLandscapeLeft`. `--demo-arg <arg>` passes one more argument to the demo (repeatable), as `--no-scene-attach`, which skips `mobile::attach_to_scene`.
 - Never: touches another device, uses `booted` as a device argument, opens Simulator.app or drives the UI, records video, writes outside `target/ios-sim/`.
 
 `cargo run -p demo -- --probe --frames 60` does the same probe on the desktop: a phone-shaped window (402 x 874 points) for about a second, exit 0 after 60 presented frames. `--frames` is ignored on iOS and Android, where the loop cannot return.
@@ -59,13 +66,126 @@ Life cycle, observed order of `probe lifecycle` lines (`target/ios-sim/probe.txt
 - The second launch is the same process (same pid on both launches). Its new `--stdout` file stays empty: the output of the running process keeps going to the first launch's file, so `stdout-2.log` is empty and `probe.txt`'s launch 1 section holds the whole sequence.
 - The screenshot after the resume (`shot-2.png`) shows the same frame as before, with the status bar's "Settings" back link at the top left (iOS puts it there after a switch from another app); the frame is redrawn after `resumed` (`presented 3`).
 
-Redraws on iOS: a `request_redraw()` made inside the `RedrawRequested` handler was not delivered while the app was idle (only `presented 1` appeared in 8 s; frames 2 and 3 appeared only at `suspended` and `resumed`). With `request_redraw()` also called from `about_to_wait`, frames 2 and 3 came at once. winit's `request_redraw` on iOS queues the window when the view is itself Metal-backed and calls `setNeedsDisplay` otherwise (`ios/window.rs:138-150`); which branch this view takes was not checked, and why the request from inside the handler is lost is not established. Only the observation above was run. M4 must drive redraws from `about_to_wait` (or a display link) on iOS.
+Redraws on iOS: a `request_redraw()` made inside the `RedrawRequested` handler was not delivered while the app was idle (only `presented 1` appeared in 8 s; frames 2 and 3 appeared only at `suspended` and `resumed`). With `request_redraw()` also called from `about_to_wait`, frames 2 and 3 came at once. winit's `request_redraw` on iOS queues the window when the view is itself Metal-backed and calls `setNeedsDisplay` otherwise (`ios/window.rs:138-150`); which branch this view takes was not checked, and why the request from inside the handler is lost is not established. Only the observation above was run. M4 must drive redraws from `about_to_wait` (or a display link) on iOS. (M4 step 2 did: see "M4 reading: safe area and life cycle".)
 
 `simctl launch --terminate-running-process` worked in every script run and in one manual retry with the app running (new pid, new output file). It was refused (SBMainWorkspace) twice in earlier manual retries after a previous run; not reproduced, cause unknown.
+
+## M4 reading: the scene life cycle
+
+Run 2026-11-20 and 2026-11-21 on `iPhone-16-Pro` devices: iOS 18.0 (`luneui-demo-iphone`) and iOS 27.2 (24B8117, `luneui-demo-iphone-iOS-27-2`); Xcode SDK 27.2, winit 0.30.13. Each run's `stdout.log`, `stderr.log` and screenshots are kept under `target/ios-sim/runs/<run>/`.
+
+The route (D354): `apps/demo/ios/Info.plist` declares the scene manifest, with no scene delegate class and no storyboard:
+
+```xml
+<key>UIApplicationSceneManifest</key>
+<dict>
+	<key>UIApplicationSupportsMultipleScenes</key>
+	<false/>
+	<key>UISceneConfigurations</key>
+	<dict>
+		<key>UIWindowSceneSessionRoleApplication</key>
+		<array>
+			<dict>
+				<key>UISceneConfigurationName</key>
+				<string>Default Configuration</string>
+			</dict>
+		</array>
+	</dict>
+</dict>
+```
+
+and the app calls `lune_ui::mobile::attach_to_scene(&window)` right after `create_window`, which hands winit's `UIWindow` to the connected `UIWindowScene` (or to the next one that connects) and re-seats the root view controller. The demo prints `probe scene <attached|waiting|not-needed|skipped>` at window creation, at frame 1 and, under `--probe`, at frame 30.
+
+| run | flags | what it printed | screenshot |
+| --- | --- | --- | --- |
+| R1, iOS 18.0 (`r1-smoke-reseat`) | `--smoke` | `probe scene attached` three times; `presented 1 1206x2622`; `ios-sim: passed` | the frame full screen, the four edge markers on the screen edges, as in M1 |
+| R1, iOS 27.2 (`ios27-r1-smoke`) | `--smoke` | the same; life cycle `resumed suspended resumed`; `ios-sim: passed` | 1206x2622, both shots |
+| R2, iOS 18.0 and 27.2 | (R1's output) | `inner_size` 1206x2334 at `inner_position` 0,186; `outer_size` 1206x2622 at 0,0; scale 3; derived insets 0, 62, 0, 34; last `Resized` 1206x2622: M1's values | |
+| R3, iOS 18.0 and 27.2 | (R1's output) | `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip | |
+| R4, control A, iOS 18.0 (`r4-no-manifest`) | `--no-manifest` | M1's behaviour: frames, `Resized` 1206x2622 only; `probe scene attached` (UIKit gives a manifest-less app an implicit scene and puts winit's window in it) | the frame |
+| R4, control A, iOS 27.2 (`ios27-r4-no-manifest`) | `--no-manifest` | nothing: the process stops at launch with `SIGTRAP` (`EXC_BREAKPOINT`) in UIKit's `_UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, called from `-[UIApplication workspace:didCreateScene:…]` under `UIApplicationMain` (the crash report, `crash.ips`); empty stdout and stderr, so `resumed` never arrives | none |
+| R5, control B, iOS 18.0 (`r5-no-attach`) | `--demo-arg --no-scene-attach` | `probe scene skipped`; every size 0x0, safe area 0, the surface 1x1, no `presented` line | black (status bar and home indicator only): the screenshot tells an attached window from one that is not |
+| R6, iOS 18.0 (`r6-landscape`, before the re-seat) | `--landscape` | `inner_size` 2622x918 at 0,186, insets 0, 62, 0, 34: the portrait safe area in a landscape window (wrong) | |
+| R6, iOS 18.0 (`r6-landscape-reseat`) | `--landscape` | `inner_size` 2250x1143 at 186,0, insets 62, 0, 62, 21, the same as the landscape run without the manifest (`r6-landscape-no-manifest`) | |
+
+What the values say:
+
+- The manifest with no scene delegate class is enough: with the attach the window shows and draws on 18.0 and 27.2, and iOS 27.2 refuses an app built with the iOS 27 SDK that has no manifest (R4), which is the refusal TN3187 announced. So `launches on iOS 27`: held on the 27.2 simulator; a real device is unverified here.
+- Under the manifest the attach is what shows the window (R5): without it the window has no scene, every size reads 0 and nothing is presented.
+- The order matters for the safe area: winit sets its root view controller before the window has a scene, so the controller keeps the portrait orientation (R6, first run). `attach_to_scene` sets the root view controller to none and back after setting the scene, and the landscape insets come out right; portrait is unchanged (R1). The re-seat makes UIKit print `Unbalanced calls to begin/end appearance transitions for <WinitUIViewController …>` twice on stderr; nothing else follows from it in these runs.
+- With the manifest a first `Resized` 0x0 arrives before the 1206x2622 one (without it only 1206x2622 arrives): an app skips a 0 size (the demo does; `WindowSurface::resize` would clamp it to 1x1).
+- winit's `resumed` and `suspended` keep arriving under the manifest, at launch and across the background round trip (R3), so the life cycle stays winit's (D356's branch: no `mobile::Lifecycle`).
+- Not driven here: a scene the OS discards and reconnects (`attach_to_scene` registers its one observer on every path, so the window is handed to a scene that connects while it has none; the simulator gives no way to force a discard, so the reconnect itself was not seen: the observer registration on the attach-at-once path is by construction, not observed) and rotation at run time.
+
+## M4 reading: safe area and life cycle
+
+Run 2026-11-21, iOS 18.0 (`luneui-demo-iphone`), iPhone-16-Pro; `scripts/ios-sim.sh --smoke`.
+
+Safe area (D355): `mobile::safe_area(&window)` derives the insets from winit's `inner_position`, `outer_position`, `inner_size`, `outer_size` and `scale_factor` (live on iOS, from `safeAreaInsets`; the formula is `platform/mobile.rs`, `insets_from_geometry`, unit-tested with the portrait reading) and is `Insets::ZERO` on every other OS (on macOS the same formula gives the title bar, so it must not run there). The demo pushes `Event::SafeArea(mobile::safe_area(window))` after every `Translator::take` and draws an outline inset by `ui.safe_area()`. `probe safe_area_event` is the value `ui.safe_area()` returned: `0,62,0,34` at frame 1 and at frame 30 on iOS 18.0; the screenshot's outline sits 62 points below the top edge and 34 above the bottom, the four edge markers on the screen edges.
+
+Life cycle (D356) and redraws: the demo keeps a `paused` flag, set by `suspended` and cleared by `resumed`; while it is set `render` returns before acquiring a texture, so nothing is drawn or presented. The `WindowSurface` is kept (on iOS the CAMetalLayer survives the background; a platform that destroys the surface on suspend drops it and rebuilds it against the same `Gpu` on `resumed`, which Android's M8 will have to do). Every frame the demo asks for is requested from `about_to_wait` (a `want_frame` flag the frame sets when its repaint wants one, and any window event other than `RedrawRequested` sets), never inside `RedrawRequested`. The order, for an app on any phone target:
+
+1. on `suspended`: stop frames (acquire and present nothing); keep the `Gpu` and, on iOS, the surface;
+2. on `resumed`: clear the stop, and ask for a frame;
+3. a frame is requested outside `RedrawRequested`, and a `StartCause::ResumeTimeReached` wake-up (a `Repaint::At` that came due) is turned into one.
+
+Reading: `probe lifecycle` lines `resumed suspended resumed`; frames presented between `suspended` and the next `resumed`: 0; after it: 2 (`ios-sim: frames around the suspend: during=0 after=2`); the same smoke passed on the iOS 27.2 simulator (`LUNEUI_IOS_RUNTIME=iOS-27-2`, same readings). The control run `--demo-arg --draw-while-suspended` (the demo asks for a frame on `suspended` and does not pause) presented 3 frames between them (`during=3 after=1`) and the smoke failed, so the check can see a frame drawn while suspended. A frame the core asks for while idle arrives: the demo's `--probe` run asks for frame 31 with `Repaint::At` one second after frame 30 (`request_repaint_at`), and it arrived at once while the app was idle (`presented 31`); with the demo's `new_events` handler disabled (the `ControlFlow::WaitUntil` wake-up must be turned into a frame by the app: `StartCause::ResumeTimeReached` sets the flag) the smoke failed with no `presented 31`, so the check sees a lost scheduled frame. `Repaint::Now` is the same flag (`control_flow`'s second value); no demo frame asks for it, so only the flag path was exercised, the first three frames and a probe's first 30 going through it.
+
+## M4 reading: the soft keyboard
+
+Run 2026-11-21, `scripts/ios-sim.sh --keyboard` and `--smoke`; the demo's `--focus-field` focuses its text field on frame 1, `OutputState::apply` then calls `Window::set_ime_allowed(true)`, which winit's iOS backend answers with `becomeFirstResponder` (its view conforms to `UIKeyInput`), and UIKit raises the keyboard. No Simulator.app runs and no Simulator preference is touched; the script sets one key inside its own device (below).
+
+`mobile::KeyboardInset` (D357) observes `UIKeyboardWillChangeFrameNotification` and `UIKeyboardWillHideNotification`, converts the end frame from screen space (`UIScreen.coordinateSpace`) into the window's view, and keeps the overlap of its top edge with the view's height as a bottom inset in points, clamped to the view. The demo pushes it as `Event::KeyboardInset` after every `take`, lays the field out 12 points above the keyboard (the shapes and frost move up to clear it) and prints `probe keyboard_inset l,t,r,b` when it changes.
+
+| Device | Reading |
+| --- | --- |
+| iOS 18.0, `luneui-demo-iphone` | end frame 583 + 291 points: `probe keyboard_inset 0,0,0,291`; the keyboard's top sits at 583 points, the field's bottom 12 points above it |
+| iOS 27.2, `luneui-demo-iphone-iOS-27-2` | end frame 573 + 301 points: `probe keyboard_inset 0,0,0,301`; the same layout (a one-time system sheet about sliding to type covered the keys on the first run of the fresh device) |
+| iOS 18.0, any device, keyboard minimisation on (the control) | no keyboard: UIKit posts one change with the end frame below the screen (874 points, 75 high, overlap 0) and a hide; no inset line, the screenshot shows the focused field and no keyboard |
+
+What the readings say:
+
+- Why a device showed the keyboard once and then never (F4, 2026-11-21): a headless simulator always has its hardware keyboard attached (backboardd logs `Hardware keyboard attached` at every boot, from the simulator's `ExternalKeyboardService`), and the device's keyboard setting `AutomaticMinimizationEnabled` in `com.apple.keyboard.preferences` is true after the system writes it during a boot. With both, UIKit shows only the minimised 75-point bar below the screen. On a fresh device the key is sometimes not yet in effect on its first boot, so the keyboard rose there and on later launches of that boot only. Proof on one device (`luneui-demo-f4-b`): the key false gave the keyboard on three runs across reboots, the key true (the control) gave none, false again gave it; written while booted it takes effect at the next launch, with no reboot. `scripts/ios-sim.sh --keyboard` and `--smoke` therefore write it false in their own device (`simctl spawn <udid> defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false`) before the launches; nothing else on the device and nothing of the Simulator's own preferences changes. `--smoke` then passed twice in a row on `luneui-demo-iphone` (the device that had failed) and on `luneui-demo-iphone-iOS-27-2`.
+- The inset arrives through the observer and reaches the frame while the app is idle: the demo's observer sets a flag and asks for a redraw, and `about_to_wait` turns the flag into the frame (a request made inside `RedrawRequested` is lost while iOS is idle, and `becomeFirstResponder` is called inside a frame).
+- The keyboard's height is 291 to 301 points on the iPhone 16 Pro (it includes the home-indicator area, so the window's bottom safe area is not added to it).
+- Typed text through a live keyboard cannot be injected here: unverified.
+
+## M4 reading: the clipboard
+
+Run 2026-11-21, `scripts/ios-sim.sh --smoke` (the demo's `--probe-clipboard`). `mobile::Pasteboard` (D358) is the `ClipboardBackend` over `UIPasteboard.generalPasteboard`, main thread only; the demo builds `Clipboard::with_backend(Box::new(Pasteboard::new()))` on iOS and `Clipboard::new()` elsewhere. On frame 2 the demo calls `ui.clipboard_write("luneui-probe-<pid>")` (the frame's own request, the path a text edit's copy takes), on frame 4 `ui.clipboard_read()`, and prints the reply event it receives on the next frame: `probe clipboard luneui-probe-<pid>`. The text carries the process id, so a stale pasteboard cannot pass for the run's write.
+
+| Device | Reading |
+| --- | --- |
+| iOS 18.0 | written, read back and `xcrun simctl pbpaste <udid>` all `luneui-probe-24141` |
+| iOS 27.2 | all three `luneui-probe-26244` |
+
+`simctl pbpaste` reads the device's pasteboard, never the Mac's. Unverified here: the iOS "Allow Paste" prompt for text another app put on the pasteboard (the probe reads its own text), and pasting by a person.
+
+## M4 reading: accessibility and the desktop-only modules on a phone
+
+Accessibility (D359): the demo's `access` cargo feature turns on the facade's `accesskit`; `scripts/ios-sim.sh --smoke` builds with it. `setup` creates the window hidden, makes the `AccessBridge` (a failure, or a panic caught with `catch_unwind`, is printed as `probe access err <why>` or `panic`, and the demo runs on with the null bridge, which is what every call does without the feature), then `mobile::attach_to_scene`, then shows the window (an attach shows only a window that is not hidden). Reading, iOS 18.0: `probe access ok`, `probe scene attached`, `presented 1` and the frame as before. On iOS `Window::is_visible()` answers `None`, so `AccessBridge::new`'s "window must be hidden" check (`lune-ui-winit/src/access.rs:651-653`) cannot fire there; the hidden start is for the desktop (the same demo code). The error path was not run on a phone (nothing makes the bridge fail there). Unverified here: VoiceOver (no agent can drive it), and a screen reader reading the tree.
+
+The answers of every desktop-only entry point on iOS and Android (both use the `other` files; the line numbers are the code that decides). Nothing in this table changed except the popover:
+
+| Entry point | Answer on a phone | Where |
+| --- | --- | --- |
+| `popover::PopoverWindow::wrap` | `Err("popover windows do not exist on a phone")` (changed, D359: a second winit window is never attached to a scene, so it would be invisible while `wrap` said `Ok`); macOS, Windows and Linux unchanged | `platform/other.rs:18-24` (`cfg` on `ios`, `android`), `popover.rs` `wrap` |
+| `tray::Tray::new` | `Err(TrayError::Unsupported)` | `platform/other.rs:50-52` |
+| `Tray::set_image`, `set_tooltip`, `rect`, `bar_is_dark`; `tray::set_event_handler` | unreachable (no `Tray` exists); `set_event_handler` is a no-op | `platform/other.rs:54-71` |
+| `popover::frontmost_app` (internal) | `None` | `platform/other.rs:41` |
+| `desktop::monitors`, `window_frame`, `units_per_logical` | winit's physical monitor and frame values (`work` equals `bounds`); not `Unsupported` | `platform/desktop/other.rs:13, 34, 56` |
+| `desktop::pointer`, `desktop::window_at` | `None` | `platform/desktop/other.rs:30, 64` |
+| `desktop::display_depth` | `None` | `platform/desktop/other.rs:60` |
+| `desktop::set_window_origin`, `move_windows` | `winit`'s `set_outer_position`, which iOS ignores; `move_windows` answers `Ok` | `platform/desktop/other.rs:45, 49` |
+| `desktop::set_window_shape` | `Ok(ShapeMode::Unsupported)` (`SHAPE_MODE`) | `platform/desktop/other.rs:69, 71` |
+| `group::owned_by`, `WindowGroup::add`, `set_docked`, `raise`, `minimise`, `restore` | `Ok` or no-ops: a group only records what the app asks | `platform/group/other.rs:5-21` |
+| `material::apply`, `apply_rounded` | `Err("no OS glass on this platform; use the opaque material")` for a glass material, `Ok` for the opaque one; `BEST_SUPPORTED` is `Opaque` | `material/other.rs:6-23` |
+
+Windows on a phone: the toolkit's own glass (`Painter::acrylic`, `frost`, `backdrop`) is drawn by the renderer and works on the phone (the demo's frost panel); only the OS material is absent.
 
 ## Unverified here
 
 - A real device: 120 Hz (the simulator reports 60000 mHz), the GPU's cost (glass blur), thermal behaviour, the real safe area of other models, landscape and the Dynamic Island's insets.
-- Touch (the demo's button is drawn but taps are not translated; `Translator` drops `WindowEvent::Touch`), the soft keyboard and IME, rotation, the home indicator behaviour.
-- iOS 27: winit 0.30.13 has no `UIScene` life cycle (no `UIScene` symbol in `platform_impl/ios`), and an app built with the iOS 27 SDK that does not adopt it is expected to be refused on iOS 27 (Apple TN3187). This Mac's Xcode SDK is 27.2 and the installed runtimes are 17.5 and 18.0, so the readings above run; no iOS 27 runtime is installed. M4 adopts the scene life cycle outside winit (roadmap revision 2).
+- Touch (the demo's button is drawn but taps are not translated; `Translator` drops `WindowEvent::Touch`), typed text through the soft keyboard and IME, rotation, the home indicator behaviour.
+- iOS 27 on a real device: winit 0.30.13 has no `UIScene` life cycle, and the toolkit adopts it outside winit (`mobile::attach_to_scene` and the manifest, M4 reading above), which launches on the iOS 27.2 simulator; nothing ran on a device. A scene the OS discards and reconnects, and rotation at run time, were not driven.
 - Android: nothing was run (`aarch64-linux-android` is compile-checked only).

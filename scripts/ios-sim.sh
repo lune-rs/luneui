@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds apps/demo for the iOS simulator, runs it on one simulator device of its own and checks that
-# a frame was presented. Usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]
+# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape]
+#   [--demo-arg <arg>] [--keep-booted | --delete-device]
 #   (default)       build, assemble target/ios-sim/Demo.app (ad-hoc signed), boot the device, install,
 #                   launch, wait up to 60 s for `presented 1` in target/ios-sim/stdout.log, take one
 #                   screenshot (target/ios-sim/shot-1.png), terminate, shut the device down.
@@ -9,13 +10,46 @@
 #                   (simctl launch only, never the UI), bring it back with a second launch without
 #                   --terminate-running-process, take shot-2.png (two screenshots in all), and write the
 #                   `probe` lines of both launches to target/ios-sim/probe.txt.
+#   --smoke         --probe, and also require `probe scene attached` by the demo's frame 30 (its third
+#                   `probe scene` line) and, in launch 1's output, `probe lifecycle resumed` at launch, then
+#                   `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
+#                   The demo is built with `--features access`; the run requires `probe access ok` (the bridge
+#                   made on the hidden window, then the window shown). It also requires the demo's clipboard probe (`--probe-clipboard`: a write on frame 2, a read
+#                   on frame 4) to read back what it wrote and `xcrun simctl pbpaste` to print the same text,
+#                   and every `probe safe_area_event` line to be 0,62,0,34 (the iOS 18.0 portrait
+#                   safe area; not judged with --landscape) and no `presented` line between `probe lifecycle
+#                   suspended` and the next `probe lifecycle resumed`, with one after it. It also requires the frame the demo
+#                   schedules 1 s after its frame 30 with `Repaint::At` (`presented 31`) to arrive while idle.
+#                   In a smoke run the second screenshot is the keyboard launch below (not the resume).
+#                   It ends with the keyboard launch: the demo is relaunched with --focus-field (shot-2.png),
+#                   and `probe keyboard_inset 0,0,0,<b>` with <b> above 200 is required.
+#   --keyboard      launch the demo with --probe and --focus-field (it focuses its text field on frame 1, which
+#                   asks for the soft keyboard), require `probe keyboard_inset 0,0,0,<b>` with <b> above 200 in
+#                   the output, take one screenshot (shot-1.png) 2 s after it and stop.
+#   Soft keyboard (--keyboard and --smoke): a headless simulator always has its hardware keyboard attached
+#                   (backboardd logs "Hardware keyboard attached" at every boot), and with the device's own
+#                   keyboard setting AutomaticMinimizationEnabled true (the system writes it during a boot)
+#                   UIKit then shows only a minimised bar below the screen, so no keyboard rises. Before
+#                   these launches the script writes that one key false inside this script's device
+#                   (`simctl spawn <udid> defaults write com.apple.keyboard.preferences
+#                   AutomaticMinimizationEnabled -bool false`, read at once, no reboot; docs/mobile.md).
+#                   It never changes the Simulator's own preferences (com.apple.iphonesimulator).
+#   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
+#                   the app without the scene life cycle).
+#   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
+#                   bundle copy's Info.plist, so the app launches in landscape.
+#   --demo-arg <a>  pass one more argument to the demo (repeatable), e.g. --no-scene-attach.
 #   --keep-booted   leave the device booted at the end.
 #   --delete-device shut down and delete the device named below, then exit.
 # The device is named luneui-demo-iphone (type iPhone-16-Pro, runtime iOS-18-0; override with
-# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix). It is found by
-# exact name and created when missing.
+# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix; LUNEUI_IOS_DEVICE_NAME
+# picks another name for a device of its own); any other runtime
+# gets a device of its own, luneui-demo-iphone-<runtime>. It is found by exact name and created when
+# missing. The Info.plist edits apply to the copy in target/ios-sim/Demo.app only, never to
+# apps/demo/ios/Info.plist.
 # Never: touches any other device, uses `booted` as a device argument, opens Simulator.app, drives the
-# UI, records video, or writes outside target/ios-sim/ (cargo's own target dir aside).
+# UI, records video, or writes outside target/ios-sim/ (cargo's own target dir and the keyboard setting
+# inside its own device aside).
 # Exit codes: 0 passed; 1 a check failed (build, launch, no frame); 2 usage or setup (a tool, the rustup
 # target or the runtime is missing).
 set -euo pipefail
@@ -23,24 +57,50 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-NAME=luneui-demo-iphone
+DEFAULT_RUNTIME=iOS-18-0
 DEVICE_TYPE="${LUNEUI_IOS_DEVICE_TYPE:-iPhone-16-Pro}"
-RUNTIME="${LUNEUI_IOS_RUNTIME:-iOS-18-0}"
+RUNTIME="${LUNEUI_IOS_RUNTIME:-$DEFAULT_RUNTIME}"
+if [ "$RUNTIME" = "$DEFAULT_RUNTIME" ]; then
+  NAME=luneui-demo-iphone
+else
+  NAME="luneui-demo-iphone-$RUNTIME"
+fi
+NAME="${LUNEUI_IOS_DEVICE_NAME:-$NAME}"
 TARGET=aarch64-apple-ios-sim
 BUNDLE_ID=rs.lune.luneui.demo
 OUT="$ROOT/target/ios-sim"
 APP="$OUT/Demo.app"
 
+usage() {
+  echo "usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
+  exit 2
+}
+
 keep=0
 delete=0
 probe=0
-for arg in "$@"; do
-  case "$arg" in
+smoke=0
+keyboard=0
+no_manifest=0
+landscape=0
+demo_args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
     --probe) probe=1 ;;
+    --smoke) smoke=1; probe=1 ;;
+    --keyboard) keyboard=1; probe=1 ;;
+    --no-manifest) no_manifest=1 ;;
+    --landscape) landscape=1 ;;
+    --demo-arg)
+      [ "$#" -ge 2 ] || usage
+      demo_args+=("$2")
+      shift
+      ;;
     --keep-booted) keep=1 ;;
     --delete-device) delete=1 ;;
-    *) echo "usage: scripts/ios-sim.sh [--probe] [--keep-booted | --delete-device]" >&2; exit 2 ;;
+    *) usage ;;
   esac
+  shift
 done
 
 UDID=""
@@ -102,7 +162,12 @@ if [ -z "$UDID" ]; then
 fi
 
 echo "ios-sim: building demo for $TARGET"
-IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build -p demo --target "$TARGET" || fail "build"
+# A smoke run builds the demo with the accessibility bridge (`--features access`, D359).
+build_features=()
+if [ "$smoke" -eq 1 ]; then
+  build_features=(--features access)
+fi
+IPHONEOS_DEPLOYMENT_TARGET=17.0 cargo build -p demo --target "$TARGET" ${build_features[@]+"${build_features[@]}"} || fail "build"
 BIN="${CARGO_TARGET_DIR:-$ROOT/target}/$TARGET/debug/demo"
 [ -f "$BIN" ] || fail "no binary at $BIN"
 
@@ -111,6 +176,18 @@ rm -rf "$APP"
 mkdir -p "$APP"
 cp "$BIN" "$APP/demo"
 cp "$ROOT/apps/demo/ios/Info.plist" "$APP/Info.plist"
+PLB=/usr/libexec/PlistBuddy
+if [ "$no_manifest" -eq 1 ]; then
+  "$PLB" -c "Delete :UIApplicationSceneManifest" "$APP/Info.plist" >/dev/null || fail "--no-manifest (PlistBuddy)"
+  echo "ios-sim: bundle copy without UIApplicationSceneManifest"
+fi
+if [ "$landscape" -eq 1 ]; then
+  "$PLB" -c "Delete :UISupportedInterfaceOrientations" "$APP/Info.plist" >/dev/null 2>&1 || true
+  "$PLB" -c "Add :UISupportedInterfaceOrientations array" \
+    -c "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationLandscapeLeft" \
+    "$APP/Info.plist" >/dev/null || fail "--landscape (PlistBuddy)"
+  echo "ios-sim: bundle copy in landscape (UIInterfaceOrientationLandscapeLeft)"
+fi
 codesign --force --sign - "$APP" >/dev/null 2>&1 || fail "codesign (ad-hoc)"
 
 state="$(xcrun simctl list devices | grep -F "($UDID)" | head -n 1)"
@@ -122,14 +199,44 @@ booted_by_us=1
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || fail "bootstatus"
 
 xcrun simctl install "$UDID" "$APP" || fail "install"
+if [ "$keyboard" -eq 1 ] || [ "$smoke" -eq 1 ]; then
+  # The soft keyboard rises only with keyboard minimisation off on this device (see the header).
+  xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences AutomaticMinimizationEnabled -bool false \
+    || fail "could not turn keyboard minimisation off on $NAME"
+fi
 rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/stdout-2.log" "$OUT/stderr-2.log" \
-  "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
+  "$OUT/stdout-3.log" "$OUT/stderr-3.log" "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
 : > "$OUT/stdout.log"
 : > "$OUT/stderr.log"
 app_args=()
 if [ "$probe" -eq 1 ]; then
   app_args=(--probe)
 fi
+if [ "$keyboard" -eq 1 ]; then
+  app_args+=(--focus-field)
+fi
+if [ "$smoke" -eq 1 ]; then
+  app_args+=(--probe-clipboard)
+fi
+app_args+=(${demo_args[@]+"${demo_args[@]}"})
+# Waits for `probe keyboard_inset 0,0,0,<b>` in $1 (up to 20 s) and requires <b> above 200 points.
+check_keyboard() {
+  local log="$1" line=""
+  for _ in $(seq 1 40); do
+    line="$(grep '^probe keyboard_inset ' "$log" | tail -n 1 || true)"
+    [ -n "$line" ] && break
+    sleep 0.5
+  done
+  grep '^probe keyboard_inset ' "$log" || true
+  if [ -z "$line" ]; then
+    # Keep what the screen shows for the reading.
+    xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-nokeyboard.png" >/dev/null 2>&1 || true
+  fi
+  [ -n "$line" ] || fail "no 'probe keyboard_inset' line: device $NAME showed no soft keyboard (screenshot $OUT/shot-nokeyboard.png)"
+  awk -v l="$line" 'BEGIN { n = split(l, p, " "); split(p[3], v, ","); exit !(v[1] == 0 && v[2] == 0 && v[3] == 0 && v[4] > 200) }' \
+    || fail "keyboard inset is not 0,0,0,<b> with <b> above 200: $line"
+}
+
 xcrun simctl launch --terminate-running-process \
   --stdout="$OUT/stdout.log" --stderr="$OUT/stderr.log" "$UDID" "$BUNDLE_ID" ${app_args[@]+"${app_args[@]}"} || fail "launch"
 
@@ -150,26 +257,94 @@ grep "^presented " "$OUT/stdout.log" | head -n 3 || true
 
 if [ "$probe" -eq 1 ]; then
   grep -q "^probe inner_size " "$OUT/stdout.log" || fail "no 'probe inner_size' line"
+  if [ "$keyboard" -eq 1 ]; then
+    check_keyboard "$OUT/stdout.log"
+  fi
   sleep 2
 else
   sleep 1
+fi
+if [ "$smoke" -eq 1 ]; then
+  # The demo prints `probe scene` at window creation, at frame 1 and at frame 30.
+  for _ in $(seq 1 60); do
+    [ "$(grep -c '^probe scene ' "$OUT/stdout.log" || true)" -ge 3 ] && break
+    sleep 0.5
+  done
+  grep '^probe scene ' "$OUT/stdout.log" || true
+  [ "$(grep '^probe scene ' "$OUT/stdout.log" | sed -n 3p)" = "probe scene attached" ] \
+    || fail "no 'probe scene attached' by frame 30"
+  # The safe area `ui.safe_area()` returned at frames 1 and 30 (D355): the iOS 18.0 portrait
+  # reading. A --landscape run prints the lines and does not judge them.
+  for _ in $(seq 1 60); do
+    [ "$(grep -c '^probe safe_area_event ' "$OUT/stdout.log" || true)" -ge 2 ] && break
+    sleep 0.5
+  done
+  grep '^probe safe_area_event ' "$OUT/stdout.log" || true
+  if [ "$landscape" -eq 0 ]; then
+    [ "$(grep -c '^probe safe_area_event ' "$OUT/stdout.log" || true)" -ge 2 ] \
+      || fail "fewer than two 'probe safe_area_event' lines"
+    [ "$(grep '^probe safe_area_event ' "$OUT/stdout.log" | sort -u)" = "probe safe_area_event 0,62,0,34" ] \
+      || fail "'probe safe_area_event' is not 0,62,0,34 on every line"
+  fi
+  # The accessibility bridge (D359): made on the hidden window before the attach, then the window is
+  # shown; `probe access ok` and a presented frame (the checks above) mean the demo draws with it on.
+  grep '^probe access ' "$OUT/stdout.log" | head -n 1 || true
+  [ "$(grep '^probe access ' "$OUT/stdout.log" | head -n 1)" = "probe access ok" ] \
+    || fail "no 'probe access ok' (the accessibility bridge was not made)"
+  # The clipboard (D358): the demo writes `luneui-probe-<pid>` through the frame's clipboard
+  # request on frame 2 and reads it back on frame 4; the read must equal the write and the
+  # simulator's pasteboard (`simctl pbpaste`, the device's, never the Mac's).
+  for _ in $(seq 1 40); do
+    grep -q '^probe clipboard ' "$OUT/stdout.log" && break
+    sleep 0.5
+  done
+  grep '^probe clipboard' "$OUT/stdout.log" || true
+  written="$(grep '^probe clipboard_write ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard_write //')"
+  readback="$(grep '^probe clipboard ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard //')"
+  # On a device's first boot the host-side pasteboard sync can lag the demo's own write, so
+  # `pbpaste` prints '' (or an older text) for a moment: poll up to 10 s until it equals the
+  # written text, then compare once below. A wrong text or an empty one still fails after the wait.
+  pasted=""
+  pb_err=""
+  for _ in $(seq 1 20); do
+    pasted="$(xcrun simctl pbpaste "$UDID" 2>"$OUT/pbpaste.err" | tr -d '\r\n')"
+    [ -n "$written" ] && [ "$pasted" = "$written" ] && break
+    sleep 0.5
+  done
+  pb_err="$(head -c 300 "$OUT/pbpaste.err" 2>/dev/null | tr '\r\n' '  ')"
+  echo "ios-sim: clipboard written '$written', read back '$readback', pbpaste '$pasted'"
+  [ -n "$written" ] || fail "no 'probe clipboard_write' line"
+  [ "$readback" = "$written" ] || fail "the clipboard read back '$readback', not '$written'"
+  [ "$pasted" = "$written" ] || fail "simctl pbpaste printed '$pasted', not '$written' after 10 s (stderr: '$pb_err')"
+  # The frame the demo schedules 1 s after its frame 30 (`Repaint::At`) must arrive while the app
+  # is idle: nothing else asks for frame 31 (D356).
+  for _ in $(seq 1 40); do
+    grep -q '^presented 31 ' "$OUT/stdout.log" && break
+    sleep 0.5
+  done
+  grep -q '^presented 31 ' "$OUT/stdout.log" \
+    || fail "the scheduled frame (Repaint::At) did not arrive while idle (no 'presented 31')"
 fi
 xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-1.png" >/dev/null 2>&1 || fail "screenshot"
 [ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
 sips -g pixelWidth -g pixelHeight "$OUT/shot-1.png" | tail -n 2
 
-if [ "$probe" -eq 1 ]; then
+if [ "$keyboard" -eq 1 ]; then
+  echo "ios-sim: keyboard screenshot $OUT/shot-1.png"
+elif [ "$probe" -eq 1 ]; then
   # Background the demo by launching the Settings app, then foreground it with a plain launch.
   xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null || fail "launch Settings"
   sleep 3
   : > "$OUT/stdout-2.log"
   : > "$OUT/stderr-2.log"
   xcrun simctl launch --stdout="$OUT/stdout-2.log" --stderr="$OUT/stderr-2.log" \
-    "$UDID" "$BUNDLE_ID" --probe || fail "second launch"
+    "$UDID" "$BUNDLE_ID" "${app_args[@]}" || fail "second launch"
   sleep 3
-  xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
-  [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
-  sips -g pixelWidth -g pixelHeight "$OUT/shot-2.png" | tail -n 2
+  if [ "$smoke" -eq 0 ]; then
+    xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
+    [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
+    sips -g pixelWidth -g pixelHeight "$OUT/shot-2.png" | tail -n 2
+  fi
   {
     echo "# launch 1 (stdout.log, to the end of the run)"
     grep "^probe \|^presented " "$OUT/stdout.log" || true
@@ -177,6 +352,45 @@ if [ "$probe" -eq 1 ]; then
     grep "^probe \|^presented " "$OUT/stdout-2.log" || true
   } > "$OUT/probe.txt"
   echo "ios-sim: probe lines in $OUT/probe.txt ($(grep -c '^probe ' "$OUT/probe.txt") lines)"
+fi
+
+if [ "$smoke" -eq 1 ]; then
+  # Launch 1's process keeps writing to stdout.log across the round trip (docs/mobile.md).
+  cycle="$(grep '^probe lifecycle ' "$OUT/stdout.log" | sed 's/^probe lifecycle //' | tr '\n' ' ')"
+  echo "ios-sim: life cycle: $cycle"
+  grep -qE '^resumed .*suspended .*resumed' <<< "$cycle" \
+    || fail "life cycle not 'resumed' at launch, then 'suspended' and 'resumed'"
+  # No frame while suspended (D356): between a `probe lifecycle suspended` line and the next
+  # `probe lifecycle resumed` line there is no `presented` line, and one follows the `resumed`.
+  # (A probe run prints a `presented` line for every frame.)
+  verdict="$(awk '
+    /^probe lifecycle suspended/ { state = "suspended"; next }
+    /^probe lifecycle resumed/   { if (state == "suspended") { state = "resumed"; trips++ } next }
+    /^presented /                { if (state == "suspended") during++; else if (state == "resumed") after++ }
+    END { printf "during=%d after=%d trips=%d", during, after, trips }
+  ' "$OUT/stdout.log")"
+  echo "ios-sim: frames around the suspend: $verdict"
+  [[ "$verdict" == "during=0 after="[1-9]* ]] \
+    || fail "a frame was presented while suspended, or none after 'resumed' ($verdict)"
+fi
+
+if [ "$smoke" -eq 1 ]; then
+  # The keyboard launch (D357): the demo focuses its text field on frame 1, the soft keyboard rises
+  # and the inset reaches the frame. This is the run's second screenshot.
+  : > "$OUT/stdout-3.log"
+  : > "$OUT/stderr-3.log"
+  xcrun simctl launch --terminate-running-process --stdout="$OUT/stdout-3.log" --stderr="$OUT/stderr-3.log" \
+    "$UDID" "$BUNDLE_ID" --probe --focus-field ${demo_args[@]+"${demo_args[@]}"} || fail "keyboard launch"
+  for _ in $(seq 1 120); do
+    grep -q "^presented 1 " "$OUT/stdout-3.log" 2>/dev/null && break
+    sleep 0.5
+  done
+  grep -q "^presented 1 " "$OUT/stdout-3.log" || fail "keyboard launch: no 'presented 1' within 60 s"
+  check_keyboard "$OUT/stdout-3.log"
+  sleep 2
+  xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "keyboard screenshot"
+  [ -s "$OUT/shot-2.png" ] || fail "empty keyboard screenshot"
+  echo "ios-sim: keyboard screenshot $OUT/shot-2.png"
 fi
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
