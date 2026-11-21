@@ -18,6 +18,7 @@ use winit::event::{StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
+use lune_ui::clipboard::Clipboard;
 use lune_ui::frame::FrameRenderer;
 use lune_ui::gpu::{self, Gpu};
 use lune_ui::input::{Event, OutputState, Translator, control_flow, keymap};
@@ -41,6 +42,12 @@ const MONO_FONT: &str = "RobotoMono Nerd Font Mono";
 
 /// The window's size in logical points on a desktop: an iPhone 16 Pro's screen. Ignored on iOS.
 const PHONE: (f64, f64) = (402.0, 874.0);
+
+/// The text the clipboard probe writes: unique to the process, so a stale pasteboard cannot pass
+/// for this run's write.
+fn clipboard_probe_text() -> String {
+    format!("luneui-probe-{}", std::process::id())
+}
 
 /// The text field's key.
 const FIELD_KEY: &str = "field";
@@ -71,6 +78,9 @@ pub struct Options {
     /// Focus the text field on the first frame, which asks the OS for its soft keyboard (a phone
     /// run's way to see the keyboard inset without a finger).
     pub focus_field: bool,
+    /// On frame 2 write `luneui-probe-<pid>` to the clipboard, on frame 4 read it back, and print
+    /// `probe clipboard_write <text>` and `probe clipboard <text>` (or `unavailable`).
+    pub probe_clipboard: bool,
 }
 
 impl Default for Options {
@@ -82,6 +92,7 @@ impl Default for Options {
             scene_attach: true,
             pause: true,
             focus_field: false,
+            probe_clipboard: false,
         }
     }
 }
@@ -196,6 +207,8 @@ struct App {
     start: Instant,
     presented: u32,
     taps: u32,
+    /// The clipboard: the phone's pasteboard on iOS, the OS clipboard elsewhere.
+    clipboard: Clipboard,
     /// What the text field holds.
     field: String,
     /// The keyboard inset the last frame saw, to print it when it changes.
@@ -304,6 +317,15 @@ impl App {
         translator.scale_factor(scale);
         let s = scale as f32;
         let mut input = translator.take(self.start.elapsed());
+        if self.options.probe_clipboard {
+            for event in &input.events {
+                match event {
+                    Event::ClipboardText(text) => probe_line("clipboard", text),
+                    Event::ClipboardUnavailable => probe_line("clipboard", "unavailable"),
+                    _ => {}
+                }
+            }
+        }
         // The insets are the app's to push every frame (the core keeps the last value).
         input
             .events
@@ -330,6 +352,18 @@ impl App {
         // The surface in logical points: the markers sit on its four edges.
         let (w, h) = (size.0 as f32 / s, size.1 as f32 / s);
         let safe = ui.safe_area();
+        if self.options.probe_clipboard {
+            // The clipboard probe goes through the frame's own request path, the one a text
+            // edit's copy and paste use.
+            if self.presented == 1 {
+                let text = clipboard_probe_text();
+                probe_line("clipboard_write", &text);
+                ui.clipboard_write(text);
+            }
+            if self.presented == 3 {
+                ui.clipboard_read();
+            }
+        }
         let keyboard_bottom = ui.keyboard_inset().bottom;
         if self.options.focus_field && self.presented == 0 {
             let id = ui.id(FIELD_KEY);
@@ -352,6 +386,11 @@ impl App {
         let (display, out) = ui.finish();
         if output.apply(window, &out, s) {
             event_loop.exit();
+        }
+        self.clipboard.service(&out, translator);
+        if !out.clipboard.is_empty() {
+            // A read's reply arrives in the next frame's input.
+            self.want_frame = true;
         }
         let params = FrameParams {
             size,
@@ -609,6 +648,11 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         start: Instant::now(),
         presented: 0,
         taps: 0,
+        clipboard: if cfg!(target_os = "ios") {
+            Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))
+        } else {
+            Clipboard::new()
+        },
         field: String::new(),
         last_keyboard: Insets::ZERO,
         keyboard_changed: Rc::new(Cell::new(false)),

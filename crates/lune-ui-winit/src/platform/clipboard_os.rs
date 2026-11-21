@@ -1,6 +1,6 @@
 //! The desktop OS clipboard: `arboard`, opened on first use.
 
-use crate::clipboard::Backend;
+use lune_ui_core::input::ClipboardBackend;
 
 /// `arboard`, opened on first use.
 #[derive(Default)]
@@ -17,7 +17,7 @@ impl Os {
     }
 }
 
-impl Backend for Os {
+impl ClipboardBackend for Os {
     fn read(&mut self) -> Result<String, ()> {
         // `ContentNotAvailable` (no text on it) and every other error are the same answer.
         self.open()?.get_text().map_err(|_| ())

@@ -346,6 +346,19 @@ pub enum ClipboardRequest {
     Read,
 }
 
+/// What the adapter needs of an OS clipboard: text in, text out. The desktop one is `arboard`
+/// behind `lune_ui_winit::clipboard::Clipboard::new`; a phone app passes
+/// `lune_ui_platform::mobile::Pasteboard` to `Clipboard::with_backend`, and a test gives a fake.
+/// The adapter, not the backend, caps what it reads or writes (`MAX_PASTE_BYTES`).
+pub trait ClipboardBackend {
+    /// The clipboard's text, or `Err` when it holds none or cannot be read.
+    #[allow(clippy::result_unit_err)]
+    fn read(&mut self) -> Result<String, ()>;
+    /// Puts `text` on the clipboard, or `Err` when it cannot.
+    #[allow(clippy::result_unit_err)]
+    fn write(&mut self, text: &str) -> Result<(), ()>;
+}
+
 /// When the app should draw its next frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Repaint {

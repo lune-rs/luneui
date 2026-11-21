@@ -37,7 +37,7 @@ observers. It is `!Send`: create and read it on the main thread.
 Elsewhere it is inert: [`inset`](mobile.md#method.KeyboardInset.inset) is always [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO) and `on_change` never
 runs.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:73`
+Source: `crates/lune-ui-platform/src/mobile.rs:74`
 
 **Methods and associated items**
 
@@ -58,6 +58,40 @@ Source: `crates/lune-ui-platform/src/mobile.rs:73`
 
 - `impl Debug for KeyboardInset`
 
+<a id="struct.Pasteboard"></a>
+### Struct `Pasteboard`
+
+```rust
+pub struct Pasteboard(/* private */);
+```
+
+The phone's general pasteboard as a clipboard backend (iOS: `UIPasteboard`), for an app to give
+to `lune_ui_winit::clipboard::Clipboard::with_backend(Box::new(Pasteboard::new()))`. The
+toolkit's own `Clipboard::new()` has no clipboard on iOS (the calls go to UIKit directly, which the
+winit adapter does not do), and the adapter's cap on what it reads or writes still applies.
+
+`read` answers the pasteboard's text, `Err(())` when it holds none or the call is not on the
+main thread; `write` sets the text, `Err(())` off the main thread. On iOS 16 and later reading
+text another app put there can raise the system's "Allow Paste" prompt. `!Send`.
+
+Off iOS both calls answer `Err(())`: a desktop app uses `Clipboard::new()`.
+
+Source: `crates/lune-ui-platform/src/mobile.rs:102`
+
+**Methods and associated items**
+
+`impl Pasteboard`
+
+- <a id="method.Pasteboard.new"></a>`pub fn new() -> Pasteboard`
+
+  A handle on the general pasteboard.
+
+**Trait implementations**
+
+- `impl ClipboardBackend for Pasteboard`
+- `impl Debug for Pasteboard`
+- `impl Default for Pasteboard`
+
 ## Enums
 
 <a id="enum.SceneAttach"></a>
@@ -74,7 +108,7 @@ pub enum SceneAttach {
 
 What [`attach_to_scene`](mobile.md#fn.attach_to_scene) found or did.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:17`
+Source: `crates/lune-ui-platform/src/mobile.rs:18`
 
 **Variants**
 
@@ -123,7 +157,7 @@ first) shows it itself.
 
 Off iOS it does nothing and answers [`SceneAttach::NotNeeded`](mobile.md#variant.SceneAttach.NotNeeded).
 
-Source: `crates/lune-ui-platform/src/mobile.rs:40`
+Source: `crates/lune-ui-platform/src/mobile.rs:41`
 
 <a id="fn.safe_area"></a>
 ### Function `safe_area`
@@ -144,5 +178,5 @@ that cannot be read, a non-finite one or a failed position query gives [`Insets:
 Everywhere else it is [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO): a desktop window's frame (a title bar) is not an area the
 content must keep clear of.
 
-Source: `crates/lune-ui-platform/src/mobile.rs:55`
+Source: `crates/lune-ui-platform/src/mobile.rs:56`
 

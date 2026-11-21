@@ -34,3 +34,33 @@ impl KeyboardInset {
         Insets::ZERO
     }
 }
+
+/// Inert: both calls fail. `!Send`, as the iOS one is.
+#[derive(Debug, Default)]
+pub(crate) struct Pasteboard {
+    _not_send: PhantomData<*const ()>,
+}
+
+impl Pasteboard {
+    pub(crate) fn read(&mut self) -> Result<String, ()> {
+        Err(())
+    }
+
+    pub(crate) fn write(&mut self, _text: &str) -> Result<(), ()> {
+        Err(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use lune_ui_core::input::ClipboardBackend;
+
+    use crate::mobile::Pasteboard;
+
+    #[test]
+    fn the_pasteboard_off_ios_answers_err_to_both_calls() {
+        let mut pasteboard = Pasteboard::new();
+        assert_eq!(pasteboard.read(), Err(()));
+        assert_eq!(pasteboard.write("text"), Err(()));
+    }
+}

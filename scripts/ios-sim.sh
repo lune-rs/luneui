@@ -13,7 +13,9 @@
 #   --smoke         --probe, and also require `probe scene attached` by the demo's frame 30 (its third
 #                   `probe scene` line) and, in launch 1's output, `probe lifecycle resumed` at launch, then
 #                   `suspended` and `resumed` across the Settings round trip. Two screenshots in all.
-#                   It also requires every `probe safe_area_event` line to be 0,62,0,34 (the iOS 18.0 portrait
+#                   It also requires the demo's clipboard probe (`--probe-clipboard`: a write on frame 2, a read
+#                   on frame 4) to read back what it wrote and `xcrun simctl pbpaste` to print the same text,
+#                   and every `probe safe_area_event` line to be 0,62,0,34 (the iOS 18.0 portrait
 #                   safe area; not judged with --landscape) and no `presented` line between `probe lifecycle
 #                   suspended` and the next `probe lifecycle resumed`, with one after it. It also requires the frame the demo
 #                   schedules 1 s after its frame 30 with `Repaint::At` (`presented 31`) to arrive while idle.
@@ -194,6 +196,9 @@ fi
 if [ "$keyboard" -eq 1 ]; then
   app_args+=(--focus-field)
 fi
+if [ "$smoke" -eq 1 ]; then
+  app_args+=(--probe-clipboard)
+fi
 app_args+=(${demo_args[@]+"${demo_args[@]}"})
 # Waits for `probe keyboard_inset 0,0,0,<b>` in $1 (up to 20 s) and requires <b> above 200 points.
 check_keyboard() {
@@ -262,6 +267,21 @@ if [ "$smoke" -eq 1 ]; then
     [ "$(grep '^probe safe_area_event ' "$OUT/stdout.log" | sort -u)" = "probe safe_area_event 0,62,0,34" ] \
       || fail "'probe safe_area_event' is not 0,62,0,34 on every line"
   fi
+  # The clipboard (D358): the demo writes `luneui-probe-<pid>` through the frame's clipboard
+  # request on frame 2 and reads it back on frame 4; the read must equal the write and the
+  # simulator's pasteboard (`simctl pbpaste`, the device's, never the Mac's).
+  for _ in $(seq 1 40); do
+    grep -q '^probe clipboard ' "$OUT/stdout.log" && break
+    sleep 0.5
+  done
+  grep '^probe clipboard' "$OUT/stdout.log" || true
+  written="$(grep '^probe clipboard_write ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard_write //')"
+  readback="$(grep '^probe clipboard ' "$OUT/stdout.log" | head -n 1 | sed 's/^probe clipboard //')"
+  pasted="$(xcrun simctl pbpaste "$UDID" 2>/dev/null | tr -d '\r\n')"
+  echo "ios-sim: clipboard written '$written', read back '$readback', pbpaste '$pasted'"
+  [ -n "$written" ] || fail "no 'probe clipboard_write' line"
+  [ "$readback" = "$written" ] || fail "the clipboard read back '$readback', not '$written'"
+  [ "$pasted" = "$written" ] || fail "simctl pbpaste printed '$pasted', not '$written'"
   # The frame the demo schedules 1 s after its frame 30 (`Repaint::At`) must arrive while the app
   # is idle: nothing else asks for frame 31 (D356).
   for _ in $(seq 1 40); do

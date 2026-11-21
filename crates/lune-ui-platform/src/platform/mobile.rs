@@ -6,9 +6,9 @@ mod ios;
 mod other;
 
 #[cfg(target_os = "ios")]
-pub(crate) use ios::{KeyboardInset, attach_to_scene, safe_area};
+pub(crate) use ios::{KeyboardInset, Pasteboard, attach_to_scene, safe_area};
 #[cfg(not(target_os = "ios"))]
-pub(crate) use other::{KeyboardInset, attach_to_scene, safe_area};
+pub(crate) use other::{KeyboardInset, Pasteboard, attach_to_scene, safe_area};
 
 /// The safe-area insets, in logical pixels, from a window's geometry in physical pixels: the offset
 /// of the inner rectangle inside the outer one on the left and top, the rest on the right and

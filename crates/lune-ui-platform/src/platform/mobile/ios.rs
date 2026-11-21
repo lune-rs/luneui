@@ -8,6 +8,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::fmt;
+use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
@@ -16,10 +17,10 @@ use objc2::rc::{Retained, Weak};
 use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
 use objc2::{MainThreadMarker, Message};
 use objc2_core_foundation::CGRect;
-use objc2_foundation::{NSNotification, NSNotificationCenter, NSValue};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSString, NSValue};
 use objc2_ui_kit::{
     NSValueUIGeometryExtensions, UIApplication, UICoordinateSpace, UIKeyboardFrameEndUserInfoKey,
-    UIKeyboardWillChangeFrameNotification, UIKeyboardWillHideNotification,
+    UIKeyboardWillChangeFrameNotification, UIKeyboardWillHideNotification, UIPasteboard,
     UISceneWillConnectNotification, UIView, UIWindow, UIWindowScene,
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -283,5 +284,33 @@ impl Drop for KeyboardInset {
             // centre and is removed once.
             unsafe { center.removeObserver(token.as_ref()) };
         }
+    }
+}
+
+/// The general pasteboard's text (D358). UIKit documents `string` and `setString:` as not
+/// thread-safe, so each call checks for the main thread and fails closed elsewhere.
+#[derive(Debug, Default)]
+pub(crate) struct Pasteboard {
+    _not_send: PhantomData<*const ()>,
+}
+
+impl Pasteboard {
+    pub(crate) fn read(&mut self) -> Result<String, ()> {
+        MainThreadMarker::new().ok_or(())?;
+        let board = UIPasteboard::generalPasteboard();
+        // SAFETY: called on the main thread (checked above), where UIKit documents the pasteboard
+        // as usable.
+        let text = unsafe { board.string() }.ok_or(())?;
+        Ok(text.to_string())
+    }
+
+    pub(crate) fn write(&mut self, text: &str) -> Result<(), ()> {
+        MainThreadMarker::new().ok_or(())?;
+        let board = UIPasteboard::generalPasteboard();
+        let text = NSString::from_str(text);
+        // SAFETY: called on the main thread (checked above), where UIKit documents the pasteboard
+        // as usable.
+        unsafe { board.setString(Some(&text)) };
+        Ok(())
     }
 }

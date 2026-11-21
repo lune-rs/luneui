@@ -6,10 +6,11 @@
 //! text is refused whole (a read answers `ClipboardUnavailable`, a write is dropped). Nothing is
 //! ever truncated. A failed write is silent. The OS backend is opened on first use,
 //! so a process that never copies or pastes opens nothing; a backend that cannot open answers
-//! `ClipboardUnavailable` to a read and drops a write. iOS and Android have no OS clipboard yet: there
-//! every read answers `ClipboardUnavailable` and every write is dropped.
+//! `ClipboardUnavailable` to a read and drops a write. [`Clipboard::new`] has no OS clipboard on iOS and
+//! Android: there every read answers `ClipboardUnavailable` and every write is dropped. An iOS app
+//! gives the clipboard its backend with [`Clipboard::with_backend`] (`lune_ui_platform::mobile::Pasteboard`).
 
-use lune_ui_core::input::{ClipboardRequest, FrameOutput};
+use lune_ui_core::input::{ClipboardBackend, ClipboardRequest, FrameOutput};
 
 use crate::input::Translator;
 use crate::platform::Os;
@@ -20,21 +21,13 @@ use crate::platform::Os;
 /// only the code view, which draws just the lines in view, takes what the adapter lets through.
 pub const MAX_PASTE_BYTES: usize = 33_554_432;
 
-/// What the adapter needs of an OS clipboard. The real one is `arboard` (desktop; none on iOS and Android yet); tests give a fake. Not
-/// part of the API: it is public only so a test can name it.
-#[doc(hidden)]
-pub trait Backend {
-    /// The clipboard's text, or `Err` when it holds none or cannot be read.
-    #[allow(clippy::result_unit_err)]
-    fn read(&mut self) -> Result<String, ()>;
-    /// Puts `text` on the clipboard, or `Err` when it cannot.
-    #[allow(clippy::result_unit_err)]
-    fn write(&mut self, text: &str) -> Result<(), ()>;
-}
+/// The old name of [`ClipboardBackend`], which moved to the core (D358). Kept so code written
+/// against it still compiles.
+pub use lune_ui_core::input::ClipboardBackend as Backend;
 
 /// The app's clipboard service. See the module note.
 pub struct Clipboard {
-    backend: Box<dyn Backend>,
+    backend: Box<dyn ClipboardBackend>,
 }
 
 impl std::fmt::Debug for Clipboard {
@@ -55,9 +48,10 @@ impl Clipboard {
         Self::with_backend(Box::new(Os::default()))
     }
 
-    /// A clipboard over another backend (tests).
-    #[doc(hidden)]
-    pub fn with_backend(backend: Box<dyn Backend>) -> Self {
+    /// A clipboard over `backend` instead of the OS one: a phone app's
+    /// `lune_ui_platform::mobile::Pasteboard`, or a fake in a test. The cap [`MAX_PASTE_BYTES`] and
+    /// the replies are the same for every backend.
+    pub fn with_backend(backend: Box<dyn ClipboardBackend>) -> Self {
         Self { backend }
     }
 

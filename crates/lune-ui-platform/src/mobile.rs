@@ -6,6 +6,7 @@
 //!
 //! Every item exists on every target; off iOS each one does nothing and says so.
 
+use lune_ui_core::input::ClipboardBackend;
 use lune_ui_core::layout::Insets;
 use winit::window::Window;
 
@@ -84,5 +85,35 @@ impl KeyboardInset {
     /// hidden.
     pub fn inset(&self) -> Insets {
         self.0.inset()
+    }
+}
+
+/// The phone's general pasteboard as a clipboard backend (iOS: `UIPasteboard`), for an app to give
+/// to `lune_ui_winit::clipboard::Clipboard::with_backend(Box::new(Pasteboard::new()))`. The
+/// toolkit's own `Clipboard::new()` has no clipboard on iOS (the calls go to UIKit directly, which the
+/// winit adapter does not do), and the adapter's cap on what it reads or writes still applies.
+///
+/// `read` answers the pasteboard's text, `Err(())` when it holds none or the call is not on the
+/// main thread; `write` sets the text, `Err(())` off the main thread. On iOS 16 and later reading
+/// text another app put there can raise the system's "Allow Paste" prompt. `!Send`.
+///
+/// Off iOS both calls answer `Err(())`: a desktop app uses `Clipboard::new()`.
+#[derive(Debug, Default)]
+pub struct Pasteboard(os::Pasteboard);
+
+impl Pasteboard {
+    /// A handle on the general pasteboard.
+    pub fn new() -> Pasteboard {
+        Pasteboard::default()
+    }
+}
+
+impl ClipboardBackend for Pasteboard {
+    fn read(&mut self) -> Result<String, ()> {
+        self.0.read()
+    }
+
+    fn write(&mut self, text: &str) -> Result<(), ()> {
+        self.0.write(text)
     }
 }

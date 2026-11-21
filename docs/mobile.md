@@ -21,7 +21,7 @@ Builds `apps/demo` for `aarch64-apple-ios-sim`, assembles `target/ios-sim/Demo.a
 - Default mode: waits up to 60 s for `presented 1` in `target/ios-sim/stdout.log`, takes one screenshot (`shot-1.png`), exits 0 on `ios-sim: passed`. Exit 1 a check failed, 2 setup (tool, rustup target or runtime missing).
 - `--probe`: launches the demo with `--probe`, screenshot `shot-1.png` 2 s after `presented 1`, launches the Settings app (`com.apple.Preferences`, by `simctl launch`) to send the demo to the background, launches the demo again (no `--terminate-running-process`), screenshot `shot-2.png`, and writes the `probe`/`presented` lines of both launches to `target/ios-sim/probe.txt`. Two screenshots in all.
 - `--keyboard`: launches the demo with `--probe --focus-field`, requires `probe keyboard_inset 0,0,0,<b>` with `<b>` above 200, takes one screenshot 2 s later (`shot-1.png`; `shot-nokeyboard.png` when no keyboard showed) and stops (no Settings round trip). In a `--smoke` run the same launch is the last step and its screenshot `shot-2.png` is the run's second one (the resume screenshot is not taken). `LUNEUI_IOS_DEVICE_NAME` picks a device name of its own.
-- `--smoke`: `--probe`, and also requires `probe scene attached` as the demo's third `probe scene` line (frame 30) and, in launch 1's output, `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip. Two screenshots in all. It also requires every `probe safe_area_event` line (frames 1 and 30) to be `0,62,0,34`, the iOS 18.0 portrait safe area (printed and not judged with `--landscape`), and no `presented` line between `probe lifecycle suspended` and the next `probe lifecycle resumed`, with one after it (a `--probe` run prints a `presented` line for every frame; `--demo-arg --draw-while-suspended` is the control run that must make this check fail).
+- `--smoke`: `--probe`, and also requires the clipboard probe to read back its write and `xcrun simctl pbpaste <udid>` to print the same text, `probe scene attached` as the demo's third `probe scene` line (frame 30) and, in launch 1's output, `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip. Two screenshots in all. It also requires every `probe safe_area_event` line (frames 1 and 30) to be `0,62,0,34`, the iOS 18.0 portrait safe area (printed and not judged with `--landscape`), and no `presented` line between `probe lifecycle suspended` and the next `probe lifecycle resumed`, with one after it (a `--probe` run prints a `presented` line for every frame; `--demo-arg --draw-while-suspended` is the control run that must make this check fail).
 - Control flags, which edit only the bundle copy `target/ios-sim/Demo.app/Info.plist` (with `/usr/libexec/PlistBuddy`), never `apps/demo/ios/Info.plist`: `--no-manifest` deletes `UIApplicationSceneManifest` (the app without the scene life cycle); `--landscape` sets `UISupportedInterfaceOrientations` to `UIInterfaceOrientationLandscapeLeft`. `--demo-arg <arg>` passes one more argument to the demo (repeatable), as `--no-scene-attach`, which skips `mobile::attach_to_scene`.
 - Never: touches another device, uses `booted` as a device argument, opens Simulator.app or drives the UI, records video, writes outside `target/ios-sim/`.
 
@@ -144,6 +144,17 @@ What the readings say:
 - The inset arrives through the observer and reaches the frame while the app is idle: the demo's observer sets a flag and asks for a redraw, and `about_to_wait` turns the flag into the frame (a request made inside `RedrawRequested` is lost while iOS is idle, and `becomeFirstResponder` is called inside a frame).
 - The keyboard's height is 291 to 301 points on the iPhone 16 Pro (it includes the home-indicator area, so the window's bottom safe area is not added to it).
 - Typed text through a live keyboard cannot be injected here: unverified.
+
+## M4 reading: the clipboard
+
+Run 2026-11-21, `scripts/ios-sim.sh --smoke` (the demo's `--probe-clipboard`). `mobile::Pasteboard` (D358) is the `ClipboardBackend` over `UIPasteboard.generalPasteboard`, main thread only; the demo builds `Clipboard::with_backend(Box::new(Pasteboard::new()))` on iOS and `Clipboard::new()` elsewhere. On frame 2 the demo calls `ui.clipboard_write("luneui-probe-<pid>")` (the frame's own request, the path a text edit's copy takes), on frame 4 `ui.clipboard_read()`, and prints the reply event it receives on the next frame: `probe clipboard luneui-probe-<pid>`. The text carries the process id, so a stale pasteboard cannot pass for the run's write.
+
+| Device | Reading |
+| --- | --- |
+| iOS 18.0 | written, read back and `xcrun simctl pbpaste <udid>` all `luneui-probe-24141` |
+| iOS 27.2 | all three `luneui-probe-26244` |
+
+`simctl pbpaste` reads the device's pasteboard, never the Mac's. Unverified here: the iOS "Allow Paste" prompt for text another app put on the pasteboard (the probe reads its own text), and pasting by a person.
 
 ## Unverified here
 

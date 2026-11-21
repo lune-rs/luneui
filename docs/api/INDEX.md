@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-94 modules, 1121 items. Left out and counted: 3460 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 4986 items of the omitted impls, 1341 items of the trait impls shown as one line, 2316 synthetic impls.
+94 modules, 1122 items. Left out and counted: 3460 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 4986 items of the omitted impls, 1341 items of the trait impls shown as one line, 2316 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -28,7 +28,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::drag`](lune-ui-core/drag.md) | 23 |
 | [`lune_ui_core::icon`](lune-ui-core/icon.md) | 31 |
 | [`lune_ui_core::image`](lune-ui-core/image.md) | 11 |
-| [`lune_ui_core::input`](lune-ui-core/input.md) | 23 |
+| [`lune_ui_core::input`](lune-ui-core/input.md) | 24 |
 | [`lune_ui_core::json`](lune-ui-core/json.md) | 11 |
 | [`lune_ui_core::layout`](lune-ui-core/layout.md) | 11 |
 | [`lune_ui_core::motion`](lune-ui-core/motion.md) | 34 |
@@ -141,7 +141,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-7 modules, 30 items. Left out and counted: 172 blanket impls, 160 items of the omitted impls, 37 items of the trait impls shown as one line, 84 synthetic impls.
+7 modules, 31 items. Left out and counted: 183 blanket impls, 169 items of the omitted impls, 41 items of the trait impls shown as one line, 90 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -149,20 +149,20 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 12 |
 | [`lune_ui_platform::group`](lune-ui-platform/group.md) | 2 |
 | [`lune_ui_platform::material`](lune-ui-platform/material.md) | 3 |
-| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 4 |
+| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 5 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
 
 ### `lune-ui` (`lune_ui`)
 
-7 modules, 154 re-exports shown as links.
+7 modules, 155 re-exports shown as links.
 
 | Module | Re-exports |
 | --- | --- |
 | [`lune_ui`](lune-ui/index.md) | 38 |
 | [`lune_ui::access`](lune-ui/access.md) | 19 |
 | [`lune_ui::desktop`](lune-ui/desktop.md) | 20 |
-| [`lune_ui::input`](lune-ui/input.md) | 31 |
+| [`lune_ui::input`](lune-ui/input.md) | 32 |
 | [`lune_ui::text`](lune-ui/text.md) | 16 |
 | [`lune_ui::tray`](lune-ui/tray.md) | 18 |
 | [`lune_ui::window`](lune-ui/window.md) | 12 |
@@ -356,6 +356,7 @@ Every top-level item of the four owning crates, by name.
 - [`CLEAR_GLYPH`](lune-ui-core/widgets/toast.md#constant.CLEAR_GLYPH) - constant, `lune_ui_core::widgets::toast`
 - [`CLEAR_ICON`](lune-ui-core/widgets/filter_bar.md#constant.CLEAR_ICON) - constant, `lune_ui_core::widgets::filter_bar`
 - [`Clipboard`](lune-ui-winit/clipboard.md#struct.Clipboard) - struct, `lune_ui_winit::clipboard`
+- [`ClipboardBackend`](lune-ui-core/input.md#trait.ClipboardBackend) - trait, `lune_ui_core::input`
 - [`ClipboardRequest`](lune-ui-core/input.md#enum.ClipboardRequest) - enum, `lune_ui_core::input`
 - [`CLOSE`](lune-ui-core/icon.md#constant.CLOSE) - constant, `lune_ui_core::icon`
 - [`CLOSE`](lune-ui-core/widgets/dialog.md#constant.CLOSE) - constant, `lune_ui_core::widgets::dialog`
@@ -961,6 +962,7 @@ Every top-level item of the four owning crates, by name.
 - [`PanelOptions`](lune-ui-core/widgets/panel.md#struct.PanelOptions) - struct, `lune_ui_core::widgets::panel`
 - [`PanelSlot`](lune-ui-core/widgets/panel.md#enum.PanelSlot) - enum, `lune_ui_core::widgets::panel`
 - [`parse`](lune-ui-core/json.md#fn.parse) - function, `lune_ui_core::json`
+- [`Pasteboard`](lune-ui-platform/mobile.md#struct.Pasteboard) - struct, `lune_ui_platform::mobile`
 - [`PERIOD`](lune-ui-core/widgets/progress.md#constant.PERIOD) - constant, `lune_ui_core::widgets::progress`
 - [`PERIOD`](lune-ui-core/widgets/shine.md#constant.PERIOD) - constant, `lune_ui_core::widgets::shine`
 - [`phase`](lune-ui-core/widgets/shine.md#fn.phase) - function, `lune_ui_core::widgets::shine`

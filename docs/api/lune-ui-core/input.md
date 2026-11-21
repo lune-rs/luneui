@@ -36,7 +36,7 @@ pub struct FrameOutput {
 
 What the toolkit asks of the window after a frame.
 
-Source: `crates/lune-ui-core/src/input.rs:381`
+Source: `crates/lune-ui-core/src/input.rs:394`
 
 **Fields**
 
@@ -383,7 +383,7 @@ pub enum CursorIcon {
 
 Cursor icons: the CSS cursor names.
 
-Source: `crates/lune-ui-core/src/input.rs:431`
+Source: `crates/lune-ui-core/src/input.rs:444`
 
 **Variants**
 
@@ -933,7 +933,7 @@ pub enum Repaint {
 
 When the app should draw its next frame.
 
-Source: `crates/lune-ui-core/src/input.rs:351`
+Source: `crates/lune-ui-core/src/input.rs:364`
 
 **Variants**
 
@@ -1070,7 +1070,7 @@ pub enum WindowCommand {
 
 A window operation the app performs.
 
-Source: `crates/lune-ui-core/src/input.rs:404`
+Source: `crates/lune-ui-core/src/input.rs:417`
 
 **Variants**
 
@@ -1183,6 +1183,32 @@ Source: `crates/lune-ui-core/src/input.rs:293`
 - `impl PartialEq for WordMotion`
 - `impl StructuralPartialEq for WordMotion`
 
+## Traits
+
+<a id="trait.ClipboardBackend"></a>
+### Trait `ClipboardBackend`
+
+```rust
+pub trait ClipboardBackend { .. }
+```
+
+What the adapter needs of an OS clipboard: text in, text out. The desktop one is `arboard`
+behind `lune_ui_winit::clipboard::Clipboard::new`; a phone app passes
+`lune_ui_platform::mobile::Pasteboard` to `Clipboard::with_backend`, and a test gives a fake.
+The adapter, not the backend, caps what it reads or writes (`MAX_PASTE_BYTES`).
+
+Source: `crates/lune-ui-core/src/input.rs:353`
+
+**Required items**
+
+- <a id="tymethod.ClipboardBackend.read"></a>`fn read(&mut self) -> Result<String, ()>`
+
+  The clipboard's text, or `Err` when it holds none or cannot be read.
+
+- <a id="tymethod.ClipboardBackend.write"></a>`fn write(&mut self, text: &str) -> Result<(), ()>`
+
+  Puts `text` on the clipboard, or `Err` when it cannot.
+
 ## Functions
 
 <a id="fn.printable"></a>
@@ -1195,5 +1221,5 @@ pub fn printable(text: &str) -> Option<String>
 The text a key press types: `text` without control characters, or `None` when nothing is left.
 Adapters and fakes use this one rule to decide whether a press emits [`Event::Text`](input.md#variant.Event.Text).
 
-Source: `crates/lune-ui-core/src/input.rs:515`
+Source: `crates/lune-ui-core/src/input.rs:528`
 
