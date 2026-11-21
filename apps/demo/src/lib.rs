@@ -196,6 +196,10 @@ const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android"
 /// keeps requesting frames until it.
 const PROBE_LAST_FRAME: u32 = 30;
 
+/// The frame, counting from 1, in which `--probe-clipboard` requests its read; the demo keeps
+/// requesting frames until it, so the flag works without `--probe` on an idle phone.
+const CLIPBOARD_PROBE_FRAMES: u32 = 4;
+
 /// How long after its last probe frame a `--probe` run asks for one more (`Repaint::At`), to show
 /// a scheduled frame arrives while the app is idle.
 const PROBE_TIMED_FRAME: Duration = Duration::from_millis(1000);
@@ -470,7 +474,7 @@ impl App {
                 probe_line("clipboard_write", &text);
                 ui.clipboard_write(text);
             }
-            if self.presented == 3 {
+            if self.presented == CLIPBOARD_PROBE_FRAMES - 1 {
                 ui.clipboard_read();
             }
         }
@@ -529,8 +533,11 @@ impl App {
                 );
             }
         }
-        // The frames this run asks for by itself: the first few, and a probe run's first 30.
-        if self.presented < self.options.log_frames || (probe && self.presented < PROBE_LAST_FRAME)
+        // The frames this run asks for by itself: the first few, a probe run's first 30, and the
+        // clipboard probe's first four (its read goes out in frame 4; the reply asks for frame 5).
+        if self.presented < self.options.log_frames
+            || (probe && self.presented < PROBE_LAST_FRAME)
+            || (self.options.probe_clipboard && self.presented < CLIPBOARD_PROBE_FRAMES)
         {
             self.want_frame = true;
         }
