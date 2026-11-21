@@ -54,8 +54,8 @@ use crate::widgets::scroll_area::ScrollPhysics;
 use access::Routed;
 use keys::KeyPress;
 use overlay::Dismissal as D;
-pub(crate) use pointer::LONG_PRESS;
-use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost, touch_target};
+use pointer::{Ctx, HitRecord, PointerFrame, topmost, touch_target};
+pub(crate) use pointer::{LONG_PRESS, PanReading};
 
 /// The opacity of a disabled subtree.
 pub(crate) const DISABLED_ALPHA: f32 = 0.4;
