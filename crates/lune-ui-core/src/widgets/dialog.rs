@@ -170,7 +170,7 @@ fn card_xform(card: Rect, scale: f32, alpha: f32) -> Xform {
 
 /// The scrim over the window; `blur` first asks for what is drawn behind it, blurred (at sigma 8,
 /// saturation 1), at the scrim's own opacity.
-fn paint_scrim<H: Copy + PartialEq>(p: &mut Painter<'_, H>, blur: bool) {
+pub(crate) fn paint_scrim<H: Copy + PartialEq>(p: &mut Painter<'_, H>, blur: bool) {
     let win = p.window;
     let t = p.theme;
     if blur {
@@ -340,7 +340,8 @@ impl Exit {
     }
 }
 
-fn fade(alpha: f32) -> Xform {
+/// A whole-window opacity transform: what a surface fades by.
+pub(crate) fn fade(alpha: f32) -> Xform {
     Xform {
         origin: (0.0, 0.0),
         scale: 1.0,

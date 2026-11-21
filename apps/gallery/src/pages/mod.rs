@@ -13,6 +13,7 @@ mod a11y;
 mod badge;
 mod banner;
 mod bar_chart;
+mod bottom_sheet;
 mod button;
 mod callout;
 mod checkbox;
@@ -192,6 +193,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &touch_widgets::PAGE,
     &nav_bar::PAGE,
     &tab_bar::PAGE,
+    &bottom_sheet::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

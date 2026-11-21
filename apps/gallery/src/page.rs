@@ -1062,10 +1062,10 @@ mod tests {
         ("recipes", "Remove upstream"),
     ];
 
-    /// Pages whose scenes open a modal or a popup list that fills the window (a dialog, a palette,
+    /// Pages whose scenes open a modal or a popup list that fills the window (a dialog, a sheet, a palette,
     /// a dropdown's scrolled rows): their nodes are an overlay's, so only their shapes and text
     /// on the base and page layers are checked.
-    const OVERLAY_PAGES: &[&str] = &["dialog", "dropdown", "command-palette"];
+    const OVERLAY_PAGES: &[&str] = &["dialog", "dropdown", "command-palette", "bottom-sheet"];
 
     /// Where the page's content lies on a stage: its semantic nodes' bounds and the shapes and
     /// text it draws on the base and page layers (overlay layers are left out), in the live

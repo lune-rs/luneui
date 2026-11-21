@@ -133,6 +133,16 @@ impl Track {
         self.state = State::Follow(b.raw(p));
     }
 
+    /// A finger lands on a glide and does not move yet: it stops where it shows and rests there
+    /// (no jump). A held track stays held.
+    pub(crate) fn halt(&mut self, now: Time, b: Bounds) {
+        if matches!(self.state, State::Follow(_)) {
+            return;
+        }
+        let (p, _) = self.shown(now, b);
+        self.state = State::Rest(p);
+    }
+
     /// The finger moves by `d` px: the track follows 1:1, showing the rubber band past the ends.
     pub(crate) fn follow(&mut self, now: Time, d: f32, b: Bounds) {
         self.grab(now, b);
@@ -384,6 +394,18 @@ mod tests {
         let p2 = hold(&t, ms(70));
         t.go_to(ms(70), 0.0, Some(resolved(200)), B);
         assert!((hold(&t, ms(70)) - p2).abs() < 1e-3, "go_to");
+    }
+
+    #[test]
+    fn a_halt_holds_the_shown_position_with_no_follow() {
+        let stops = [0.0, 300.0];
+        let mut t = Track::new(0.0);
+        t.release(ms(0), 900.0, &stops, 0, None, B);
+        let mid = at(&t, ms(80));
+        t.halt(ms(80), B);
+        assert!((at(&t, ms(80)) - mid).abs() < 1e-3);
+        assert!((at(&t, ms(900)) - mid).abs() < 1e-3, "it stays");
+        assert!(!t.at(ms(900), B.lo, B.hi, B.extent).1);
     }
 
     fn resolved(duration_ms: u64) -> Resolved {

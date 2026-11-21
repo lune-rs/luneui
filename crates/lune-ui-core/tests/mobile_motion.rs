@@ -166,3 +166,184 @@ fn a_ui_driven_move_conforms_at_60_and_120() {
     };
     assert_conforms("ui-driven move", end, 300.0, make);
 }
+
+// ---- the bottom sheet (step 3, D371) -------------------------------------------------------
+
+mod sheet {
+    use super::*;
+    use lune_ui_core::input::Repaint;
+    use lune_ui_core::layout::Insets;
+    use lune_ui_core::widgets::bottom_sheet::{BottomSheet, Detent};
+
+    /// The phone's window, its safe area 0/62/0/34: the largest height is 802.
+    const PHONE: (f32, f32) = (402.0, 874.0);
+    const CLOSED: f32 = 874.0;
+    /// 16 ms of app time: the warm-up frames' step.
+    const STEP: Time = Duration::from_millis(16);
+    /// A generous end for every row here: a settle is over well before, and a frame still moving
+    /// at or after it fails.
+    const END: Time = Duration::from_millis(1800);
+
+    /// The two detents of the plan's rows, and three that put a small one near the bottom.
+    const BOTH: &[Detent] = &[Detent::Fraction(0.5), Detent::Fraction(1.0)];
+    const THREE: &[Detent] = &[
+        Detent::Height(150.0),
+        Detent::Height(500.0),
+        Detent::Fraction(1.0),
+    ];
+
+    /// A sheet in a real `Ui`, driven by app time; reads the sheet node's top.
+    struct Rig {
+        s: UiSampler,
+        open: bool,
+        detents: &'static [Detent],
+    }
+
+    impl Rig {
+        fn new(detents: &'static [Detent]) -> Self {
+            let mut s = UiSampler::new(PHONE, Time::ZERO);
+            s.h.input.safe_area(Insets::new(0.0, 62.0, 0.0, 34.0));
+            Rig {
+                s,
+                open: false,
+                detents,
+            }
+        }
+
+        /// One frame at app time `at`: the sheet node's top (`None` when it is not drawn) and
+        /// whether the frame asked for another.
+        fn frame(&mut self, at: Time) -> (Option<f32>, bool) {
+            let Rig { s, open, detents } = self;
+            s.h.input.set_time(at);
+            let id = WidgetId::ROOT.with("sheet");
+            let (_, out) = s.h.frame(|ui| {
+                let sheet = BottomSheet::new("Sheet").with_detents(detents);
+                ui.bottom_sheet("sheet", open, &sheet, |_, _| ());
+            });
+            (
+                out.tree.get(id).map(|n| n.bounds.y),
+                out.repaint != Repaint::Idle,
+            )
+        }
+
+        /// Frames every 16 ms from `from` through `until`; the time of the last.
+        fn run(&mut self, from: Time, until: Time) -> Time {
+            let mut t = from;
+            while t <= until {
+                self.frame(t);
+                t += STEP;
+            }
+            t - STEP
+        }
+
+        /// Opens the sheet at `Time::ZERO` and lets it settle for 1.5 s; the next frame's time.
+        fn opened(detents: &'static [Detent]) -> (Rig, Time) {
+            let mut rig = Rig::new(detents);
+            rig.frame(Time::ZERO);
+            rig.open = true;
+            let last = rig.run(STEP, Duration::from_millis(1500));
+            (rig, last + STEP)
+        }
+
+        /// A click on the grabber of the sheet resting at `top`, then 1.5 s to settle; the next
+        /// frame's time.
+        fn step(&mut self, at: Time, top: f32) -> Time {
+            self.s.h.input.pointer_to(201.0, top + 10.0);
+            self.s
+                .h
+                .input
+                .click(lune_ui_core::input::PointerButton::Primary);
+            self.frame(at);
+            self.s.h.input.pointer_leave();
+            self.run(at + STEP, at + Duration::from_millis(1500)) + STEP
+        }
+    }
+
+    /// The row of an opening or an app close: `want_open` is what the app sets at grid time zero.
+    fn app_row(row: &str, detents: &'static [Detent], want_open: bool, target: f32) {
+        let make = move || -> Sampler<'static> {
+            let (mut rig, origin) = if want_open {
+                let mut rig = Rig::new(detents);
+                rig.frame(Time::ZERO);
+                (rig, STEP)
+            } else {
+                Rig::opened(detents)
+            };
+            Box::new(move |t| {
+                rig.open = want_open;
+                let (top, moving) = rig.frame(origin + t);
+                (top.unwrap_or(CLOSED), moving)
+            })
+        };
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn opening_to_the_first_detent_conforms_at_60_and_120() {
+        app_row("sheet open", BOTH, true, CLOSED - 0.5 * 802.0);
+    }
+
+    #[test]
+    fn an_app_close_conforms_at_60_and_120() {
+        app_row("sheet app close", BOTH, false, CLOSED);
+    }
+
+    /// A finger down on the grabber of the sheet resting at `top`, moving by `dy` px every 16 ms for
+    /// `moves` frames (a speed of `dy / 0.016` px/s); the next frame's time. The lift is the
+    /// grid's first frame, with the last move: `lift` returns its events' position.
+    fn drag(rig: &mut Rig, mut at: Time, top: f32, dy: f32, moves: u32) -> (Time, f32) {
+        let x = 201.0;
+        let mut y = top + 10.0;
+        rig.s.h.input.touch_start(1, x, y);
+        rig.frame(at);
+        for _ in 1..moves {
+            at += STEP;
+            y += dy;
+            rig.s.h.input.touch_move(1, x, y);
+            rig.frame(at);
+        }
+        (at + STEP, y + dy)
+    }
+
+    /// The row of a release at about 1200 px/s: the finger drags down from the rest at `top`, and
+    /// lifts with its last move at grid time zero.
+    fn release_row(row: &str, detents: &'static [Detent], clicks: u32, moves: u32, target: f32) {
+        let make = move || -> Sampler<'static> {
+            let (mut rig, mut at) = Rig::opened(detents);
+            let mut top = CLOSED - 150.0;
+            if detents.len() == 3 {
+                for _ in 0..clicks {
+                    at = rig.step(at, top);
+                    top = rig.frame(at).0.unwrap_or(top);
+                }
+            } else {
+                top = CLOSED - 0.5 * 802.0;
+            }
+            let (origin, last) = drag(&mut rig, at, top, 19.2, moves);
+            let mut first = true;
+            Box::new(move |t| {
+                if first {
+                    first = false;
+                    rig.s.h.input.touch_move(1, 201.0, last);
+                    rig.s.h.input.touch_end(1, 201.0, last);
+                }
+                let (top, moving) = rig.frame(origin + t);
+                (top.unwrap_or(CLOSED), moving)
+            })
+        };
+        assert_conforms(row, END, target, make);
+    }
+
+    #[test]
+    fn a_touch_release_from_between_the_detents_conforms_at_60_and_120() {
+        // From the large detent of three, down 5 frames: a release at 1200 px/s from near 160 lands
+        // on the lowest detent (the plan's two-detent setup would close: the coast of 1200 px/s
+        // is 600 px, past every detent but the bottom one).
+        release_row("sheet release", THREE, 2, 5, CLOSED - 150.0);
+    }
+
+    #[test]
+    fn a_fling_release_to_closed_conforms_at_60_and_120() {
+        release_row("sheet fling to closed", BOTH, 0, 5, CLOSED);
+    }
+}

@@ -1856,6 +1856,30 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl<'a> Ui<'a>`
 
+- <a id="method.Ui.bottom_sheet"></a>
+
+  ```rust
+  pub fn bottom_sheet<R>(
+      &mut self,
+      key: impl Hash,
+      open: &mut bool,
+      sheet: &BottomSheet<'_>,
+      content: impl FnOnce(&mut Ui<'a>, Rect) -> R,
+  ) -> SheetResponse<R>
+  ```
+
+  A bottom sheet under `key`: call it every frame. `open` false to true opens it at the
+  smallest detent; it stays up, sliding out when `open` is cleared, until it is out of the
+  window. A close the sheet decides (Escape, the scrim, a drag released to closed, an
+  assistive technology's dismiss) clears `open` itself and reports `dismissed` once.
+
+  `content` draws inside the content rect: below the grabber band and above the larger of
+  the safe area's bottom and the keyboard's, clipped to it. A scroll area in it takes the
+  vertical pans of a finger that starts on it; where it has nothing to scroll the pan drags
+  the sheet. See the module docs for the motion.
+
+`impl<'a> Ui<'a>`
+
 - <a id="method.Ui.command_palette"></a>
 
   ```rust

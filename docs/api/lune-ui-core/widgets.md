@@ -14,6 +14,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`badge`](widgets/badge.md) - A static tag (`widget.badge`): 18 px high, radius 8, a one px tone border, 11 px Medium text on a 16 px line, an optional leading status dot.
 - [`banner`](widgets/banner.md) - A banner and an empty state that take the caller's own text (`widget.banner-empty-state`).
 - [`bar_chart`](widgets/bar_chart.md) - The stacked bar chart (`data.bar-chart`, D164, D165): painter rectangles with value transitions.
+- [`bottom_sheet`](widgets/bottom_sheet.md) - The bottom sheet of a phone screen (`overlay.bottom-sheet`, D371): a modal surface that slides up from the window's bottom edge to a detent, follows a finger that drags it, and springs to the detent t...
 - [`button`](widgets/button.md) - Button control and its label width.
 - [`callout`](widgets/callout.md) - A tinted block of text with an icon and a tone (`widget.callout`).
 - [`caption`](widgets/caption.md) - The window's caption buttons through the `Ui` (`platform.window`, D240): minimize, maximize or restore, close, right-aligned along the top of a borderless window.

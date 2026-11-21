@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 105 |
+| done | 106 |
 | external | 4 |
-| **total** | **111** |
+| **total** | **112** |
 
 ## core
 
@@ -101,6 +101,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
+| [overlay.bottom-sheet](overlay/bottom-sheet.md) | Bottom sheet | done | any | Modal bottom sheet of a phone screen: slides up to a detent, follows a finger, springs to the detent a release picks or off the screen to dismiss |
 | [overlay.command-palette](overlay/command-palette.md) | Command palette | done | lunegit | 640 px search dialog over commits, branches, tags, stash, reflog, repos, settings and commands, with prefix filters |
 | [overlay.dialog](overlay/dialog.md) | Modal dialog | done | luneterm, wane | Modal dialog card: dim blurred backdrop, 448 px frosted glass card, darker footer, app-supplied body |
 | [overlay.dropdown](overlay/dropdown.md) | Drop-down list | done | luneterm, wane | Combo drop-down option list that flips above its anchor near the window bottom |
