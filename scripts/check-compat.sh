@@ -99,6 +99,11 @@ if command -v rustup > /dev/null 2>&1; then
     || die "the $DOC_TARGET target is not installed; run: rustup target add $DOC_TARGET"
 fi
 mkdir -p "$S" "$WORK"
+# shellcheck source=scripts/rustdoc-guard.sh
+. "$ROOT/scripts/rustdoc-guard.sh"
+trap guard_cleanup EXIT
+guard_lock "$S" check-compat
+guard_watch check-compat
 
 # --- helpers --------------------------------------------------------------------------------------
 
