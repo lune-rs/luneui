@@ -411,9 +411,9 @@ No `mobile::Lifecycle`: winit's `suspended` and `resumed` arrive under the manif
 
 **Unverified here.** A real device: 120 Hz, the GPU's cost, the safe area of other models, notches and the Dynamic Island. VoiceOver (D359). A finger: the 0.7.1 touch constants are starting values. Typed text through a live soft keyboard (D357). The iOS "Allow Paste" prompt for another app's text (D358). Landscape: the safe area was read on iOS 18.0 only (`docs/mobile.md`, R6). A scene the OS discards and reconnects, and rotation at run time, were not driven.
 
-## On the branch: touch-ready widgets (ships with the next patch)
+## 0.7.3 to 0.7.4: touch-ready widgets and mobile components
 
-D361 to D366. Not released: the workspace stays 0.7.3, and M6's release ships this section (D14). Additive, nothing breaks: no struct gains a field, no trait a required method, no exhaustive enum a variant. An app that never turns touch on (`set_touch_enabled(true)`, D16) sees no change: its mouse, keyboard and wheel frames are byte-identical, and it needs no edit.
+D361 to D376. Additive, hence 0.7.4: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and an app needs nothing changed. Touch stays off until an app calls `set_touch_enabled(true)` (D16): an app that never does sees no change, its mouse, keyboard and wheel frames are byte-identical. M5 (D361 to D368) made the existing widgets touch-ready and M6 (D369 to D375) added seven mobile components; the release is D376.
 
 Public additions (the only ones; the rest is crate-private or a gallery page):
 
@@ -451,7 +451,7 @@ To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary
 
 A mouse, keyboard and wheel app that does not call them sees no change. The non-touch path of each gesture: the sheet's grabber (a click steps to the next detent, Enter on the focused grabber does the same) and Escape or the scrim close it; the app's back button calls `Ui::nav_stack_pop`; the pager's dots (a click, Left, Right, Home, End; only when `dots` is on) and the app's own `*page`; a swipe row's `context` opens the app's menu with the same actions; the refresh is the app's own control passing `refreshing`, as a mouse, a wheel or a key never fires the pull; the bars' buttons and items are reached by click, Enter and Space, and the tab bar's by Left, Right, Home and End.
 
-**Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
+**Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. Desktop touchscreens (a Windows or macOS touch screen with touch turned on). The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
 
 ## API changes of the library pass
 

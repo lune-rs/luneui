@@ -601,7 +601,7 @@ Since 0.7.0 (touch input, gestures and scroll physics, D343 to D352; the workspa
 - `lune-ui-winit`: `Translator::set_touch_enabled` and `touch_enabled`, off at start, so an app that does not ask gets 0.7.0's behaviour (D346);
 - the gallery: a `touch` page and ten `phone-touch-*` scenes at 402 by 874 logical px (`page::PHONE`, D351), with a 60 and 120 Hz equality test.
 
-On the branch after 0.7.3 (mobile support M5, touch-ready widgets, D361 to D366; not released, the workspace stays 0.7.3, M6 ships it; `docs/consuming.md`, "On the branch"; for an app that never turns touch on, nothing changes):
+Since 0.7.3 (mobile support M5, touch-ready widgets, D361 to D368; the workspace version is 0.7.4, released with M6, D376; `docs/consuming.md`, "0.7.3 to 0.7.4"; for an app that never turns touch on, nothing changes):
 
 - `lune_ui_core::text_edit`: `EditActions` (`#[non_exhaustive]`, `cut`, `copy`, `paste`, `select_all`; D364);
 - `lune_ui_core::ui`: `Ui::edit_command` (queues an `EditCommand` for a text widget, applied by its next call through that widget's own path; D364) and `Ui::edit_actions` (what a text widget allows; D364); the slider, the scrollbar thumb and the split divider claim their axes with `Ui::set_drag_axes` (D362);
@@ -609,7 +609,7 @@ On the branch after 0.7.3 (mobile support M5, touch-ready widgets, D361 to D366;
 - the scroll area under the on-screen keyboard extends its y range by the covered part and reveals the focused field (D365); the overlays place inside `Ui::safe_area` and above `Ui::keyboard_inset` (`Ui::overlay_bounds`, crate-private; D365);
 - the gallery: the `touch-widgets` page and eleven `phone-widgets-*` scenes (D366).
 
-On the branch after 0.7.3 (mobile support M6, mobile components, D369 to D375; not released, the workspace stays 0.7.3, step 9 ships it as 0.7.4; `docs/consuming.md`, "On the branch"; for an app that never calls them, nothing changes):
+Since 0.7.3 (mobile support M6, mobile components, D369 to D375; released as 0.7.4, D376; `docs/consuming.md`, "0.7.3 to 0.7.4"; for an app that never calls them, nothing changes):
 
 - `widgets::gesture_track` (crate-private): `Track` (follows a finger 1:1 with a rubber band, releases into a damped spring carrying the finger's velocity to a picked stop, `go_to` under the frame's motion tier) and `Ui::pan_region` (a scroll-only region with pan axes, read through `Ui::pan`); the motion-row harness `tests/mobile_motion.rs` drives each component at 60 and 120 Hz into `conformance_of_at` (D369);
 - `widgets::nav_bar`: `NavBar`, `NavAction`, `NavBarResponse`, `Ui::nav_bar`, `HEIGHT` (44 px at the rect's bottom, the title centred, up to three action buttons; D370);
