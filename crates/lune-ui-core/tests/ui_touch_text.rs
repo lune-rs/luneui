@@ -926,6 +926,9 @@ const MENU_AT: (f32, f32) = (300.0, 250.0);
 #[derive(Default)]
 struct AppMenu {
     open: bool,
+    /// A last row the app always shows (a `Done`), so the menu takes the key focus whatever the
+    /// widget's actions are.
+    done_row: bool,
 }
 
 impl AppMenu {
@@ -964,7 +967,7 @@ impl AppMenu {
                     .filter(|(takes, ..)| *takes)
                     .map(|(_, text, cmd)| (text, cmd))
                     .collect();
-                let rows: Vec<MenuRow<'_>> = shown
+                let mut rows: Vec<MenuRow<'_>> = shown
                     .iter()
                     .map(|(text, _)| MenuRow::Item {
                         glyph: None,
@@ -972,10 +975,17 @@ impl AppMenu {
                         shortcut: "",
                     })
                     .collect();
+                if self.done_row {
+                    rows.push(MenuRow::Item {
+                        glyph: None,
+                        text: "Done",
+                        shortcut: "",
+                    });
+                }
                 let resp = ui.menu("edit-menu", &rows, MENU_AT);
-                if let Some(i) = resp.picked {
-                    cmd = Some(shown[i].1.clone());
-                    ui.edit_command(id, shown[i].1.clone());
+                if let Some((_, c)) = resp.picked.and_then(|i| shown.get(i)) {
+                    cmd = Some(c.clone());
+                    ui.edit_command(id, c.clone());
                 }
                 if resp.picked.is_some() || resp.dismissed {
                     self.open = false;
@@ -1180,4 +1190,79 @@ fn focus_moving_to_another_widget_ends_the_hold_of_the_menu() {
         Some(false),
         "a tap on another widget ends the selection"
     );
+}
+
+#[test]
+fn a_long_press_while_composing_cancels_the_preedit_and_the_menu_offers_paste_and_select_all() {
+    // The menu takes the key focus, so the platform's composition ends: the widget's ends too,
+    // and its menu is built from the state without it (D364).
+    for kind in KINDS {
+        let mut e = Edit::new(kind);
+        let id = e.id();
+        let mut h = ready(&mut e);
+        let mut app = AppMenu {
+            done_row: true,
+            ..AppMenu::default()
+        };
+        let at = e.at(2);
+        let mut draw = |ui: &mut Ui<'_>| e.draw(ui);
+        h.at_ms(0).input.touch_start(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        h.at_ms(40).input.touch_end(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        h.at_ms(100);
+        let (_, before, ..) = app.frame(&mut h, id, &mut draw);
+        let caret_area = before.ime_area;
+        assert!(caret_area.is_some(), "{kind:?}: focused after the tap");
+        h.input.ime(ImeEvent::Enabled);
+        h.input.ime(ImeEvent::Preedit {
+            text: "x".to_owned(),
+            cursor: Some((1, 1)),
+        });
+        h.at_ms(200);
+        let (_, composing, ..) = app.frame(&mut h, id, &mut draw);
+        assert_ne!(
+            composing.ime_area, caret_area,
+            "{kind:?}: the preedit moves the caret"
+        );
+        h.at_ms(1000).input.touch_start(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        h.at_ms(1600);
+        let (r, ..) = app.frame(&mut h, id, &mut draw);
+        assert!(r.secondary_clicked && app.open, "{kind:?}");
+        h.at_ms(1700).input.touch_end(1, at.0, at.1);
+        for k in 0..3 {
+            h.at_ms(1800 + 100 * k);
+            let (_, out, actions, _) = app.frame(&mut h, id, &mut draw);
+            let a = actions.expect("the menu stays open");
+            assert!(
+                a.paste && a.select_all,
+                "{kind:?}: frame {k} with the menu open offers Paste and Select all: {a:?}"
+            );
+            assert_eq!(out.ime_area, None, "{kind:?}: the menu has the key focus");
+        }
+        h.at_ms(2200);
+        press_key(&mut h, NamedKey::Escape, |h| app.frame(h, id, &mut draw));
+        assert!(!app.open, "{kind:?}: Escape closes the menu");
+        // Focus comes back with the menu's closing frame.
+        let mut after = None;
+        let mut out = FrameOutput::default();
+        for k in 0..2 {
+            h.at_ms(2300 + 100 * k);
+            let (_, o) = h.frame(|ui| {
+                draw(ui);
+                after = ui.edit_actions(id);
+            });
+            out = o;
+        }
+        let a = after.expect("a drawn text widget");
+        assert!(
+            a.paste && a.select_all,
+            "{kind:?}: focus back, no stale preedit: {a:?}"
+        );
+        assert_eq!(
+            out.ime_area, caret_area,
+            "{kind:?}: the caret is where it was before the preedit"
+        );
+    }
 }

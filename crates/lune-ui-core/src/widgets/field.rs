@@ -577,15 +577,19 @@ pub(super) fn begin_edit_with(
         st.edit.set_selection(first, first);
     }
     host.sync(ui, &mut st.edit);
+    // A focus loss ends a composition (the platform sees no `ime_area` from here on) and a
+    // pending paste, the app's edit menu included.
+    if !focused || !drawn {
+        st.paste_pending = false;
+        if st.edit.preedit().is_some() {
+            host.apply(ui, &mut st.edit, EditCommand::ImeCancel);
+        }
+    }
     // A touch's edit menu holds the widget while it has the key focus: the selection and its
     // handles stay for when focus returns (D364).
     let held = focused || ui.held_by_overlay(id);
     if !held || !drawn {
-        st.paste_pending = false;
         st.handles = false;
-        if st.edit.preedit().is_some() {
-            host.apply(ui, &mut st.edit, EditCommand::ImeCancel);
-        }
     }
     let mut frame = EditFrame::default();
     if key_focus {
