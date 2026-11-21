@@ -7,6 +7,7 @@ use lune_ui_core::input::{FrameOutput, PointerButton, Repaint};
 use lune_ui_core::motion::MotionTier;
 use lune_ui_core::paint::Rect;
 use lune_ui_core::testing::{UiHarness, disabled_violations};
+use lune_ui_core::text::{Spec, Style};
 use lune_ui_core::ui::{Ui, WidgetId};
 use lune_ui_core::widgets::button::ButtonKind;
 use lune_ui_core::widgets::nav_stack::NavStackResponse;
@@ -27,6 +28,8 @@ struct Seen {
     /// The offset of the scroll area of level `scrolling`.
     offset: f64,
     repaint: Option<Repaint>,
+    /// Every text the frame drew: its left edge and the right edge of its clip.
+    texts: Vec<(f32, f32)>,
 }
 
 impl Seen {
@@ -68,7 +71,7 @@ impl Rig {
         let (depth, scrolling, pop, disabled) =
             (self.depth, self.scrolling, self.pop, self.disabled);
         self.pop = false;
-        let (_, out) = self.h.frame(|ui| {
+        let (scene, out) = self.h.frame(|ui| {
             let mut run = |ui: &mut Ui<'_>| {
                 seen.resp = ui.nav_stack("stack", STACK, depth, |ui, level, r| {
                     let t = *ui.theme();
@@ -86,6 +89,10 @@ impl Rig {
                         });
                         seen.offset = res.offset.1;
                     }
+                    let t = *ui.theme();
+                    let line =
+                        Spec::plain("a line of the level", Style::ui(t.font_base, t.fg_primary));
+                    ui.painter().text(&line, r.x + 250.0, r.y + 600.0);
                     let body = Rect::new(r.x + 60.0, r.y + 100.0, 80.0, 40.0);
                     if ui.button("body", body, "Open", ButtonKind::Primary).clicked {
                         seen.body.push(level);
@@ -113,6 +120,12 @@ impl Rig {
         });
         seen.lefts.sort_by_key(|(l, _)| *l);
         seen.repaint = Some(out.repaint);
+        seen.texts = scene
+            .layers
+            .iter()
+            .flat_map(|l| &l.texts)
+            .map(|t| (t.x, t.clip.right()))
+            .collect();
         (seen, out)
     }
 
@@ -207,6 +220,36 @@ fn a_push_slides_the_new_top_in_and_parallaxes_the_level_below() {
     assert_eq!(end.lefts, vec![(1, 0.0)], "only the top at rest");
     assert!(!end.resp.moving && !end.resp.popped);
     assert_eq!(end.repaint, Some(Repaint::Idle));
+}
+
+#[test]
+fn the_level_below_shows_only_left_of_the_top_edge() {
+    // Text draws above every fill of its layer, so a lower level's text over the top's area
+    // would show through the top level: the lower level's text is clipped at the top's edge.
+    let mut rig = Rig::new(1);
+    rig.run(100);
+    rig.depth = 2;
+    let mut s = rig.frame().0;
+    while s.left(1).is_some_and(|x| x > 250.0) {
+        s = rig.frame().0;
+    }
+    let x = s.left(1).expect("the top is drawn");
+    assert!(x > 50.0 && x <= 250.0, "part way across: {x}");
+    let lower = s.left(0).expect("the level below is drawn");
+    let below: Vec<_> = s.texts.iter().filter(|(l, _)| *l < x).collect();
+    assert!(
+        below
+            .iter()
+            .any(|(l, _)| (*l - (lower + 250.0)).abs() < 0.01),
+        "the lower level's line is drawn: {:?}",
+        s.texts
+    );
+    for (l, right) in below {
+        assert!(
+            *right <= x + 0.01,
+            "text at {l} clipped at {right}, top edge {x}"
+        );
+    }
 }
 
 #[test]

@@ -31,7 +31,7 @@
 use std::hash::Hash;
 
 use super::gesture_track::{Bounds, Track};
-use crate::color::Rgba;
+use crate::color::{Rgba, premul};
 use crate::motion::{Kind, Motion};
 use crate::paint::Rect;
 use crate::ui::{Sense, Ui};
@@ -239,13 +239,19 @@ impl Ui<'_> {
         } else if moving && depth >= 2 {
             let done = if w > 0.0 { x / w } else { 1.0 };
             let lower = Rect::new(rect.x - PARALLAX * w * (1.0 - done), rect.y, rect.w, rect.h);
+            // The lower level shows only left of the top's edge. Its text draws above every
+            // fill of the layer, so without this clip it would show through the top level.
+            let seen = Rect::new(rect.x, rect.y, x, rect.h);
+            self.painter().push_clip(seen);
             draw_level(self, &key, depth - 2, lower, &mut page);
+            self.painter().pop_clip();
             if x > 0.0 {
                 let p = self.painter();
-                p.fill(
-                    Rect::new(rect.x, rect.y, x, rect.h),
+                // The shade is an over fill: it dims the lower level's text as well as its fills.
+                p.fill_over(
+                    seen,
                     0.0,
-                    scaled(t.dialog_backdrop, SHADE * (1.0 - done)),
+                    premul(scaled(t.dialog_backdrop, SHADE * (1.0 - done))),
                 );
                 // The shadow is the whole blurred shape: the top level covers its inner half, and
                 // the shape runs past the rect's top and bottom so its edge does not fade there.
