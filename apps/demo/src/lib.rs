@@ -7,6 +7,8 @@
 
 #![deny(unsafe_code)]
 
+use std::cell::Cell;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,7 +23,7 @@ use lune_ui::gpu::{self, Gpu};
 use lune_ui::input::{Event, OutputState, Translator, control_flow, keymap};
 use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark::THEME;
-use lune_ui::mobile::{self, SceneAttach};
+use lune_ui::mobile::{self, KeyboardInset, SceneAttach};
 use lune_ui::motion::{Cadence, MotionTier};
 use lune_ui::paint::Rect;
 use lune_ui::scene::{FrameParams, LayerId};
@@ -31,6 +33,7 @@ use lune_ui::surface::{Acquired, SurfaceOptions, WindowSurface};
 use lune_ui::text::TextCache;
 use lune_ui::ui::{FrameConfig, Ui, UiStore};
 use lune_ui::widgets::button::ButtonKind;
+use lune_ui::widgets::field::FieldState;
 use lune_ui::widgets::label::LabelRole;
 
 const UI_FONT: &str = "RznSans";
@@ -38,6 +41,9 @@ const MONO_FONT: &str = "RobotoMono Nerd Font Mono";
 
 /// The window's size in logical points on a desktop: an iPhone 16 Pro's screen. Ignored on iOS.
 const PHONE: (f64, f64) = (402.0, 874.0);
+
+/// The text field's key.
+const FIELD_KEY: &str = "field";
 
 /// The backdrop blur's sigma (physical pixels) and saturation, the gallery's values.
 const BLUR_SIGMA: f32 = 8.0;
@@ -62,6 +68,9 @@ pub struct Options {
     /// Draw nothing between `suspended` and `resumed`. Off only for the control run that shows the
     /// smoke check can see a frame drawn while suspended.
     pub pause: bool,
+    /// Focus the text field on the first frame, which asks the OS for its soft keyboard (a phone
+    /// run's way to see the keyboard inset without a finger).
+    pub focus_field: bool,
 }
 
 impl Default for Options {
@@ -72,6 +81,7 @@ impl Default for Options {
             frames: None,
             scene_attach: true,
             pause: true,
+            focus_field: false,
         }
     }
 }
@@ -174,6 +184,7 @@ struct Shown {
     text: TextCache,
     translator: Translator,
     output: OutputState,
+    keyboard: KeyboardInset,
 }
 
 struct App {
@@ -185,6 +196,12 @@ struct App {
     start: Instant,
     presented: u32,
     taps: u32,
+    /// What the text field holds.
+    field: String,
+    /// The keyboard inset the last frame saw, to print it when it changes.
+    last_keyboard: Insets,
+    /// Set by the keyboard observer when the inset moves; `about_to_wait` turns it into a frame.
+    keyboard_changed: Rc<Cell<bool>>,
     /// Between `suspended` and `resumed`: nothing is acquired, drawn or presented.
     paused: bool,
     /// The last frame, or an event since, asks for another: `about_to_wait` requests it. A request
@@ -194,7 +211,11 @@ struct App {
 }
 
 /// Opens the window, the GPU and the surface.
-fn setup(event_loop: &ActiveEventLoop, options: Options) -> Result<Shown, String> {
+fn setup(
+    event_loop: &ActiveEventLoop,
+    options: Options,
+    keyboard_changed: Rc<Cell<bool>>,
+) -> Result<Shown, String> {
     let probe = options.probe;
     let attrs = Window::default_attributes()
         .with_title("luneui demo")
@@ -219,6 +240,16 @@ fn setup(event_loop: &ActiveEventLoop, options: Options) -> Result<Shown, String
     let surface = WindowSurface::with_options(&gpu, surface, (size.width, size.height), options)?;
     let frame = FrameRenderer::for_surface(&mut gpu, &surface);
     let translator = Translator::new(size, window.scale_factor());
+    // The observer runs inside the OS's notification, which can fall inside a frame: it only wakes
+    // the app. A request made inside `RedrawRequested` is lost while iOS is idle, so the flag
+    // `about_to_wait` reads is the one that counts.
+    let keyboard = {
+        let waker = window.clone();
+        KeyboardInset::new(&window, move || {
+            keyboard_changed.set(true);
+            waker.request_redraw();
+        })
+    };
     if probe {
         let info = gpu.adapter.get_info();
         probe_window("created", &window, &surface);
@@ -236,6 +267,7 @@ fn setup(event_loop: &ActiveEventLoop, options: Options) -> Result<Shown, String
         text: text_cache(),
         translator,
         output: OutputState::new(),
+        keyboard,
     })
 }
 
@@ -256,6 +288,7 @@ impl App {
             text,
             translator,
             output,
+            keyboard,
         } = shown;
         let target = match surface.acquire(gpu)? {
             Acquired::Frame(t) => t,
@@ -275,6 +308,15 @@ impl App {
         input
             .events
             .push(Event::SafeArea(mobile::safe_area(window)));
+        let kb = keyboard.inset();
+        input.events.push(Event::KeyboardInset(kb));
+        if kb != self.last_keyboard {
+            self.last_keyboard = kb;
+            probe_line(
+                "keyboard_inset",
+                format!("{},{},{},{}", kb.left, kb.top, kb.right, kb.bottom),
+            );
+        }
         let config = FrameConfig {
             theme: THEME,
             tier: MotionTier::Full,
@@ -288,11 +330,24 @@ impl App {
         // The surface in logical points: the markers sit on its four edges.
         let (w, h) = (size.0 as f32 / s, size.1 as f32 / s);
         let safe = ui.safe_area();
+        let keyboard_bottom = ui.keyboard_inset().bottom;
+        if self.options.focus_field && self.presented == 0 {
+            let id = ui.id(FIELD_KEY);
+            ui.request_focus(id);
+        }
         if self.options.probe && self.presented + 1 == PROBE_LAST_FRAME {
             ui.request_repaint_at(input.time + PROBE_TIMED_FRAME);
         }
         let mut taps = self.taps;
-        draw(&mut ui, w, h, safe, &mut taps);
+        draw(
+            &mut ui,
+            w,
+            h,
+            safe,
+            keyboard_bottom,
+            &mut self.field,
+            &mut taps,
+        );
         self.taps = taps;
         let (display, out) = ui.finish();
         if output.apply(window, &out, s) {
@@ -346,19 +401,31 @@ impl App {
 }
 
 /// One frame of the demo in a surface of `w` by `h` logical points, with `safe` the edges the
-/// system covers.
-fn draw(ui: &mut Ui<'_>, w: f32, h: f32, safe: Insets, taps: &mut u32) {
+/// system covers and `keyboard_bottom` the height the soft keyboard covers at the bottom.
+fn draw(
+    ui: &mut Ui<'_>,
+    w: f32,
+    h: f32,
+    safe: Insets,
+    keyboard_bottom: f32,
+    field: &mut String,
+    taps: &mut u32,
+) {
+    // Keyboard avoidance: the shapes and the field move up by what the field would otherwise lack
+    // to clear the keyboard (the button stays where it is, under the keyboard).
+    let field_h = 44.0;
+    let lift = (h * 0.68 + field_h + 12.0 - (h - keyboard_bottom)).max(0.0);
     let t = *ui.theme();
     let p = ui.painter();
     p.fill(Rect::new(0.0, 0.0, w, h), 0.0, [20, 22, 28, 255]);
     // Two overlapping shapes for the frost to blur.
     p.fill(
-        Rect::new(w * 0.08, h * 0.30, w * 0.50, h * 0.22),
+        Rect::new(w * 0.08, h * 0.30 - lift, w * 0.50, h * 0.22),
         28.0,
         [232, 96, 62, 255],
     );
     p.fill(
-        Rect::new(w * 0.42, h * 0.38, w * 0.50, h * 0.22),
+        Rect::new(w * 0.42, h * 0.38 - lift, w * 0.50, h * 0.22),
         28.0,
         [62, 150, 232, 255],
     );
@@ -373,7 +440,7 @@ fn draw(ui: &mut Ui<'_>, w: f32, h: f32, safe: Insets, taps: &mut u32) {
         *taps += 1;
     }
     // The frost surface over the lower part of the shapes: a blurred copy of what is under it.
-    let panel = Rect::new(w * 0.20, h * 0.46, w * 0.60, h * 0.18);
+    let panel = Rect::new(w * 0.20, h * 0.46 - lift, w * 0.60, h * 0.18);
     let p = ui.painter();
     p.on(LayerId::Popup);
     p.backdrop(panel, 20.0);
@@ -384,6 +451,16 @@ fn draw(ui: &mut Ui<'_>, w: f32, h: f32, safe: Insets, taps: &mut u32) {
         (panel.x + 16.0, panel.y + 16.0),
         "frost",
         LabelRole::Strong,
+    );
+    // The text field, above the soft keyboard when one is up.
+    let rest = h * 0.68 - lift;
+    ui.painter().on(LayerId::Toast);
+    ui.text_field(
+        FIELD_KEY,
+        Rect::new(24.0, rest, w - 48.0, field_h),
+        field,
+        "Type here",
+        FieldState::default(),
     );
     // A marker along each edge of the surface, in four colours: top red, right green, bottom
     // blue, left yellow.
@@ -417,7 +494,7 @@ impl ApplicationHandler for App {
             shown.window.request_redraw();
             return;
         }
-        match setup(event_loop, self.options) {
+        match setup(event_loop, self.options, self.keyboard_changed.clone()) {
             Ok(shown) => {
                 shown.window.request_redraw();
                 self.shown = Some(shown);
@@ -456,6 +533,9 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         // Every frame this run asks for is requested here, never inside `RedrawRequested`, where a
         // request is lost while iOS is idle (docs/mobile.md, M1 reading).
+        if self.keyboard_changed.take() {
+            self.want_frame = true;
+        }
         if self.want_frame
             && !self.paused
             && let Some(shown) = &self.shown
@@ -529,6 +609,9 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         start: Instant::now(),
         presented: 0,
         taps: 0,
+        field: String::new(),
+        last_keyboard: Insets::ZERO,
+        keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
         want_frame: false,
         error: None,

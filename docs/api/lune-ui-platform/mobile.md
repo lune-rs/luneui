@@ -14,6 +14,50 @@ Every item exists on every target; off iOS each one does nothing and says so.
 
 Source: `crates/lune-ui-platform/src/mobile.rs:1`
 
+## Structs
+
+<a id="struct.KeyboardInset"></a>
+### Struct `KeyboardInset`
+
+```rust
+pub struct KeyboardInset(/* private */);
+```
+
+The part of the window the soft keyboard covers, kept current for an app to push as
+`Event::KeyboardInset` (iOS).
+
+On iOS it observes `UIKeyboardWillChangeFrameNotification` and `UIKeyboardWillHideNotification`
+and keeps the overlap of the keyboard's end frame with the window's view as a bottom inset, in
+logical pixels (the frame converted from screen space, clamped to the view's height; a missing
+or non-finite frame, and a hide, give zero). `on_change` runs when the value changes, never when
+it stays the same, on the main thread and from inside the notification: it must only wake the
+app (for example `Window::request_redraw`), never draw. Dropping the value removes both
+observers. It is `!Send`: create and read it on the main thread.
+
+Elsewhere it is inert: [`inset`](mobile.md#method.KeyboardInset.inset) is always [`Insets::ZERO`](../lune-ui-core/layout.md#associatedconstant.Insets.ZERO) and `on_change` never
+runs.
+
+Source: `crates/lune-ui-platform/src/mobile.rs:73`
+
+**Methods and associated items**
+
+`impl KeyboardInset`
+
+- <a id="method.KeyboardInset.inset"></a>`pub fn inset(&self) -> Insets`
+
+  The bottom inset the keyboard covers now, in logical pixels; `Insets::ZERO` while it is
+  hidden.
+
+- <a id="method.KeyboardInset.new"></a>`pub fn new(window: &Window, on_change: impl Fn() + 'static) -> KeyboardInset`
+
+  Starts observing the keyboard for `window`, calling `on_change` when the inset changes. A
+  window with no UIKit view (or a call off the main thread) gives an inert value that reads
+  zero.
+
+**Trait implementations**
+
+- `impl Debug for KeyboardInset`
+
 ## Enums
 
 <a id="enum.SceneAttach"></a>

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds apps/demo for the iOS simulator, runs it on one simulator device of its own and checks that
-# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke] [--no-manifest] [--landscape]
+# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape]
 #   [--demo-arg <arg>] [--keep-booted | --delete-device]
 #   (default)       build, assemble target/ios-sim/Demo.app (ad-hoc signed), boot the device, install,
 #                   launch, wait up to 60 s for `presented 1` in target/ios-sim/stdout.log, take one
@@ -17,6 +17,13 @@
 #                   safe area; not judged with --landscape) and no `presented` line between `probe lifecycle
 #                   suspended` and the next `probe lifecycle resumed`, with one after it. It also requires the frame the demo
 #                   schedules 1 s after its frame 30 with `Repaint::At` (`presented 31`) to arrive while idle.
+#                   In a smoke run the second screenshot is the keyboard launch below (not the resume).
+#                   It ends with the keyboard launch: the demo is relaunched with --focus-field (shot-2.png),
+#                   and `probe keyboard_inset 0,0,0,<b>` with <b> above 200 is required.
+#   --keyboard      launch the demo with --probe and --focus-field (it focuses its text field on frame 1, which
+#                   asks for the soft keyboard), require `probe keyboard_inset 0,0,0,<b>` with <b> above 200 in
+#                   the output, take one screenshot (shot-1.png) 2 s after it and stop. The soft keyboard needs
+#                   the Simulator's "Connect Hardware Keyboard" off; this script never changes that preference.
 #   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
 #                   the app without the scene life cycle).
 #   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
@@ -25,7 +32,8 @@
 #   --keep-booted   leave the device booted at the end.
 #   --delete-device shut down and delete the device named below, then exit.
 # The device is named luneui-demo-iphone (type iPhone-16-Pro, runtime iOS-18-0; override with
-# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix); any other runtime
+# LUNEUI_IOS_DEVICE_TYPE and LUNEUI_IOS_RUNTIME, ids without the CoreSimulator prefix; LUNEUI_IOS_DEVICE_NAME
+# picks another name for a device of its own); any other runtime
 # gets a device of its own, luneui-demo-iphone-<runtime>. It is found by exact name and created when
 # missing. The Info.plist edits apply to the copy in target/ios-sim/Demo.app only, never to
 # apps/demo/ios/Info.plist.
@@ -46,13 +54,14 @@ if [ "$RUNTIME" = "$DEFAULT_RUNTIME" ]; then
 else
   NAME="luneui-demo-iphone-$RUNTIME"
 fi
+NAME="${LUNEUI_IOS_DEVICE_NAME:-$NAME}"
 TARGET=aarch64-apple-ios-sim
 BUNDLE_ID=rs.lune.luneui.demo
 OUT="$ROOT/target/ios-sim"
 APP="$OUT/Demo.app"
 
 usage() {
-  echo "usage: scripts/ios-sim.sh [--probe | --smoke] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
+  echo "usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
   exit 2
 }
 
@@ -60,6 +69,7 @@ keep=0
 delete=0
 probe=0
 smoke=0
+keyboard=0
 no_manifest=0
 landscape=0
 demo_args=()
@@ -67,6 +77,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --probe) probe=1 ;;
     --smoke) smoke=1; probe=1 ;;
+    --keyboard) keyboard=1; probe=1 ;;
     --no-manifest) no_manifest=1 ;;
     --landscape) landscape=1 ;;
     --demo-arg)
@@ -173,14 +184,35 @@ xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || fail "bootstatus"
 
 xcrun simctl install "$UDID" "$APP" || fail "install"
 rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/stdout-2.log" "$OUT/stderr-2.log" \
-  "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
+  "$OUT/stdout-3.log" "$OUT/stderr-3.log" "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
 : > "$OUT/stdout.log"
 : > "$OUT/stderr.log"
 app_args=()
 if [ "$probe" -eq 1 ]; then
   app_args=(--probe)
 fi
+if [ "$keyboard" -eq 1 ]; then
+  app_args+=(--focus-field)
+fi
 app_args+=(${demo_args[@]+"${demo_args[@]}"})
+# Waits for `probe keyboard_inset 0,0,0,<b>` in $1 (up to 20 s) and requires <b> above 200 points.
+check_keyboard() {
+  local log="$1" line=""
+  for _ in $(seq 1 40); do
+    line="$(grep '^probe keyboard_inset ' "$log" | tail -n 1 || true)"
+    [ -n "$line" ] && break
+    sleep 0.5
+  done
+  grep '^probe keyboard_inset ' "$log" || true
+  if [ -z "$line" ]; then
+    # Keep what the screen shows for the reading.
+    xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-nokeyboard.png" >/dev/null 2>&1 || true
+  fi
+  [ -n "$line" ] || fail "no 'probe keyboard_inset' line: device $NAME showed no soft keyboard (a device with a hardware keyboard connected never does, and the 18.0 device first made here is one; a fresh device shows it: LUNEUI_IOS_DEVICE_NAME=<a new name> makes one, --delete-device removes $NAME; this script never changes the Simulator's preferences)"
+  awk -v l="$line" 'BEGIN { n = split(l, p, " "); split(p[3], v, ","); exit !(v[1] == 0 && v[2] == 0 && v[3] == 0 && v[4] > 200) }' \
+    || fail "keyboard inset is not 0,0,0,<b> with <b> above 200: $line"
+}
+
 xcrun simctl launch --terminate-running-process \
   --stdout="$OUT/stdout.log" --stderr="$OUT/stderr.log" "$UDID" "$BUNDLE_ID" ${app_args[@]+"${app_args[@]}"} || fail "launch"
 
@@ -201,6 +233,9 @@ grep "^presented " "$OUT/stdout.log" | head -n 3 || true
 
 if [ "$probe" -eq 1 ]; then
   grep -q "^probe inner_size " "$OUT/stdout.log" || fail "no 'probe inner_size' line"
+  if [ "$keyboard" -eq 1 ]; then
+    check_keyboard "$OUT/stdout.log"
+  fi
   sleep 2
 else
   sleep 1
@@ -240,7 +275,9 @@ xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-1.png" >/dev/null 2>&1 
 [ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
 sips -g pixelWidth -g pixelHeight "$OUT/shot-1.png" | tail -n 2
 
-if [ "$probe" -eq 1 ]; then
+if [ "$keyboard" -eq 1 ]; then
+  echo "ios-sim: keyboard screenshot $OUT/shot-1.png"
+elif [ "$probe" -eq 1 ]; then
   # Background the demo by launching the Settings app, then foreground it with a plain launch.
   xcrun simctl launch "$UDID" com.apple.Preferences >/dev/null || fail "launch Settings"
   sleep 3
@@ -249,9 +286,11 @@ if [ "$probe" -eq 1 ]; then
   xcrun simctl launch --stdout="$OUT/stdout-2.log" --stderr="$OUT/stderr-2.log" \
     "$UDID" "$BUNDLE_ID" "${app_args[@]}" || fail "second launch"
   sleep 3
-  xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
-  [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
-  sips -g pixelWidth -g pixelHeight "$OUT/shot-2.png" | tail -n 2
+  if [ "$smoke" -eq 0 ]; then
+    xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "screenshot 2"
+    [ -s "$OUT/shot-2.png" ] || fail "empty screenshot 2"
+    sips -g pixelWidth -g pixelHeight "$OUT/shot-2.png" | tail -n 2
+  fi
   {
     echo "# launch 1 (stdout.log, to the end of the run)"
     grep "^probe \|^presented " "$OUT/stdout.log" || true
@@ -279,6 +318,25 @@ if [ "$smoke" -eq 1 ]; then
   echo "ios-sim: frames around the suspend: $verdict"
   [[ "$verdict" == "during=0 after="[1-9]* ]] \
     || fail "a frame was presented while suspended, or none after 'resumed' ($verdict)"
+fi
+
+if [ "$smoke" -eq 1 ]; then
+  # The keyboard launch (D357): the demo focuses its text field on frame 1, the soft keyboard rises
+  # and the inset reaches the frame. This is the run's second screenshot.
+  : > "$OUT/stdout-3.log"
+  : > "$OUT/stderr-3.log"
+  xcrun simctl launch --terminate-running-process --stdout="$OUT/stdout-3.log" --stderr="$OUT/stderr-3.log" \
+    "$UDID" "$BUNDLE_ID" --probe --focus-field ${demo_args[@]+"${demo_args[@]}"} || fail "keyboard launch"
+  for _ in $(seq 1 120); do
+    grep -q "^presented 1 " "$OUT/stdout-3.log" 2>/dev/null && break
+    sleep 0.5
+  done
+  grep -q "^presented 1 " "$OUT/stdout-3.log" || fail "keyboard launch: no 'presented 1' within 60 s"
+  check_keyboard "$OUT/stdout-3.log"
+  sleep 2
+  xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-2.png" >/dev/null 2>&1 || fail "keyboard screenshot"
+  [ -s "$OUT/shot-2.png" ] || fail "empty keyboard screenshot"
+  echo "ios-sim: keyboard screenshot $OUT/shot-2.png"
 fi
 
 xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true

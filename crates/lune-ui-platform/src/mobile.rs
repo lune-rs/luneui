@@ -55,3 +55,34 @@ pub fn attach_to_scene(window: &Window) -> SceneAttach {
 pub fn safe_area(window: &Window) -> Insets {
     os::safe_area(window)
 }
+
+/// The part of the window the soft keyboard covers, kept current for an app to push as
+/// `Event::KeyboardInset` (iOS).
+///
+/// On iOS it observes `UIKeyboardWillChangeFrameNotification` and `UIKeyboardWillHideNotification`
+/// and keeps the overlap of the keyboard's end frame with the window's view as a bottom inset, in
+/// logical pixels (the frame converted from screen space, clamped to the view's height; a missing
+/// or non-finite frame, and a hide, give zero). `on_change` runs when the value changes, never when
+/// it stays the same, on the main thread and from inside the notification: it must only wake the
+/// app (for example `Window::request_redraw`), never draw. Dropping the value removes both
+/// observers. It is `!Send`: create and read it on the main thread.
+///
+/// Elsewhere it is inert: [`inset`](Self::inset) is always [`Insets::ZERO`] and `on_change` never
+/// runs.
+#[derive(Debug)]
+pub struct KeyboardInset(os::KeyboardInset);
+
+impl KeyboardInset {
+    /// Starts observing the keyboard for `window`, calling `on_change` when the inset changes. A
+    /// window with no UIKit view (or a call off the main thread) gives an inert value that reads
+    /// zero.
+    pub fn new(window: &Window, on_change: impl Fn() + 'static) -> KeyboardInset {
+        KeyboardInset(os::KeyboardInset::new(window, on_change))
+    }
+
+    /// The bottom inset the keyboard covers now, in logical pixels; `Insets::ZERO` while it is
+    /// hidden.
+    pub fn inset(&self) -> Insets {
+        self.0.inset()
+    }
+}

@@ -6,23 +6,28 @@
 //! Every UIKit call runs on the main thread: each entry checks it with `MainThreadMarker::new` and
 //! does nothing elsewhere.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::fmt;
 use std::ptr::NonNull;
+use std::rc::Rc;
 
 use block2::RcBlock;
-use objc2::MainThreadMarker;
 use objc2::rc::{Retained, Weak};
-use objc2::runtime::{NSObjectProtocol, ProtocolObject};
-use objc2_foundation::{NSNotification, NSNotificationCenter};
+use objc2::runtime::{AnyObject, NSObjectProtocol, ProtocolObject};
+use objc2::{MainThreadMarker, Message};
+use objc2_core_foundation::CGRect;
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSValue};
 use objc2_ui_kit::{
-    UIApplication, UISceneWillConnectNotification, UIView, UIWindow, UIWindowScene,
+    NSValueUIGeometryExtensions, UIApplication, UICoordinateSpace, UIKeyboardFrameEndUserInfoKey,
+    UIKeyboardWillChangeFrameNotification, UIKeyboardWillHideNotification,
+    UISceneWillConnectNotification, UIView, UIWindow, UIWindowScene,
 };
 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use winit::window::Window;
 
 use lune_ui_core::layout::Insets;
 
-use super::insets_from_geometry;
+use super::{insets_from_geometry, keyboard_overlap};
 use crate::mobile::SceneAttach;
 
 /// The scene observer's state, on the main thread only.
@@ -153,4 +158,130 @@ pub(crate) fn safe_area(window: &Window) -> Insets {
         (outer.width, outer.height),
         window.scale_factor(),
     )
+}
+
+/// The `UIView` behind `window`, or `None` when there is no UIKit handle.
+fn ui_view(window: &Window, _mtm: MainThreadMarker) -> Option<Retained<UIView>> {
+    let RawWindowHandle::UiKit(handle) = window.window_handle().ok()?.as_raw() else {
+        return None;
+    };
+    // SAFETY: winit guarantees `ui_view` is a live UIView while the window exists, and the
+    // marker proves this runs on the main thread, where UIKit objects may be used.
+    let view: &UIView = unsafe { handle.ui_view.cast().as_ref() };
+    Some(view.retain())
+}
+
+/// The keyboard's end frame carried by a keyboard notification (screen space), if there is one.
+fn end_frame(note: &NSNotification) -> Option<CGRect> {
+    let info = note.userInfo()?;
+    // SAFETY: the key is UIKit's own extern static, always initialised once UIKit is loaded.
+    let key: &AnyObject = unsafe { UIKeyboardFrameEndUserInfoKey }.as_ref();
+    let value = info.objectForKey(key)?.downcast::<NSValue>().ok()?;
+    // SAFETY: UIKit documents the value under this key as an NSValue holding a CGRect.
+    Some(unsafe { value.CGRectValue() })
+}
+
+/// The bottom inset, in points, that the keyboard's end frame `end` (screen space) puts on `view`.
+fn bottom_inset(view: &UIView, end: CGRect) -> Insets {
+    let Some(window) = view.window() else {
+        return Insets::ZERO;
+    };
+    let space = window.screen().coordinateSpace();
+    let r = view.convertRect_fromCoordinateSpace(end, &space);
+    let overlap = keyboard_overlap(view.bounds().size.height, r.origin.y);
+    Insets::new(0.0, 0.0, 0.0, overlap)
+}
+
+/// Observes the soft keyboard's frame (D357). The observers run on the posting thread, which is
+/// the main thread for UIKit's keyboard notifications, and each checks it again.
+pub(crate) struct KeyboardInset {
+    value: Rc<Cell<Insets>>,
+    tokens: Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>,
+}
+
+impl fmt::Debug for KeyboardInset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyboardInset")
+            .field("inset", &self.value.get())
+            .finish_non_exhaustive()
+    }
+}
+
+impl KeyboardInset {
+    pub(crate) fn new(window: &Window, on_change: impl Fn() + 'static) -> Self {
+        let value = Rc::new(Cell::new(Insets::ZERO));
+        let mut tokens = Vec::new();
+        let Some(mtm) = MainThreadMarker::new() else {
+            return Self { value, tokens };
+        };
+        let Some(view) = ui_view(window, mtm) else {
+            return Self { value, tokens };
+        };
+        let on_change = Rc::new(on_change);
+        let view = Weak::from_retained(&view);
+        let set = {
+            let value = Rc::clone(&value);
+            move |inset: Insets| {
+                if value.get() != inset {
+                    value.set(inset);
+                    on_change();
+                }
+            }
+        };
+        let change = {
+            let set = set.clone();
+            RcBlock::new(move |note: NonNull<NSNotification>| {
+                if MainThreadMarker::new().is_none() {
+                    return;
+                }
+                // SAFETY: the notification centre passes a live NSNotification for the block's
+                // duration.
+                let note = unsafe { note.as_ref() };
+                let inset = match (view.load(), end_frame(note)) {
+                    (Some(view), Some(end)) => bottom_inset(&view, end),
+                    _ => Insets::ZERO,
+                };
+                set(inset);
+            })
+        };
+        let hide = RcBlock::new(move |_note: NonNull<NSNotification>| {
+            if MainThreadMarker::new().is_some() {
+                set(Insets::ZERO);
+            }
+        });
+        let center = NSNotificationCenter::defaultCenter();
+        // SAFETY: the names are UIKit's own extern statics; `obj` is `None` (any sender); `queue`
+        // is `None`, so each block runs on the posting thread and checks it is the main one. The
+        // blocks capture only `Rc`s and a weak view, which they touch on the main thread only.
+        unsafe {
+            tokens.push(center.addObserverForName_object_queue_usingBlock(
+                Some(UIKeyboardWillChangeFrameNotification),
+                None,
+                None,
+                &change,
+            ));
+            tokens.push(center.addObserverForName_object_queue_usingBlock(
+                Some(UIKeyboardWillHideNotification),
+                None,
+                None,
+                &hide,
+            ));
+        }
+        Self { value, tokens }
+    }
+
+    pub(crate) fn inset(&self) -> Insets {
+        self.value.get()
+    }
+}
+
+impl Drop for KeyboardInset {
+    fn drop(&mut self) {
+        let center = NSNotificationCenter::defaultCenter();
+        for token in self.tokens.drain(..) {
+            // SAFETY: the token came from `addObserverForName:object:queue:usingBlock:` on this
+            // centre and is removed once.
+            unsafe { center.removeObserver(token.as_ref()) };
+        }
+    }
 }

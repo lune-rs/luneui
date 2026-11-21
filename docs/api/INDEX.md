@@ -141,7 +141,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-7 modules, 29 items. Left out and counted: 161 blanket impls, 151 items of the omitted impls, 36 items of the trait impls shown as one line, 78 synthetic impls.
+7 modules, 30 items. Left out and counted: 172 blanket impls, 160 items of the omitted impls, 37 items of the trait impls shown as one line, 84 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -149,7 +149,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::desktop`](lune-ui-platform/desktop.md) | 12 |
 | [`lune_ui_platform::group`](lune-ui-platform/group.md) | 2 |
 | [`lune_ui_platform::material`](lune-ui-platform/material.md) | 3 |
-| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 3 |
+| [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 4 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
 
@@ -718,6 +718,7 @@ Every top-level item of the four owning crates, by name.
 - [`KEY_GAP`](lune-ui-core/widgets/bar_chart.md#constant.KEY_GAP) - constant, `lune_ui_core::widgets::bar_chart`
 - [`KEY_SPACING`](lune-ui-core/widgets/bar_chart.md#constant.KEY_SPACING) - constant, `lune_ui_core::widgets::bar_chart`
 - [`KEY_STEP`](lune-ui-core/widgets/split_panes.md#constant.KEY_STEP) - constant, `lune_ui_core::widgets::split_panes`
+- [`KeyboardInset`](lune-ui-platform/mobile.md#struct.KeyboardInset) - struct, `lune_ui_platform::mobile`
 - [`Keyframes`](lune-ui-core/motion.md#struct.Keyframes) - struct, `lune_ui_core::motion`
 - [`Keymap`](lune-ui-core/input.md#struct.Keymap) - struct, `lune_ui_core::input`
 - [`keymap`](lune-ui-winit/input.md#fn.keymap) - function, `lune_ui_winit::input`
