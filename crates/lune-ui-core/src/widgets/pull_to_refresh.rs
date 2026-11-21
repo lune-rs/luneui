@@ -136,7 +136,7 @@ impl Ui<'_> {
             let progress = (pulled / THRESHOLD).min(1.0);
             let shown = progress.max(band / BAND).min(1.0);
             let color = with_alpha(self.theme().fg_secondary, shown);
-            let center = (rect.x + rect.w / 2.0, rect.y + strip.h.min(BAND) / 2.0);
+            let center = (rect.x + rect.w / 2.0, rect.y + strip.h / 2.0);
             self.painter().push_clip(strip);
             if refreshing || fired || band > 0.0 {
                 let name = self.tr("luneui.refresh.busy");

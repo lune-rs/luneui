@@ -34,7 +34,7 @@ Neither Lunegit nor Wane has a pull to refresh; the look is a deliberate deviati
 - Rect: the area the app gives; the scroll area takes `rect` less the band at its top (`rect.y + band`, `rect.h - band`).
 - Band: 0 to 56 px at the rect's top; 56 while the app refreshes.
 - Strip: from the rect's top to the content's top (the band plus what the pull shows past the top); the indicator is clipped to it, so it never draws over what is above the rect or over the content.
-- Indicator: centred on the rect's width and on the strip's height (the band's centre once the strip is 56 or more); while pulling, a ring from 12 o'clock clockwise over `min(shown / 64, 1)` of a turn in `fg_secondary` faded by the same share; at or past 64 the spinner glyph; while the band is open the spinner, turning while busy.
+- Indicator: centred on the rect's width and on the strip's height (the band's centre at rest while refreshing); while pulling, a ring from 12 o'clock clockwise over `min(shown / 64, 1)` of a turn in `fg_secondary` faded by the same share; at or past 64 the spinner glyph; while the band is open the spinner, turning while busy.
 
 ### States
 
