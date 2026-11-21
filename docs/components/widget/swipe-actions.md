@@ -15,7 +15,7 @@ summary: Swipe row actions of a phone list: a row whose content a finger slides 
 
 ## Needs
 
-- The swipe-to-reveal row of a native phone list, with the finger's follow, rubber band and spring (R-widget-6).
+- The swipe-to-reveal row of a native phone list, with the finger's follow, rubber band and spring (R-widget-6, R-widget-8).
 - A way for a mouse and a keyboard to reach the same actions: the response's `context` and the app's menu (R-widget-3).
 
 ## Existing code

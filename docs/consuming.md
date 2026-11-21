@@ -437,6 +437,22 @@ To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary
 
 **Unverified here.** Every constant is a starting value: the 44 pt target, the 500 ms rest, the 1.5 s linger and the handle look were judged on scripted input, not under a finger (no finger can be driven here). The keyboard avoidance was judged on scripted insets, not a live keyboard or a notch.
 
+**M6: mobile components (D369 to D375).** Seven components, each a module with its `Ui` method, its options, item and response types; no existing item changes. The table is what is public; `gesture_track` and the scroll area's overscroll reader are crate-private.
+
+| item | what it is |
+| --- | --- |
+| `nav_bar::NavBar`, `NavAction`, `NavBarResponse`, `nav_bar::HEIGHT`, `Ui::nav_bar(key, rect, &bar)` | the phone header: an optional back button, the title, up to three action buttons; 44 pt at the rect's bottom (D370) |
+| `tab_bar::TabBarItem`, `TabBarResponse`, `tab_bar::HEIGHT`, `Ui::tab_bar(key, rect, items, &mut selected)` | the bottom tab bar: items with an optional badge, one tab stop; 49 pt at the rect's top (D370) |
+| `bottom_sheet::Detent`, `BottomSheet`, `SheetResponse`, `Ui::bottom_sheet(key, &mut open, &sheet, content)` | a modal sheet over `Ui::overlay`, with detents, a drag and a dismissal (D371) |
+| `nav_stack::NavStackResponse`, `Ui::nav_stack(key, rect, depth, page)`, `Ui::nav_stack_pop(key)` | push and pop of the levels the app owns, with edge-swipe back (D372) |
+| `pager::PagerOptions`, `PagerResponse`, `Ui::pager(key, rect, count, &mut page, &opts, draw)` | horizontal pages that snap by one page, and an optional row of dots (D373) |
+| `swipe_actions::SwipeAction`, `SwipeActions`, `SwipeEdge`, `SwipeResponse`, `Ui::swipe_actions(key, rect, &actions, row)` | a row whose leading and trailing actions a swipe reveals (D374) |
+| `pull_to_refresh::RefreshResponse`, `THRESHOLD` (64), `BAND` (56), `Ui::pull_to_refresh(key, rect, refreshing, &opts, content)` | a scroll area that fires `refresh` on a touch pull past 64 px and holds a spinner while the app refreshes (D375) |
+
+A mouse, keyboard and wheel app that does not call them sees no change. The non-touch path of each gesture: the sheet's grabber (a click steps to the next detent, Enter on the focused grabber does the same) and Escape or the scrim close it; the app's back button calls `Ui::nav_stack_pop`; the pager's dots (a click, Left, Right, Home, End; only when `dots` is on) and the app's own `*page`; a swipe row's `context` opens the app's menu with the same actions; the refresh is the app's own control passing `refreshing`, as a mouse, a wheel or a key never fires the pull; the bars' buttons and items are reached by click, Enter and Space, and the tab bar's by Left, Right, Home and End.
+
+**Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so

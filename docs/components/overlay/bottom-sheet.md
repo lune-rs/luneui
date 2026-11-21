@@ -15,7 +15,7 @@ summary: Modal bottom sheet of a phone screen: slides up to a detent, follows a 
 
 ## Needs
 
-- A phone screen's secondary surface that keeps the page it covers recognisable and moves with the finger (R-overlay-5, R-widget-6).
+- A phone screen's secondary surface that keeps the page it covers recognisable and moves with the finger (R-overlay-5, R-overlay-6, R-widget-6).
 - A way for a mouse and a keyboard to do everything a finger does: step the detent, close, reach the content (R-widget-3).
 
 ## Existing code

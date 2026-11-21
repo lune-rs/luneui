@@ -15,7 +15,7 @@ summary: Bottom tab bar of a phone screen: a 49 px row of equal items (glyph, la
 
 ## Needs
 
-- A phone app's primary navigation, drawn from the theme with every label elided to its item (R-widget-6).
+- A phone app's primary navigation, drawn from the theme with every label elided to its item (R-widget-6, R-widget-7).
 - One tab stop with roving focus, a tap or key that selects, `reselected`, and `context` for a long press or secondary click without opening a menu (R-widget-3, R-widget-6).
 
 ## Existing code

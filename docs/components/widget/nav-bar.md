@@ -15,7 +15,7 @@ summary: Navigation bar of a phone screen: a 44 px row at the bottom of the rect
 
 ## Needs
 
-- A phone screen's header, drawn from the theme with every text elided to its room (R-widget-6).
+- A phone screen's header, drawn from the theme with every text elided to its room (R-widget-6, R-widget-7).
 - Every button reachable by touch within a 44 by 44 target, by mouse and by keyboard, with a semantic node (R-widget-3, R-widget-6).
 
 ## Existing code

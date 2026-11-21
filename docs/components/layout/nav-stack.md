@@ -15,7 +15,7 @@ summary: Navigation stack of a phone app: the app's levels, the top one pushed i
 
 ## Needs
 
-- The drill-down of a phone app, with the back gesture of a native one (R-widget-6, R-layout-3).
+- The drill-down of a phone app, with the back gesture of a native one (R-widget-6, R-layout-3, R-layout-4).
 - A way for a mouse and a keyboard to do what the swipe does: the app's back button calls `nav_stack_pop` (R-widget-3).
 
 ## Existing code

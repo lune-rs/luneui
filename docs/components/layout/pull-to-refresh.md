@@ -15,7 +15,7 @@ summary: Pull to refresh of a phone list: a scroll area that reports refresh whe
 
 ## Needs
 
-- The pull-down refresh of a phone list, with the finger, rubber band and way back of the scroll area's own touch scrolling (R-widget-6, R-motion-4).
+- The pull-down refresh of a phone list, with the finger, rubber band and way back of the scroll area's own touch scrolling (R-widget-6, R-motion-4, R-layout-6).
 - A refresh a mouse and a keyboard reach: the app's own control (a button, a menu entry) passing the same `refreshing`; the pull never fires from a wheel, a key or a mouse (R-widget-3).
 
 ## Existing code

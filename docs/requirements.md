@@ -144,6 +144,13 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   selection); and no action or hint exists only on hover, so a finger resting on an anchor shows its
   tooltip. Mouse, keyboard and wheel behaviour is unchanged. Resolved: `widget.slider`,
   `widget.tab-strip`, `core.gestures` and `overlay.tooltip` (M5, D361 to D363).
+- R-widget-7 [new] A phone app's chrome: a navigation bar (an optional back button, a centred title, up to three
+  action buttons) and a bottom tab bar with one tab stop, drawn from the theme on the safe area the app gives, every
+  text elided to its room, every button reachable by a 44 pt touch target and by mouse and keyboard. Built in M6
+  (D370). Resolved: `widget.nav-bar` and `widget.tab-bar`.
+- R-widget-8 [new] Swipe row actions: a list row a finger slides to reveal leading and trailing actions, with a full
+  swipe; a mouse and a keyboard reach the same actions through the row's `context` and the app's menu. Built in M6
+  (D374). Resolved: `widget.swipe-actions`.
 
 ### Overlays
 
@@ -160,6 +167,9 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   popovers, tooltips, toasts, the dialog card and the palette place within `Ui::safe_area` and above
   `Ui::keyboard_inset`, and a scroll area under the keyboard extends its range by the covered part and
   reveals the focused field's caret (D365). Resolved: `overlay.menu` and `layout.scroll-area` (M5).
+- R-overlay-6 [new] A bottom sheet: a modal sheet with detents that a finger drags and releases to a detent or to
+  closed, slides out (not fades) when the app or a dismissal closes it, and that a mouse and a keyboard step and close
+  (the grabber, Escape, the scrim). Built in M6 (D371). Resolved: `overlay.bottom-sheet`.
 
 ### Layout and data views
 
@@ -169,6 +179,12 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
 - R-layout-2 [new] Resizable split panes and scrolling regions that preserve offset. Split panes are M7.
 - R-layout-3 [new] Virtualized lists and tree views with tree guide lines, for long lists (Lunegit
   uses virtualizing panels in several views). The tree view is M7.
+- R-layout-4 [new] A navigation stack: push and pop of the levels the app owns, with the edge swipe back from the left
+  edge, and each covered level kept alive with its scroll offset (D372). Built in M6. Resolved: `layout.nav-stack`.
+- R-layout-5 [new] A pager: horizontal pages with the finger's follow, rubber band and one-page snap, and a row of
+  dots a mouse and a keyboard use (D373). Built in M6. Resolved: `layout.pager`.
+- R-layout-6 [new] Pull to refresh: a scroll area that a touch pull past 64 px refreshes, holding a spinner in a band
+  while the app refreshes; never from a mouse, a wheel or a key (D375). Built in M6. Resolved: `layout.pull-to-refresh`.
 - R-data-1 [new] Domain views Lunegit draws itself: commit graph rows, diff views (unified and
   split) with hunk actions and conflict strips, pie chart, kanban board with drag-and-drop.
   Resolved by D42: toolkit components `data.lane-graph`, `text.diff-view`, `data.pie-chart` and

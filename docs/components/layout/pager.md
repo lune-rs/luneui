@@ -15,7 +15,7 @@ summary: Pager of a phone screen: pages side by side that a finger swipes betwee
 
 ## Needs
 
-- The swipeable pages of a phone app (an onboarding, a photo strip), with the finger's follow, rubber band and one-page snap of a native one (R-widget-6, R-layout-3).
+- The swipeable pages of a phone app (an onboarding, a photo strip), with the finger's follow, rubber band and one-page snap of a native one (R-widget-6, R-layout-3, R-layout-5).
 - A way for a mouse and a keyboard to do what the swipe does: the dots (a click, Left, Right, Home, End) and the app's own `*page` (R-widget-3).
 
 ## Existing code
