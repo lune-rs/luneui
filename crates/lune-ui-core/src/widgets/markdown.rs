@@ -27,7 +27,7 @@ use crate::access::{Action, Node, Role, State};
 use crate::color::{Rgba, premul};
 use crate::icon;
 use crate::image::{Anchor, Fit, ImageAlign, ImageId};
-use crate::input::{CursorIcon, NamedKey};
+use crate::input::{CursorIcon, NamedKey, PointerKind};
 use crate::paint::Rect;
 use crate::text::{Font, Spec, Style};
 use crate::theme::Theme;
@@ -399,6 +399,7 @@ fn link_regions(
     boxes: &[Rect],
     origin: (f32, f32),
 ) {
+    let touch = ui.pointer_kind() == PointerKind::Touch;
     for (j, b) in boxes.iter().enumerate() {
         let at = Rect::new(origin.0 + b.x, origin.1 + b.y, b.w, b.h);
         let lid = id.with(j);
@@ -410,11 +411,13 @@ fn link_regions(
         let key = ui.activation_keys(lid, r.enabled, &[NamedKey::Enter, NamedKey::Space]);
         let raised = ui.transient::<Raised>(lid);
         let mut act = key;
+        // A finger follows a link at the tap, not at the press, so a pan that scrolls the
+        // document over a link opens nothing (D362).
         if r.press_started {
-            act = true;
-            raised.0 = true;
+            act |= !touch;
+            raised.0 = !touch;
         } else if r.clicked {
-            act |= !raised.0;
+            act |= touch || !raised.0;
         }
         // A disabled response reports no press whatever the pointer does, so it must not end the
         // capture: the release after it would read as a fresh click.

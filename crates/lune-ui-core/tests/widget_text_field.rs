@@ -958,6 +958,33 @@ mod edit {
         assert_eq!(text, "lune");
     }
 
+    /// A finger clears at the tap: the press empties nothing and selects nothing (D362).
+    #[test]
+    fn a_touch_on_clear_empties_the_text_on_the_tap_and_selects_nothing_on_the_press() {
+        let opts = FieldOptions {
+            variant: Variant::Search,
+            ..FieldOptions::default()
+        };
+        let at = (RECT.right() - 7.0 - 9.0, CENTRE.1);
+        let mut text = String::from("lune");
+        let mut h = focused(&mut text, &opts);
+        h.input.touch_start(1, at.0, at.1);
+        let (_, r, out) = run(&mut h, &mut text, &opts);
+        assert_eq!(text, "lune", "the press clears nothing");
+        assert!(!r.response.changed);
+        let sel = out
+            .tree
+            .get(id())
+            .and_then(|n| n.text.as_ref())
+            .map(|t| t.selection)
+            .expect("the field's text node");
+        assert_eq!(sel.0, sel.1, "the press selects nothing");
+        h.input.touch_end(1, at.0, at.1);
+        let (_, r, _) = run(&mut h, &mut text, &opts);
+        assert_eq!(text, "");
+        assert!(r.response.changed);
+    }
+
     #[test]
     fn the_date_variant_keeps_its_padding_clear() {
         let opts = FieldOptions {

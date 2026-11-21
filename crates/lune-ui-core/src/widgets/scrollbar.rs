@@ -132,6 +132,9 @@ impl Ui<'_> {
         let t = *self.theme();
         let _track = self.interact(id.with("track"), g.track, Sense::HOVER);
         let thumb = self.interact(id.with("thumb"), g.thumb, Sense::DRAG);
+        // Under a finger the thumb keeps a drag along its own bar's axis only (D362): a pan across
+        // it scrolls the area, as it does anywhere else.
+        self.set_drag_axes(thumb.id, axis == Axis::Horizontal, axis == Axis::Vertical);
         let shown = if reveal || thumb.pressed { 1.0 } else { 0.0 };
         let opacity = self.animate_f32(id.with("opacity"), shown, &REVEAL);
         let hot = thumb.hovered || thumb.pressed;

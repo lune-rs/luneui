@@ -2443,3 +2443,95 @@ fn a_second_shift_move_during_a_landing_restarts_from_where_the_card_is_drawn() 
         }
     }
 }
+
+/// Touch frames over the board, each at `ms`: the response of every frame.
+fn touch_run(h: &mut UiHarness, m: &Model, steps: &[(u64, (f32, f32))], end: bool) -> Vec<Run> {
+    let mut out = Vec::new();
+    for (k, (ms, at)) in steps.iter().enumerate() {
+        if k == 0 {
+            h.input.touch_start(1, at.0, at.1);
+        } else {
+            h.input.touch_move(1, at.0, at.1);
+        }
+        out.push(run(h, m, *ms));
+    }
+    if end {
+        let (ms, at) = steps[steps.len() - 1];
+        h.input.touch_end(1, at.0, at.1);
+        out.push(run(h, m, ms + 10));
+    }
+    out
+}
+
+#[test]
+fn a_touch_pan_on_a_card_scrolls_its_column_and_a_tap_opens_it() {
+    // Column 1 holds 30 cards: its list scrolls.
+    let m = tall();
+    let mut h = UiHarness::new(WIN);
+    let first = run(&mut h, &m, 0);
+    run(&mut h, &m, 10);
+    let (x, y) = center(&first.out, 101);
+    let before = bounds(&first.out, 101).y;
+    let seen = touch_run(
+        &mut h,
+        &m,
+        &[
+            (20, (x, y)),
+            (30, (x, y - 15.0)),
+            (40, (x, y - 40.0)),
+            (50, (x, y - 80.0)),
+        ],
+        true,
+    );
+    assert!(
+        seen.iter()
+            .all(|r| r.r.moved.is_none() && r.r.opened.is_none())
+    );
+    let after = run(&mut h, &m, 5000);
+    assert!(
+        bounds(&after.out, 101).y < before - 20.0,
+        "the column scrolled: {} -> {}",
+        before,
+        bounds(&after.out, 101).y
+    );
+
+    // A tap opens the card, on the lift.
+    let mut h = UiHarness::new(WIN);
+    let first = run(&mut h, &m, 0);
+    run(&mut h, &m, 10);
+    let (x, y) = center(&first.out, 101);
+    h.input.touch_start(1, x, y);
+    assert_eq!(run(&mut h, &m, 20).r.opened, None);
+    h.input.touch_end(1, x, y);
+    assert_eq!(run(&mut h, &m, 30).r.opened, Some(101));
+}
+
+#[test]
+fn a_long_press_on_a_card_then_a_move_moves_the_card() {
+    let m = tall();
+    let mut h = UiHarness::new(WIN);
+    let first = run(&mut h, &m, 0);
+    run(&mut h, &m, 10);
+    let (x, y) = center(&first.out, 101);
+    let to = center(&first.out, 21);
+    h.input.touch_start(1, x, y);
+    run(&mut h, &m, 20);
+    let held = run(&mut h, &m, 600);
+    assert_eq!(
+        held.r.context.map(|c| c.0),
+        Some(101),
+        "the long press is the context"
+    );
+    let mut moved = None;
+    for (k, f) in [0.2f32, 0.5, 0.8, 1.0, 1.0].into_iter().enumerate() {
+        h.input
+            .touch_move(1, x + (to.0 - x) * f, y + (to.1 - y) * f);
+        let r = run(&mut h, &m, 620 + 20 * k as u64);
+        moved = moved.or(r.r.moved);
+    }
+    h.input.touch_end(1, to.0, to.1);
+    let r = run(&mut h, &m, 800);
+    moved = moved.or(r.r.moved);
+    let mv = moved.expect("the card moved");
+    assert_eq!((mv.card, mv.column), (101, 2));
+}

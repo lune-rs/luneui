@@ -5,11 +5,16 @@
 //! clock.
 
 use lune_ui_core::input::PointerButton;
+use lune_ui_core::layout::Axis;
 use lune_ui_core::paint::Rect;
 use lune_ui_core::testing::{UiHarness, hit_regions};
 use lune_ui_core::ui::{Response, Sense, Ui};
 use lune_ui_core::widgets::menu::MenuRow;
 use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
+use lune_ui_core::widgets::slider::SliderOptions;
+use lune_ui_core::widgets::split_panes::{SplitOptions, SplitSide, geometry};
+use lune_ui_core::widgets::tab_strip::{Tab, TabEvent, TabKey, TabStripOptions, TabStripResponse};
+use lune_ui_core::widgets::tone::Tone;
 
 const P: PointerButton = PointerButton::Primary;
 const WIN: (f32, f32) = (400.0, 300.0);
@@ -396,4 +401,330 @@ fn a_drag_out_of_a_long_press_dismisses_the_menu_the_long_press_opened() {
     let (tab, menu) = run(&mut h, true);
     assert!(tab.drag_started);
     assert_eq!(menu, Some(false), "a mouse drag dismisses nothing");
+}
+
+// Step 2 (D362): drag claims and acting on the tap.
+
+const AREA: Rect = Rect::new(0.0, 0.0, 400.0, 300.0);
+
+/// One frame of a vertical scroll area over `AREA` (content 400 x 1500) running `content`: what it
+/// returned and the area's y offset after the frame.
+fn in_area<R>(h: &mut UiHarness, content: impl FnOnce(&mut Ui<'_>) -> R) -> (R, f64) {
+    let mut out = None;
+    h.frame(|ui| {
+        let res = ui.scroll_area("area", AREA, &ScrollOptions::default(), |ui, _| {
+            (content(ui), Extent::new(400.0, 1500.0))
+        });
+        out = Some((res.value, res.offset.1));
+    });
+    out.expect("the frame ran")
+}
+
+/// A touch that starts at `from`, travels to `to` in three moves, one frame each, and lifts: the
+/// frame outputs of `run`, in order (press, moves, lift).
+fn swipe<R>(
+    h: &mut UiHarness,
+    from: (f32, f32),
+    to: (f32, f32),
+    mut run: impl FnMut(&mut UiHarness) -> R,
+) -> Vec<R> {
+    let mut out = Vec::new();
+    h.input.touch_start(1, from.0, from.1);
+    out.push(run(h));
+    for k in 1..=3 {
+        let t = k as f32 / 3.0;
+        h.input.touch_move(
+            1,
+            from.0 + (to.0 - from.0) * t,
+            from.1 + (to.1 - from.1) * t,
+        );
+        out.push(run(h));
+    }
+    h.input.touch_end(1, to.0, to.1);
+    out.push(run(h));
+    out
+}
+
+const SLIDER: Rect = Rect::new(20.0, 100.0, 300.0, 24.0);
+const SLIDER_OPTS: SliderOptions<'static> = SliderOptions {
+    min: 0.0,
+    max: 100.0,
+    step: 0.0,
+    name: "Level",
+};
+
+fn slider_frame(h: &mut UiHarness, value: &mut f32) -> (Response, f64) {
+    let (r, offset) = in_area(h, |ui| ui.slider("level", SLIDER, value, &SLIDER_OPTS));
+    (r, offset)
+}
+
+#[test]
+fn a_slider_claims_x_only_a_vertical_pan_scrolls_and_a_horizontal_drag_moves_it() {
+    let ready = || {
+        let mut h = harness();
+        let mut v = 10.0;
+        slider_frame(&mut h, &mut v);
+        slider_frame(&mut h, &mut v);
+        h
+    };
+    // A vertical pan from the slider scrolls the area and leaves the value.
+    let mut h = ready();
+    let mut v = 10.0;
+    let seen = swipe(&mut h, (170.0, 112.0), (170.0, 60.0), |h| {
+        slider_frame(h, &mut v)
+    });
+    assert_eq!(v, 10.0, "the pan changed no value");
+    assert!(seen.last().is_some_and(|(_, off)| *off > 20.0), "{seen:?}");
+    assert!(seen.iter().all(|(r, _)| !r.changed));
+
+    // A horizontal drag moves the value from the slop on, and the area stays.
+    let mut h = ready();
+    let mut v = 10.0;
+    let seen = swipe(&mut h, (170.0, 112.0), (260.0, 112.0), |h| {
+        slider_frame(h, &mut v)
+    });
+    assert!(v > 60.0, "the drag followed: {v}");
+    assert!(seen.iter().all(|(_, off)| *off == 0.0));
+}
+
+#[test]
+fn a_tap_on_the_slider_track_sets_the_value_on_the_lift_not_on_the_press() {
+    let mut h = harness();
+    let mut v = 10.0;
+    slider_frame(&mut h, &mut v);
+    slider_frame(&mut h, &mut v);
+    h.input.touch_start(1, 290.0, 112.0);
+    let (press, _) = slider_frame(&mut h, &mut v);
+    assert!(press.pressed && !press.changed);
+    assert_eq!(v, 10.0, "the press set nothing");
+    h.input.touch_end(1, 290.0, 112.0);
+    let (lift, _) = slider_frame(&mut h, &mut v);
+    assert!(lift.clicked && lift.changed);
+    assert!(v > 85.0, "the lift jumped to the tap: {v}");
+
+    // A mouse press still sets it on the press.
+    let mut h = harness();
+    let mut v = 10.0;
+    slider_frame(&mut h, &mut v);
+    slider_frame(&mut h, &mut v);
+    h.input.pointer_to(290.0, 112.0).press(P);
+    let (press, _) = slider_frame(&mut h, &mut v);
+    assert!(press.changed && v > 85.0);
+}
+
+const SPLIT: Rect = Rect::new(20.0, 60.0, 300.0, 200.0);
+
+fn split_frame(h: &mut UiHarness) -> (f32, bool, f64) {
+    let o = SplitOptions {
+        axis: Axis::Horizontal,
+        sized: SplitSide::First,
+        default: 100.0,
+        min: 20.0,
+        max: 280.0,
+        min_other: 20.0,
+        hidden: false,
+        name: "Split",
+    };
+    let (r, off) = in_area(h, |ui| ui.split_panes("split", SPLIT, &o, |_, _, _| {}));
+    (r.size, r.changed, off)
+}
+
+#[test]
+fn a_split_divider_claims_its_axis_a_vertical_pan_scrolls_and_a_horizontal_drag_moves_it() {
+    let mid = {
+        let g = geometry(SPLIT, Axis::Horizontal, SplitSide::First, 100.0).hit;
+        (g.x + g.w / 2.0, g.y + g.h / 2.0)
+    };
+    let ready = || {
+        let mut h = harness();
+        split_frame(&mut h);
+        split_frame(&mut h);
+        h
+    };
+    let mut h = ready();
+    let seen = swipe(&mut h, mid, (mid.0, mid.1 - 50.0), split_frame);
+    assert!(
+        seen.iter()
+            .all(|(size, changed, _)| *size == 100.0 && !*changed)
+    );
+    assert!(
+        seen.last().is_some_and(|(_, _, off)| *off > 20.0),
+        "{seen:?}"
+    );
+    // The next press works as the first: nothing is left held.
+    let (size, _, _) = split_frame(&mut h);
+    assert_eq!(size, 100.0);
+    h.input.touch_start(1, mid.0, mid.1 - 50.0);
+    split_frame(&mut h);
+
+    // A press that wobbles inside the slop and lifts moves nothing: the strip follows a drag, not
+    // the held press.
+    let mut h = ready();
+    let seen = swipe(&mut h, mid, (mid.0 + 6.0, mid.1), split_frame);
+    assert!(seen.iter().all(|(size, changed, _)| *size == 100.0 && !*changed));
+
+    let mut h = ready();
+    let seen = swipe(&mut h, mid, (mid.0 + 40.0, mid.1), split_frame);
+    assert!(
+        seen.last().is_some_and(|(size, _, _)| *size > 130.0),
+        "{seen:?}"
+    );
+    assert!(seen.iter().all(|(_, _, off)| *off == 0.0));
+}
+
+#[test]
+fn a_scrollbar_thumb_keeps_a_drag_along_its_axis_under_a_finger() {
+    let frame = |h: &mut UiHarness| in_area(h, |_| ()).1;
+    let mut h = harness();
+    frame(&mut h);
+    frame(&mut h);
+    // A finger pulling the thumb down scrolls the area down (a pan down would clamp at the top).
+    let seen = swipe(&mut h, (394.0, 20.0), (394.0, 70.0), frame);
+    assert!(seen.last().is_some_and(|off| *off > 100.0), "{seen:?}");
+
+    // Across its axis the thumb gives the touch up: in an area that scrolls both ways, a drag
+    // along x from the vertical bar's thumb pans the area sideways.
+    let wide = |h: &mut UiHarness| {
+        let mut out = (0.0, 0.0);
+        h.frame(|ui| {
+            let res = ui.scroll_area("area", AREA, &ScrollOptions::default(), |_, _| {
+                ((), Extent::new(900.0, 1500.0))
+            });
+            out = res.offset;
+        });
+        out
+    };
+    let mut h = harness();
+    wide(&mut h);
+    wide(&mut h);
+    let seen = swipe(&mut h, (394.0, 20.0), (300.0, 20.0), wide);
+    let end = seen.last().copied().unwrap_or_default();
+    assert!(end.0 > 50.0 && end.1 == 0.0, "{seen:?}");
+}
+
+/// One frame of a strip of `n` tabs at (40, 40) `w` wide.
+fn strip_frame(h: &mut UiHarness, w: f32, n: u64) -> TabStripResponse {
+    let mut out = None;
+    h.frame(|ui| {
+        let tabs: Vec<Tab<'_>> = (0..n)
+            .map(|k| Tab {
+                key: TabKey(k),
+                title: "A tab",
+                closable: false,
+                progress: None,
+            })
+            .collect();
+        let o = TabStripOptions {
+            active: Some(TabKey(0)),
+            panel_focused: false,
+            busy: None,
+            busy_tone: Tone::Neutral,
+            card: Rect::new(40.0, 40.0, w, 200.0),
+            name: "Sessions",
+            header_tint: None,
+        };
+        out = Some(ui.tab_strip("s", Rect::new(40.0, 40.0, w, 32.0), &tabs, &o));
+    });
+    out.expect("the frame ran")
+}
+
+fn strip_ready(w: f32, n: u64) -> UiHarness {
+    let mut h = UiHarness::new((500.0, 300.0));
+    strip_frame(&mut h, w, n);
+    strip_frame(&mut h, w, n);
+    h
+}
+
+fn events(seen: &[TabStripResponse]) -> Vec<TabEvent> {
+    seen.iter().flat_map(|r| r.events.clone()).collect()
+}
+
+#[test]
+fn a_pan_on_a_tab_of_an_overflowing_strip_scrolls_it_and_activates_nothing() {
+    let mut h = strip_ready(250.0, 5);
+    let seen = swipe(&mut h, (100.0, 56.0), (40.0, 56.0), |h| {
+        strip_frame(h, 250.0, 5)
+    });
+    assert_eq!(events(&seen), vec![], "no activation, no reorder");
+    // The strip moved: a tap at the same place, once the fling has come to rest, lands on
+    // another tab.
+    h.at_ms(5000);
+    strip_frame(&mut h, 250.0, 5);
+    h.input.touch_start(1, 120.0, 56.0);
+    strip_frame(&mut h, 250.0, 5);
+    h.input.touch_end(1, 120.0, 56.0);
+    let tap = strip_frame(&mut h, 250.0, 5);
+    assert_eq!(tap.events, vec![TabEvent::Activate(TabKey(1))]);
+
+    // A tap on the first tab activates it on the lift, not on the press.
+    let mut h = strip_ready(250.0, 5);
+    h.input.touch_start(1, 100.0, 56.0);
+    assert_eq!(strip_frame(&mut h, 250.0, 5).events, vec![]);
+    h.input.touch_end(1, 100.0, 56.0);
+    assert_eq!(
+        strip_frame(&mut h, 250.0, 5).events,
+        vec![TabEvent::Activate(TabKey(0))]
+    );
+
+    // A mouse press still activates on the press.
+    let mut h = strip_ready(250.0, 5);
+    h.input.pointer_to(100.0, 56.0).press(P);
+    assert_eq!(
+        strip_frame(&mut h, 250.0, 5).events,
+        vec![TabEvent::Activate(TabKey(0))]
+    );
+}
+
+#[test]
+fn a_long_press_on_a_tab_reports_context_and_a_move_after_it_reorders() {
+    let mut h = strip_ready(250.0, 5);
+    h.at_ms(0).input.touch_start(1, 70.0, 56.0);
+    strip_frame(&mut h, 250.0, 5);
+    h.at_ms(500);
+    let held = strip_frame(&mut h, 250.0, 5);
+    assert!(held.context.is_some_and(|(k, _)| k == TabKey(0)));
+    assert_eq!(held.events, vec![]);
+    let mut all = Vec::new();
+    for (ms, x) in [(520, 110.0), (540, 160.0), (560, 220.0), (580, 220.0)] {
+        h.at_ms(ms).input.touch_move(1, x, 56.0);
+        all.push(strip_frame(&mut h, 250.0, 5));
+    }
+    h.at_ms(600).input.touch_end(1, 220.0, 56.0);
+    all.push(strip_frame(&mut h, 250.0, 5));
+    let ev = events(&all);
+    assert!(
+        ev.iter()
+            .any(|e| matches!(e, TabEvent::Reorder { from: 0, .. })),
+        "{ev:?}"
+    );
+    assert!(!ev.iter().any(|e| matches!(e, TabEvent::Activate(_))));
+}
+
+#[test]
+fn in_a_strip_that_fits_a_horizontal_touch_drag_reorders_as_a_mouse_drag_does() {
+    let mut touch = strip_ready(500.0, 3);
+    let seen = swipe(&mut touch, (70.0, 56.0), (240.0, 56.0), |h| {
+        strip_frame(h, 500.0, 3)
+    });
+    let t = events(&seen);
+    assert!(
+        t.iter()
+            .any(|e| matches!(e, TabEvent::Reorder { from: 0, .. })),
+        "{t:?}"
+    );
+    let mut mouse = strip_ready(500.0, 3);
+    mouse.input.pointer_to(70.0, 56.0).press(P);
+    let mut m = vec![strip_frame(&mut mouse, 500.0, 3)];
+    for k in 1..=3 {
+        mouse.input.pointer_to(70.0 + 170.0 * k as f32 / 3.0, 56.0);
+        m.push(strip_frame(&mut mouse, 500.0, 3));
+    }
+    mouse.input.release(P);
+    m.push(strip_frame(&mut mouse, 500.0, 3));
+    let reorder = |v: &[TabEvent]| {
+        v.iter()
+            .find(|e| matches!(e, TabEvent::Reorder { .. }))
+            .cloned()
+    };
+    assert_eq!(reorder(&t), reorder(&events(&m)));
 }

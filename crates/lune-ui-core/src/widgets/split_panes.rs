@@ -25,7 +25,7 @@
 use std::hash::Hash;
 
 use crate::access::{AccessValue, Action, Node, Role, State, Value};
-use crate::input::{CursorIcon, FocusEvent, Key, NamedKey};
+use crate::input::{CursorIcon, FocusEvent, Key, NamedKey, PointerKind};
 use crate::layout::Axis;
 use crate::motion::{Kind, Motion};
 use crate::paint::Rect;
@@ -284,8 +284,13 @@ impl Ui<'_> {
         let mut next = before;
         let mut restore = None;
         // The release frame counts: the event carries the pointer's last move.
-        let following =
-            peeked.pressed || peeked.press_started || peeked.clicked || peeked.drag_stopped;
+        // Under a finger the strip follows a drag from the slop on, not the press: a pan that
+        // scrolls the area under it leaves the size alone (D362).
+        let following = if self.pointer_kind() == PointerKind::Touch {
+            peeked.drag_started || peeked.dragged || peeked.drag_stopped
+        } else {
+            peeked.pressed || peeked.press_started || peeked.clicked || peeked.drag_stopped
+        };
         if let Some(mut grab) = self.transient::<Hold>(hold).0.filter(|_| peeked.enabled) {
             // An Escape that came before the release of this frame counts: the key keeps the
             // press it arrived under (`consume_key_while_pressed`).
@@ -375,6 +380,12 @@ impl Ui<'_> {
         });
         // The strip registers after the panes, in the place the panes were drawn for.
         let mut r = self.interact(id, at.hit, SENSE);
+        // The strip drags along its split axis only (D362): across it, a pan scrolls the area.
+        self.set_drag_axes(
+            id,
+            opts.axis == Axis::Horizontal,
+            opts.axis == Axis::Vertical,
+        );
 
         // An accessibility set-value arrives with the region's reading, which a pane drawn
         // before it cannot see: the panes drew `next`, and a different final size catches up.

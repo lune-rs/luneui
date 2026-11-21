@@ -184,6 +184,19 @@ fn a_clear_settles_to_idle() {
     assert_eq!(frame(&mut h, &mut text).repaint, Repaint::Idle);
 }
 
+/// A finger asks for focus at the tap, so a press that goes on to pan raises no keyboard (D362).
+#[test]
+fn a_touch_on_the_surface_outside_the_field_focuses_it_on_the_tap() {
+    let mut text = String::new();
+    let mut h = start(&mut text);
+    h.input.touch_start(1, ON_ICON.0, ON_ICON.1);
+    frame(&mut h, &mut text);
+    assert_eq!(frame(&mut h, &mut text).focused, None, "not on the press");
+    h.input.touch_end(1, ON_ICON.0, ON_ICON.1);
+    frame(&mut h, &mut text);
+    assert_eq!(frame(&mut h, &mut text).focused, Some(id()), "on the tap");
+}
+
 #[test]
 fn a_press_on_the_surface_outside_the_field_focuses_the_field() {
     let mut text = String::new();

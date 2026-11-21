@@ -23,7 +23,7 @@ use super::text_lines::range_boxes;
 use crate::access::{AccessValue, Action, Node, Role, State, TextValue, Value};
 use crate::color::{Rgba, premul};
 use crate::icon;
-use crate::input::{CursorIcon, FocusEvent, ImeEvent, Key, Modifiers, NamedKey};
+use crate::input::{CursorIcon, FocusEvent, ImeEvent, Key, Modifiers, NamedKey, PointerKind};
 use crate::motion::{Kind, Lerp, Motion};
 use crate::paint::{Painter, Rect};
 use crate::text::{CaretPos, Font, LineSpan, Spec, Style, TextSystem, Unit};
@@ -1094,7 +1094,9 @@ impl Ui<'_> {
         let clearable = opts.variant == Variant::Search && r.enabled && !opts.read_only;
         if clearable && !text.is_empty() {
             let c = self.interact(id.with("clear"), clear_rect, Sense::CLICK);
-            if c.press_started || c.clicked {
+            // A finger clears at the tap, so a press that turns into a pan clears nothing (D362).
+            let pressed = c.press_started && self.pointer_kind() != PointerKind::Touch;
+            if pressed || c.clicked {
                 // While composing the engine refuses both, as it does any press.
                 apply(self, &cfg, &mut st.edit, text, EditCommand::SelectAll);
                 let out = apply(
