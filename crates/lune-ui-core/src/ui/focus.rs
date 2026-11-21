@@ -183,12 +183,18 @@ impl Ui<'_> {
 
     /// Whether `id` is under an overlay it opened that has the key focus, as a touch's edit menu
     /// does (D364): the focused widget is in an active overlay whose saved focus is `id`, or in
-    /// one whose saved focus is in such an overlay, and the last press was a touch. A text widget
-    /// that is held this way keeps its selection, its handles and its edit actions, because focus
-    /// returns to it when the overlay closes. A mouse never holds: its focus loss ends them as
-    /// before. False in a disabled scope.
+    /// one whose saved focus is in such an overlay, and that overlay (the one whose saved focus
+    /// is `id`) opened under a touch. A text widget that is held this way keeps its selection,
+    /// its handles and its edit actions, because focus returns to it when the overlay closes.
+    /// How the overlay opened decides, not the latest press (D368): a mouse click on a row of a
+    /// menu a finger opened keeps the hold, so the row under the pointer is the row it picks. An
+    /// overlay a mouse opened never holds: that focus loss ends them as before. False in a
+    /// disabled scope.
     pub(crate) fn held_by_overlay(&self, id: WidgetId) -> bool {
-        if !self.enabled || self.pointer_kind() != crate::input::PointerKind::Touch {
+        // No overlay a touch opened, none holds: the common case (every mouse-only frame) skips
+        // the walk over the hits.
+        let touch_opened = |o: &super::overlay::OverlayRec| o.active() && o.opened_by_touch;
+        if !self.enabled || !self.store.overlays.iter().any(touch_opened) {
             return false;
         }
         let tag_of = |w: WidgetId| {
@@ -215,7 +221,7 @@ impl Ui<'_> {
                 return false;
             };
             match rec.saved_focus {
-                Some(s) if s == id => return true,
+                Some(s) if s == id => return rec.opened_by_touch,
                 Some(s) => at = s,
                 None => return false,
             }

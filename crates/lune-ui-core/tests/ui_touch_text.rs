@@ -5,6 +5,7 @@
 //! run through the same rules; selectable text has its two cases. Scripted time and touches
 //! through `UiHarness`; nothing here reads a clock.
 
+use lune_ui_core::access::Role;
 use lune_ui_core::code_doc::CodeDoc;
 use lune_ui_core::input::{
     ClipboardRequest, FrameOutput, ImeEvent, Key, Modifiers, NamedKey, PointerButton,
@@ -1131,6 +1132,173 @@ fn a_real_edit_menu_keeps_positioned_selectable_text_selected_and_copy_writes_th
     let text = "alpha beta gamma";
     let at = (20.0 + GLYPH * 7.0 + 1.0, 40.0);
     selectable_with_menu(text, text, at);
+}
+
+// A menu a finger opened, picked with a mouse (mixed input, D368): the hold is the menu's,
+// set when it opened, so the mouse press on a row keeps the selection and the row under it.
+
+/// With the app's menu open from a long press (the lift at 700 ms), moves the mouse onto its
+/// Copy row after the guard and clicks it: on the press frame the menu still offers Copy at the
+/// same place and the text still holds a selection; the release picks Copy; returns what was
+/// written to the clipboard until the menu has gone.
+fn mouse_clicks_copy(
+    h: &mut UiHarness,
+    app: &mut AppMenu,
+    id: WidgetId,
+    draw: &mut dyn FnMut(&mut Ui<'_>) -> Response,
+    what: &str,
+) -> Vec<ClipboardRequest> {
+    let copy_row = |out: &FrameOutput| {
+        out.tree
+            .nodes
+            .iter()
+            .find(|n| n.role == Role::MenuItem && n.name == "Copy")
+            .map(|n| n.bounds)
+    };
+    // Past the guard that drops a touch's mouse copy (500 ms after the lift at 700).
+    h.at_ms(1300);
+    let (_, out, ..) = app.frame(h, id, draw);
+    let row = copy_row(&out).unwrap_or_else(|| panic!("{what}: the menu shows Copy"));
+    let (x, y) = centre(row);
+    h.at_ms(1320).input.pointer_to(x, y);
+    app.frame(h, id, draw);
+    h.at_ms(1340).input.press(P);
+    let (_, out, actions, cmd) = app.frame(h, id, draw);
+    assert!(
+        actions.expect("the menu is open on the press").copy,
+        "{what}: the mouse press keeps the menu's Copy"
+    );
+    assert_eq!(
+        copy_row(&out),
+        Some(row),
+        "{what}: the Copy row stays under the mouse"
+    );
+    let n = out.tree.get(id).and_then(|n| n.text.as_ref());
+    assert!(
+        n.is_some_and(|t| t.selection.0 != t.selection.1),
+        "{what}: the selection is held on the press frame"
+    );
+    assert_eq!(cmd, None, "{what}: nothing picked on the press");
+    h.at_ms(1380).input.release(P);
+    let (_, out, _, cmd) = app.frame(h, id, draw);
+    assert_eq!(
+        cmd,
+        Some(EditCommand::Copy),
+        "{what}: the release picks Copy"
+    );
+    let mut written = out.clipboard;
+    for k in 0..3 {
+        h.at_ms(1400 + 100 * k);
+        let (_, o, ..) = app.frame(h, id, draw);
+        written.extend(o.clipboard);
+    }
+    assert!(!app.open, "{what}: the pick closes the menu");
+    written
+}
+
+#[test]
+fn a_mouse_click_on_copy_in_a_menu_a_finger_opened_copies_on_every_editor() {
+    for kind in KINDS {
+        let mut e = Edit::new(kind);
+        let id = e.id();
+        let mut h = ready(&mut e);
+        let mut app = AppMenu::default();
+        let at = e.at(1);
+        let mut draw = |ui: &mut Ui<'_>| e.draw(ui);
+        h.at_ms(0).input.touch_start(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        h.at_ms(600);
+        let (r, out, ..) = app.frame(&mut h, id, &mut draw);
+        assert!(r.secondary_clicked && app.open, "{kind:?}");
+        assert_eq!(range(&out, id), (0, 5), "{kind:?}");
+        h.at_ms(700).input.touch_end(1, at.0, at.1);
+        app.frame(&mut h, id, &mut draw);
+        let what = format!("{kind:?}");
+        let written = mouse_clicks_copy(&mut h, &mut app, id, &mut draw, &what);
+        assert_eq!(
+            written,
+            [ClipboardRequest::Write("hello".to_owned())],
+            "{kind:?}: the mouse's Copy writes the selection"
+        );
+    }
+}
+
+/// The selectable text case of the mixed pick: a long press at `at` on `shown` over `full`, the
+/// lift, then the mouse clicks Copy.
+fn selectable_mouse_copy(shown: &str, full: &str, at: (f32, f32)) {
+    let mut h = UiHarness::new(WIN);
+    let mut app = AppMenu::default();
+    let spec = Spec::plain(shown, Style::ui(13.0, DARK.fg_primary));
+    let mut draw = |ui: &mut Ui<'_>| ui.selectable_text("s", VALUE, &spec, full);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(0).input.touch_start(1, at.0, at.1);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(600);
+    let (r, ..) = app.frame(&mut h, sel_id(), &mut draw);
+    assert!(r.secondary_clicked && app.open);
+    h.at_ms(700).input.touch_end(1, at.0, at.1);
+    app.frame(&mut h, sel_id(), &mut draw);
+    let written = mouse_clicks_copy(&mut h, &mut app, sel_id(), &mut draw, full);
+    assert_eq!(written, [ClipboardRequest::Write(copied(full, shown))]);
+}
+
+#[test]
+fn a_mouse_click_on_copy_in_a_menu_a_finger_opened_copies_whole_selectable_text() {
+    selectable_mouse_copy("ab\u{2026}", "abcdef", (24.0, 40.0));
+}
+
+#[test]
+fn a_mouse_click_on_copy_in_a_menu_a_finger_opened_copies_the_positioned_word() {
+    let text = "alpha beta gamma";
+    let at = (20.0 + GLYPH * 7.0 + 1.0, 40.0);
+    selectable_mouse_copy(text, text, at);
+}
+
+#[test]
+fn a_menu_a_mouse_opened_does_not_hold_when_a_finger_then_presses_it() {
+    // The converse: the hold is decided when the menu opens, so a finger landing on a menu the
+    // mouse opened does not bring the selection back; the focus loss ends it as a mouse's does.
+    let (shown, full) = ("ab\u{2026}", "abcdef");
+    let mut h = UiHarness::new(WIN);
+    let mut app = AppMenu {
+        done_row: true,
+        ..AppMenu::default()
+    };
+    let spec = Spec::plain(shown, Style::ui(13.0, DARK.fg_primary));
+    let mut draw = |ui: &mut Ui<'_>| ui.selectable_text("s", VALUE, &spec, full);
+    let drawn = |out: &FrameOutput| {
+        out.tree
+            .get(sel_id())
+            .and_then(|n| n.text.as_ref())
+            .expect("a text node")
+            .selection
+    };
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(0).input.pointer_to(24.0, 40.0);
+    app.frame(&mut h, sel_id(), &mut draw);
+    h.at_ms(20).input.click(P);
+    let (_, out, ..) = app.frame(&mut h, sel_id(), &mut draw);
+    assert_eq!(drawn(&out), (0, 6), "a mouse press selects the whole text");
+    h.at_ms(100).input.click(PointerButton::Secondary);
+    let (r, out, ..) = app.frame(&mut h, sel_id(), &mut draw);
+    assert!(r.secondary_clicked && app.open, "the mouse opens the menu");
+    let done = out
+        .tree
+        .nodes
+        .iter()
+        .find(|n| n.role == Role::MenuItem && n.name == "Done")
+        .map(|n| n.bounds)
+        .expect("the menu shows Done");
+    // The next frame the menu has the key focus; a finger lands on its Done row.
+    let (x, y) = centre(done);
+    h.at_ms(200).input.touch_start(1, x, y);
+    let (_, out, actions, cmd) = app.frame(&mut h, sel_id(), &mut draw);
+    assert_eq!(cmd, None);
+    assert!(
+        !actions.expect("the menu is open on the press").copy,
+        "a menu the mouse opened offers no Copy, whatever presses it"
+    );
+    assert_eq!(drawn(&out), (0, 0), "nor is the selection drawn");
 }
 
 #[test]
