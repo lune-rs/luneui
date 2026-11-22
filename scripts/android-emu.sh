@@ -11,7 +11,8 @@
 #                   `wm density` to target/android-emu/probe.txt.
 #   --build-only    build and package the APK and stop (no emulator, no AVD): the local link check.
 #   --demo-arg <a>  pass one more argument to the demo (repeatable), e.g. --focus-field.
-#   --keep-booted   leave the emulator booted at the end (and reuse one this script left on the port).
+#   --keep-booted   leave the emulator booted at the end (a later run reuses it, and shuts it down
+#                   unless it too has --keep-booted).
 #   --delete-device shut down and delete the AVD named below, then exit.
 # Packaging (D420) uses only the installed SDK, no Gradle and no cargo-apk: `cargo rustc --crate-type
 # cdylib` with the NDK's clang as linker, `aapt2 link` of apps/demo/android/AndroidManifest.xml (no
@@ -284,6 +285,8 @@ if [ -z "$on_port" ]; then
   echo "android-emu: booted in $((SECONDS - boot_start)) s"
 else
   echo "android-emu: reusing $AVD on $SERIAL"
+  # An emulator of this script's own AVD left by --keep-booted is this script's to shut down too.
+  booted_by_us=1
 fi
 adb_s shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
 adb_s shell wm dismiss-keyguard >/dev/null 2>&1 || true
