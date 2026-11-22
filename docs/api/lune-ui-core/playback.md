@@ -16,9 +16,10 @@ time to [`Player::advance`](playback.md#method.Player.advance), which appends th
 and the time the player needs the next frame at (give it to
 [`Ui::request_repaint_at`](ui.md#method.Ui.request_repaint_at)).
 
-The marks are returned in the same call as the events up to them, and the events reach the
-widgets only in the frame that reads them, so an app checks what a mark names on the frame after
-the one that got it.
+The marks are returned in the same call as the events up to them. An app calls
+[`Player::advance`](playback.md#method.Player.advance) before [`Ui::begin`](ui.md#method.Ui.begin), so the frame that follows reads
+those events and the state after that frame's draw reflects them: check what a mark names
+there, on the frame it passes.
 
 [`draw_touches`](playback.md#fn.draw_touches) draws a disc under each scripted contact, for a recording; it is opt-in and is
 written with public painter calls only, so an app could draw its own.
@@ -55,7 +56,7 @@ pub struct Advance {
 
 What one [`Player::advance`](playback.md#method.Player.advance) call found.
 
-Source: `crates/lune-ui-core/src/playback.rs:217`
+Source: `crates/lune-ui-core/src/playback.rs:218`
 
 **Fields**
 
@@ -100,7 +101,7 @@ pub struct Contact {
 
 A scripted contact as [`draw_touches`](playback.md#fn.draw_touches) sees it.
 
-Source: `crates/lune-ui-core/src/playback.rs:233`
+Source: `crates/lune-ui-core/src/playback.rs:234`
 
 **Fields**
 
@@ -141,7 +142,7 @@ Plays a [`Script`](playback.md#struct.Script) against the app's time. It latches
 [`Self::advance`](playback.md#method.Player.advance), not at construction, so a first frame that comes late starts the script
 when it comes.
 
-Source: `crates/lune-ui-core/src/playback.rs:257`
+Source: `crates/lune-ui-core/src/playback.rs:258`
 
 **Methods and associated items**
 
@@ -200,7 +201,7 @@ pub struct Script {
 A list of timed cues built by a cursor: touch gestures, raw events and named marks. Each
 builder method starts at the cursor and returns `&mut Self`, so calls chain.
 
-Source: `crates/lune-ui-core/src/playback.rs:79`
+Source: `crates/lune-ui-core/src/playback.rs:80`
 
 **Methods and associated items**
 
@@ -276,7 +277,7 @@ contacts only; a live finger is the OS's own setting. It draws on [`LayerId::Toa
 frame at the top level, outside any clip. It asks for no frame: [`Advance::next`](playback.md#structfield.Advance.next) carries the
 end of the fade.
 
-Source: `crates/lune-ui-core/src/playback.rs:493`
+Source: `crates/lune-ui-core/src/playback.rs:494`
 
 ## Constants
 
@@ -290,7 +291,7 @@ pub const DRAG_SETTLE: std::time::Duration;
 How long a [`Script::drag`](playback.md#method.Script.drag) holds still at its end point before the lift, so the release
 velocity reads zero and nothing flings.
 
-Source: `crates/lune-ui-core/src/playback.rs:50`
+Source: `crates/lune-ui-core/src/playback.rs:51`
 
 <a id="constant.FADE"></a>
 ### Constant `FADE`
@@ -301,7 +302,7 @@ pub const FADE: std::time::Duration;
 
 How long a lifted contact fades out in [`draw_touches`](playback.md#fn.draw_touches) at [`MotionTier::Full`](motion.md#variant.MotionTier.Full).
 
-Source: `crates/lune-ui-core/src/playback.rs:53`
+Source: `crates/lune-ui-core/src/playback.rs:54`
 
 <a id="constant.SAMPLE"></a>
 ### Constant `SAMPLE`
@@ -312,7 +313,7 @@ pub const SAMPLE: std::time::Duration;
 
 The spacing of the samples a gesture expands into: 8 ms, 120 Hz.
 
-Source: `crates/lune-ui-core/src/playback.rs:43`
+Source: `crates/lune-ui-core/src/playback.rs:44`
 
 <a id="constant.TAP_HOLD"></a>
 ### Constant `TAP_HOLD`
@@ -323,7 +324,7 @@ pub const TAP_HOLD: std::time::Duration;
 
 How long a [`Script::tap`](playback.md#method.Script.tap) holds the finger down: well under the long press.
 
-Source: `crates/lune-ui-core/src/playback.rs:46`
+Source: `crates/lune-ui-core/src/playback.rs:47`
 
 <a id="constant.TOUCH_ID_BASE"></a>
 ### Constant `TOUCH_ID_BASE`
@@ -334,5 +335,5 @@ pub const TOUCH_ID_BASE: u64 = 281_474_976_710_656u64;
 
 The raw identifier of a script's first gesture's contact; the n-th is this plus n.
 
-Source: `crates/lune-ui-core/src/playback.rs:56`
+Source: `crates/lune-ui-core/src/playback.rs:57`
 

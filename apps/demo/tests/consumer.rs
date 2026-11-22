@@ -3,27 +3,62 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 const ALLOWED: [&str; 4] = ["lune-ui", "winit", "wgpu", "pollster"];
 
-/// The dependency names in every `[...dependencies]` table of the manifest.
-fn dependency_names(manifest: &str) -> Vec<String> {
+/// The names of the package's dependencies of every kind and target, as cargo resolves them
+/// (`cargo metadata --no-deps`, offline), so no manifest spelling (a `[dependencies.<name>]`
+/// table, a target table, a trailing comment, a rename) can hide one.
+fn dependency_names(root: &Path) -> Vec<String> {
+    let out = Command::new(env!("CARGO"))
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--no-deps",
+            "--offline",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("run cargo metadata");
+    assert!(out.status.success(), "cargo metadata failed");
+    let json = String::from_utf8(out.stdout).expect("utf-8 metadata");
+    names_in_metadata(&json, "demo")
+}
+
+/// Every dependency `name` of the package called `package` in `cargo metadata` output. The
+/// output is scanned token by token (strings with their escapes, brackets by depth) because the
+/// test may add no JSON crate; it panics when the package or its list is not found.
+fn names_in_metadata(json: &str, package: &str) -> Vec<String> {
+    let head = format!("\"name\":\"{package}\",\"version\"");
+    let start = json.find(&head).expect("the demo package in the metadata");
+    let rest = &json[start..];
+    let key = "\"dependencies\":[";
+    let list = rest.find(key).expect("the dependencies list") + key.len();
+    let bytes = rest.as_bytes();
+    let (mut i, mut depth) = (list, 1usize);
     let mut names = Vec::new();
-    let mut in_deps = false;
-    for line in manifest.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            in_deps = line
-                .trim_matches(|c| c == '[' || c == ']')
-                .ends_with("dependencies");
-            continue;
+    while depth > 0 {
+        match bytes[i] {
+            b'[' | b'{' => depth += 1,
+            b']' | b'}' => depth -= 1,
+            b'"' => {
+                let from = i + 1;
+                i = from;
+                while bytes[i] != b'"' {
+                    i += if bytes[i] == b'\\' { 2 } else { 1 };
+                }
+                let text = &rest[from..i];
+                // A key at the depth of a dependency object's own fields is followed by `:`.
+                if depth == 2 && text == "name" && bytes[i + 1] == b':' {
+                    let value = rest[i + 2..].strip_prefix('"').expect("a string name");
+                    names.push(value[..value.find('"').expect("closing quote")].to_owned());
+                }
+            }
+            _ => {}
         }
-        if in_deps
-            && !line.starts_with('#')
-            && let Some((name, _)) = line.split_once('=')
-        {
-            names.push(name.trim().to_owned());
-        }
+        i += 1;
     }
     names
 }
@@ -42,8 +77,7 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 #[test]
 fn the_manifest_names_only_the_facade_and_the_platform_crates() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let manifest = fs::read_to_string(root.join("Cargo.toml")).expect("manifest");
-    let names = dependency_names(&manifest);
+    let names = dependency_names(root);
     assert!(names.iter().any(|n| n == "lune-ui"), "{names:?}");
     for name in &names {
         assert!(ALLOWED.contains(&name.as_str()), "dependency `{name}`");
@@ -72,4 +106,19 @@ fn no_source_names_a_core_or_test_support_path() {
             );
         }
     }
+}
+
+#[test]
+fn the_metadata_scan_sees_every_kind_and_a_table_form() {
+    let json = concat!(
+        r#"{"packages":[{"name":"other","version":"1","dependencies":[{"name":"x"}]},"#,
+        r#"{"name":"demo","version":"0.1.0","description":"a [b] \"c\"","dependencies":["#,
+        r#"{"name":"lune-ui","req":"*","features":["a","name"]},"#,
+        r#"{"name":"evil","kind":"dev","target":"cfg(target_os = \"ios\")"},"#,
+        r#"{"name":"build-one","kind":"build"}],"targets":[{"name":"demo"}]}]}"#
+    );
+    assert_eq!(
+        names_in_metadata(json, "demo"),
+        ["lune-ui", "evil", "build-one"]
+    );
 }

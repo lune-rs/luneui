@@ -590,7 +590,7 @@ impl Showcase {
             Some(since) if now.saturating_sub(since) >= REFRESH_WORK => {
                 self.refresh_since = None;
                 self.refreshes += 1;
-                let (title, preview) = FRESH[self.refreshes as usize % FRESH.len()];
+                let (title, preview) = FRESH[(self.refreshes as usize - 1) % FRESH.len()];
                 self.rows.insert(
                     0,
                     Row {
@@ -1011,10 +1011,10 @@ pub fn script(l: &Layout) -> Script {
     s.tap(l.tab_item_center(1)).wait(ms(900)).mark("cards");
     let (right, left) = (l.card_point(0.8, 0.5), l.card_point(0.2, 0.5));
     s.wait(BEAT);
-    s.swipe(right, left, ms(170)).wait(ms(1000));
-    s.swipe(right, left, ms(170)).wait(ms(1000)).mark("page-2");
+    s.swipe(right, left, ms(140)).wait(ms(1000));
+    s.swipe(right, left, ms(140)).wait(ms(1000)).mark("page-2");
     s.wait(BEAT);
-    s.swipe(left, right, ms(170)).wait(ms(1000)).mark("page-1");
+    s.swipe(left, right, ms(140)).wait(ms(1000)).mark("page-1");
 
     // Settings: the second switch on, the slider to 80 %.
     s.wait(BEAT);

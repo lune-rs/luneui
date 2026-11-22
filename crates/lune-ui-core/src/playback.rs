@@ -10,9 +10,10 @@
 //! and the time the player needs the next frame at (give it to
 //! [`Ui::request_repaint_at`](crate::ui::Ui::request_repaint_at)).
 //!
-//! The marks are returned in the same call as the events up to them, and the events reach the
-//! widgets only in the frame that reads them, so an app checks what a mark names on the frame after
-//! the one that got it.
+//! The marks are returned in the same call as the events up to them. An app calls
+//! [`Player::advance`] before [`Ui::begin`](crate::ui::Ui::begin), so the frame that follows reads
+//! those events and the state after that frame's draw reflects them: check what a mark names
+//! there, on the frame it passes.
 //!
 //! [`draw_touches`] draws a disc under each scripted contact, for a recording; it is opt-in and is
 //! written with public painter calls only, so an app could draw its own.
