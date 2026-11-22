@@ -409,7 +409,13 @@ launch() {
   adb_s logcat -v raw -s RustStdoutStderr:I >> "$log" 2>/dev/null &
   follower_pid=$!
   adb_s shell am start -W -n "$ACTIVITY" >"$OUT/am-start.log" 2>&1 || { cat "$OUT/am-start.log" >&2; fail "am start"; }
-  grep -q '^Status: ok' "$OUT/am-start.log" || { cat "$OUT/am-start.log" >&2; fail "am start did not report Status: ok"; }
+  # `am start -W` gives up waiting after about 10 s with `Status: timeout` when the emulator is busy right
+  # after a boot; the app may still come up, so only an error answer fails here and `presented 1` decides.
+  if grep -q '^Status: timeout' "$OUT/am-start.log"; then
+    echo "android-emu: am start -W timed out; waiting for the first frame anyway"
+  else
+    grep -q '^Status: ok' "$OUT/am-start.log" || { cat "$OUT/am-start.log" >&2; fail "am start did not report Status: ok"; }
+  fi
   if ! wait_line "$log" "^presented 1 " 120; then
     dump_logcat
     echo "--- stdout (tail) ---" >&2
