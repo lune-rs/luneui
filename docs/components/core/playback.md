@@ -71,7 +71,7 @@ None.
 
 ### Gallery scenes
 
-None: not a widget; the demo app's `--demo` plays a script of it end to end (M7 steps 2 to 4).
+n/a — not a widget; the demo app's `--demo` plays a script of it end to end (M7 steps 2 to 4).
 
 ### Painter primitives
 
