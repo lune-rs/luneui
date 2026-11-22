@@ -99,13 +99,13 @@ struct Screen {
 }
 
 /// The Android emulator's pixel_7 as `scripts/android-emu.sh --probe` reads it (M8 step 0, reading
-/// 4): a 1080x2400 window at scale 2.625 and the content rect `0,283,1080,2337`, so a status bar
-/// inset of 283 px and a gesture bar inset of 63 px.
+/// 4): a 1080x2400 window at scale 2.625 and the content rect `0,136,1080,2337`, so a status bar
+/// inset of 136 px and a gesture bar inset of 63 px.
 const EMULATOR_SCALE: f32 = 2.625;
 const EMULATOR: Screen = Screen {
     window: (1080.0 / EMULATOR_SCALE, 2400.0 / EMULATOR_SCALE),
     scale: EMULATOR_SCALE,
-    safe: Insets::new(0.0, 283.0 / EMULATOR_SCALE, 0.0, 63.0 / EMULATOR_SCALE),
+    safe: Insets::new(0.0, 136.0 / EMULATOR_SCALE, 0.0, 63.0 / EMULATOR_SCALE),
 };
 
 fn layouts() -> [(&'static str, Screen); 3] {

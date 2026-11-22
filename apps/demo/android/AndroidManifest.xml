@@ -13,11 +13,14 @@
 
         <!-- singleTask: a second activity instance would call android_main again in the same process,
              and winit's event loop cannot be built twice. configChanges: rotation and the keyboard
-             never recreate the activity. adjustResize: the content rect shrinks with the soft keyboard. -->
+             never recreate the activity. adjustResize: the content rect shrinks with the soft keyboard.
+             theme: NoActionBar, or the default action bar sits above the content view and the content rect's
+             top holds its 56 dp of blank band. -->
         <activity
             android:name="android.app.NativeActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale"
             android:windowSoftInputMode="adjustResize|stateHidden">
             <meta-data android:name="android.app.lib_name" android:value="demo" />
