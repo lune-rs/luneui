@@ -11,6 +11,7 @@
 
 use std::time::Duration;
 
+use lune_ui::color::with_alpha_byte;
 use lune_ui::icon;
 use lune_ui::input::{Event, FrameOutput, RawInput, keymap};
 use lune_ui::layout::Insets;
@@ -48,6 +49,11 @@ pub const CARDS: usize = 5;
 /// The room the pager's dots take below a card, and the gap above a card.
 const DOTS_ROOM: f32 = 36.0;
 const CARD_GAP: f32 = 12.0;
+/// A card's disc, its title and its line: sizes of the centred group, and the tint's alpha.
+const CARD_DISC: f32 = 64.0;
+const CARD_TITLE_H: f32 = 28.0;
+const CARD_LINE_H: f32 = 22.0;
+const CARD_TINT: u8 = 0x1A;
 /// A settings row's height, and the slider row's.
 const SETTINGS_ROW: f32 = 52.0;
 const SLIDER_ROW: f32 = 76.0;
@@ -732,25 +738,30 @@ impl Showcase {
                     card.w,
                     card.h,
                 );
+                // Card 0 is the accent's; the others are the status tones.
+                let (ink, tint) = if i == 0 {
+                    (t.accent, with_alpha_byte(t.accent, CARD_TINT))
+                } else {
+                    (tone.color(&t), tone.fill(&t))
+                };
                 let p = ui.painter();
                 p.fill(c, 16.0, t.surface_overlay);
+                p.fill(c, 16.0, tint);
                 p.ring(c, 16.0, 1.0, t.border_subtle, false);
-                let disc = Rect::new(c.x + MARGIN, c.y + MARGIN, 44.0, 44.0);
-                p.fill(disc, 22.0, tone.color(&t));
+                // The disc, the title and the line, centred as one group in the card.
+                let room = c.w - 2.0 * MARGIN;
+                let group = CARD_DISC + 16.0 + CARD_TITLE_H + 16.0 + CARD_LINE_H;
+                let top = c.y + (c.h - group) / 2.0;
+                let disc = Rect::new(c.x + (c.w - CARD_DISC) / 2.0, top, CARD_DISC, CARD_DISC);
+                p.fill(disc, CARD_DISC / 2.0, ink);
                 let title = Spec::plain(title, Style::ui(t.font_title, t.fg_primary).bold());
-                let title = p.elide(&title, c.w - 2.0 * MARGIN);
-                p.text_in(
-                    &title,
-                    Rect::new(c.x + MARGIN, c.y + MARGIN + 60.0, c.w - 2.0 * MARGIN, 28.0),
-                    0.0,
-                );
+                let title = p.elide(&title, room);
+                let y = top + CARD_DISC + 16.0;
+                p.text_centered(&title, Rect::new(c.x + MARGIN, y, room, CARD_TITLE_H));
                 let line = Spec::plain(line, Style::ui(t.font_m, t.fg_secondary));
-                let line = p.elide(&line, c.w - 2.0 * MARGIN);
-                p.text_in(
-                    &line,
-                    Rect::new(c.x + MARGIN, c.y + MARGIN + 92.0, c.w - 2.0 * MARGIN, 22.0),
-                    0.0,
-                );
+                let line = p.elide(&line, room);
+                let y = y + CARD_TITLE_H + 16.0;
+                p.text_centered(&line, Rect::new(c.x + MARGIN, y, room, CARD_LINE_H));
             },
         );
         ui.nav_bar("bar", l.nav_bar, &NavBar::new("Cards"));
@@ -791,9 +802,16 @@ impl Showcase {
             Rect::new(third.x + MARGIN, third.y + 8.0, third.w - 80.0, 28.0),
             0.0,
         );
+        // The value's right edge is the toggles': measured, then placed.
+        let (value_w, _) = p.measure(&value);
         p.text_in(
             &value,
-            Rect::new(third.right() - MARGIN - 56.0, third.y + 8.0, 56.0, 28.0),
+            Rect::new(
+                third.right() - MARGIN - value_w,
+                third.y + 8.0,
+                value_w,
+                28.0,
+            ),
             0.0,
         );
         let opts = SliderOptions {
