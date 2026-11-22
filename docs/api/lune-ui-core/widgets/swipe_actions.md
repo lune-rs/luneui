@@ -23,7 +23,8 @@ content.
   proportion to their widths, so the outermost always touches the window edge. A button is at
   least 74 px wide, as wide as its label and 12 px on each side, and as tall as the row.
 * With [`SwipeActions::full_swipe`](swipe_actions.md#structfield.SwipeActions.full_swipe) the pull continues past the open width; a lift with more
-  than 60 % of the row's width uncovered springs to the full width, the edge's outermost
+  than 60 % of the row's width uncovered, and more than 24 px beyond the edge's open width
+  (so on a narrow row the open rest position is never a full swipe), springs to the full width, the edge's outermost
   button stretching across the row, and reports that button when it arrives. The row then
   closes.
 * A tap on a button reports it and closes the row. While the row is open, a press on its
@@ -53,7 +54,7 @@ pub struct SwipeAction<'a> {
 
 One button of an edge.
 
-Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:59`
+Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:63`
 
 **Fields**
 
@@ -108,7 +109,7 @@ pub struct SwipeActions<'a> {
 
 The buttons of a row, by edge.
 
-Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:97`
+Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:101`
 
 **Fields**
 
@@ -172,7 +173,7 @@ pub struct SwipeResponse<R> {
 
 What a frame of [`Ui::swipe_actions`](../ui.md#method.Ui.swipe_actions) reports.
 
-Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:160`
+Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:164`
 
 **Fields**
 
@@ -213,7 +214,7 @@ pub enum SwipeEdge {
 
 An edge of the row.
 
-Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:150`
+Source: `crates/lune-ui-core/src/widgets/swipe_actions.rs:154`
 
 **Variants**
 

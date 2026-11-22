@@ -69,6 +69,8 @@ struct Rig {
     h: UiHarness,
     ms: u64,
     rows: usize,
+    /// The rows' width.
+    row_w: f32,
     full: bool,
     leading: bool,
     trailing: bool,
@@ -120,6 +122,7 @@ impl Rig {
             h: UiHarness::new(WIN),
             ms: 0,
             rows,
+            row_w: 400.0,
             full: false,
             leading: true,
             trailing: true,
@@ -133,8 +136,9 @@ impl Rig {
         self.ms += 16;
         self.h.at_ms(self.ms);
         let mut seen = Seen::default();
-        let (rows, a, disabled) = (
+        let (rows, row_w, a, disabled) = (
             self.rows,
+            self.row_w,
             actions(self.leading, self.trailing, self.full),
             self.disabled,
         );
@@ -143,11 +147,15 @@ impl Rig {
                 for i in 0..rows {
                     let mut body = Vec::new();
                     let mut got = Rect::new(0.0, 0.0, 0.0, 0.0);
-                    let res: SwipeResponse<()> =
-                        ui.swipe_actions(("swipe", i), row_rect(i), &a, |ui, r| {
+                    let res: SwipeResponse<()> = ui.swipe_actions(
+                        ("swipe", i),
+                        Rect::new(0.0, TOP + ROW_H * i as f32, row_w, ROW_H),
+                        &a,
+                        |ui, r| {
                             got = r;
                             content(ui, i, r, &mut body);
-                        });
+                        },
+                    );
                     seen.action.push(res.action);
                     seen.open.push(res.open);
                     seen.context.push(res.context);
@@ -463,6 +471,43 @@ fn a_full_swipe_short_of_60_percent_opens_and_reports_nothing() {
     for _ in 0..60 {
         assert!(rig.frame().action[0].is_none());
     }
+}
+
+/// On a row narrower than the buttons' total over 60 %, the open rest position is past 60 % of
+/// the row: a lift there opens the row, it is not a full swipe. A pull past the buttons by the
+/// margin still is.
+#[test]
+fn on_a_narrow_row_a_lift_at_the_open_width_opens_and_is_not_a_full_swipe() {
+    for pull in [3u32, 4, 5] {
+        // 30 px a frame: 90, 120 and 150 px of a 220 px row whose buttons total over 132 (60 %).
+        let mut rig = Rig::new(1);
+        rig.full = true;
+        rig.row_w = 220.0;
+        let p = rig.drag((215.0, FINGER_Y), (-30.0, 0.0), pull);
+        let s = rig.lift_after_rest(p, 10);
+        for _ in 0..90 {
+            assert!(
+                rig.frame().action[0].is_none(),
+                "no action on a {} px pull",
+                30 * pull
+            );
+        }
+        let end = rig.run(600);
+        assert_eq!(s.open[0].or(end.open[0]), Some(SwipeEdge::Trailing));
+        assert!(end.left(0) < -100.0, "rests open: {}", end.left(0));
+        assert!(end.action[0].is_none());
+    }
+    // A pull far past the buttons is still a full swipe on the same row.
+    let mut rig = Rig::new(1);
+    rig.full = true;
+    rig.row_w = 220.0;
+    let p = rig.drag((215.0, FINGER_Y), (-30.0, 0.0), 7);
+    rig.lift_after_rest(p, 10);
+    let mut got = None;
+    for _ in 0..120 {
+        got = got.or(rig.frame().action[0]);
+    }
+    assert_eq!(got, Some((SwipeEdge::Trailing, 1)));
 }
 
 #[test]

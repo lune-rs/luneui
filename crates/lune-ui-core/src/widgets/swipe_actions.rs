@@ -17,7 +17,8 @@
 //!   proportion to their widths, so the outermost always touches the window edge. A button is at
 //!   least 74 px wide, as wide as its label and 12 px on each side, and as tall as the row.
 //! * With [`SwipeActions::full_swipe`] the pull continues past the open width; a lift with more
-//!   than 60 % of the row's width uncovered springs to the full width, the edge's outermost
+//!   than 60 % of the row's width uncovered, and more than 24 px beyond the edge's open width
+//!   (so on a narrow row the open rest position is never a full swipe), springs to the full width, the edge's outermost
 //!   button stretching across the row, and reports that button when it arrives. The row then
 //!   closes.
 //! * A tap on a button reports it and closes the row. While the row is open, a press on its
@@ -50,6 +51,9 @@ const GLYPH: f32 = 20.0;
 const GLYPH_GAP: f32 = 2.0;
 /// The part of the row's width past which a lift is a full swipe.
 const FULL: f32 = 0.6;
+/// The room a full swipe needs past an edge's open width: the pull is a full swipe only past this
+/// much beyond the buttons' total, so a lift at the open rest position never is one.
+const FULL_MARGIN: f32 = 24.0;
 /// The alpha of the shade a pressed button takes.
 const PRESS_SHADE: u8 = 0x40;
 
@@ -218,10 +222,18 @@ fn natural(ui: &mut Ui<'_>, items: &[SwipeAction<'_>]) -> Vec<f32> {
         .collect()
 }
 
+/// The uncovered width past which a lift is a full swipe, for an edge whose buttons total
+/// `total` on a row `row_w` wide: 60 % of the row, and at least `FULL_MARGIN` past the open
+/// width (on a row where the buttons are most of it, the open rest position is not a full swipe).
+/// At or past `row_w` there is no full swipe.
+fn full_at(total: f32, row_w: f32) -> f32 {
+    (FULL * row_w).max(total + FULL_MARGIN)
+}
+
 /// The widths the buttons of an edge show when `r` px of it are uncovered, in screen order
 /// (`outer` is the outermost's index): in proportion to their natural widths up to the total,
 /// beyond it the outermost takes what is left, and with `full` the others narrow to nothing at
-/// 60 % of `row_w`.
+/// [`full_at`].
 fn shown_widths(natural: &[f32], outer: usize, r: f32, row_w: f32, full: bool) -> Vec<f32> {
     let total: f32 = natural.iter().sum();
     if total <= 0.0 {
@@ -230,7 +242,7 @@ fn shown_widths(natural: &[f32], outer: usize, r: f32, row_w: f32, full: bool) -
     if r <= total {
         return natural.iter().map(|w| w * r / total).collect();
     }
-    let edge = FULL * row_w;
+    let edge = full_at(total, row_w);
     let keep = if !full || edge <= total {
         if full { 0.0 } else { 1.0 }
     } else {
@@ -361,9 +373,9 @@ impl Ui<'_> {
                 let (shown, _) = st.track.at(now, b.lo, b.hi, b.extent);
                 let full = if !actions.full_swipe {
                     None
-                } else if shown > FULL * w && trail_sum > 0.0 {
+                } else if trail_sum > 0.0 && shown > full_at(trail_sum, w) {
                     Some(SwipeEdge::Trailing)
-                } else if shown < -FULL * w && lead_sum > 0.0 {
+                } else if lead_sum > 0.0 && shown < -full_at(lead_sum, w) {
                     Some(SwipeEdge::Leading)
                 } else {
                     None
@@ -576,6 +588,22 @@ mod tests {
         let mid = shown_widths(&[80.0, 120.0], 1, 220.0, 400.0, true);
         assert!((mid.iter().sum::<f32>() - 220.0).abs() < 1e-3);
         assert!(mid[0] > 0.0 && mid[0] < 80.0);
+    }
+
+    #[test]
+    fn the_full_swipe_point_is_past_the_open_width_on_a_narrow_row() {
+        // A wide row: 60 % of it. A narrow one, where the buttons are most of it: the margin past
+        // them, so the open width is never past the point.
+        assert!((full_at(148.0, 400.0) - 240.0).abs() < 1e-3);
+        assert_eq!(full_at(148.0, 220.0), 172.0);
+        let w = shown_widths(&[74.0, 74.0], 1, 148.0, 220.0, true);
+        assert_eq!(
+            w,
+            vec![74.0, 74.0],
+            "the open width shows the buttons whole"
+        );
+        let w = shown_widths(&[74.0, 74.0], 1, 172.0, 220.0, true);
+        assert_eq!(w[0], 0.0);
     }
 
     #[test]
