@@ -293,9 +293,10 @@ impl<'a> Ui<'a> {
             let goal = if live.closing { 0.0 } else { 1.0 };
             self.animate_f32(fade_id, goal, &drawer)
         });
+        // A fade-only close ends when the fade does: a finger that held the sheet at the close
+        // leaves the track on `Follow` with no target, and nothing is drawn but the fade.
         if live.closing
-            && live.track.settled_at(now, live.target)
-            && fade_v.is_none_or(|f| f <= 0.001)
+            && fade_v.map_or_else(|| live.track.settled_at(now, live.target), |f| f <= 0.001)
         {
             // Out of the window: the overlay is not called, so it ends.
             return SheetResponse {

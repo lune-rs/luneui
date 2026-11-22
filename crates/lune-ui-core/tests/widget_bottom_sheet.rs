@@ -553,6 +553,39 @@ fn the_reduced_tier_does_not_slide_and_the_off_tier_snaps() {
     assert_eq!((s.top, s.value), (None, false), "gone at once");
 }
 
+/// A sheet closed while a finger still holds it ends under the reduced tier: the fade is all
+/// that shows, and it ends the overlay with the finger down and after it lifts.
+#[test]
+fn under_the_reduced_tier_a_sheet_closed_while_held_ends() {
+    for by_escape in [false, true] {
+        let mut rig = Rig::new(&BOTH);
+        rig.h.tier = MotionTier::Reduced;
+        rig.frame();
+        rig.open = true;
+        rig.run(1000);
+        rig.drag((200.0, 600.0), (200.0, 660.0), 6, 16);
+        if by_escape {
+            rig.h.input.key_down(Key::Named(NamedKey::Escape), None);
+        } else {
+            rig.open = false;
+        }
+        rig.frame();
+        assert!(!rig.open, "closed (escape: {by_escape})");
+        // The finger is still down: the fade runs out and the overlay ends.
+        let s = rig.run(1500);
+        assert_eq!(
+            s.top, None,
+            "ended with the finger down (escape: {by_escape}): {s:?}"
+        );
+        let s = rig.lift((200.0, 660.0));
+        assert_eq!(
+            s.top, None,
+            "stays ended after the lift (escape: {by_escape})"
+        );
+        assert!(!rig.open && rig.run(500).top.is_none());
+    }
+}
+
 #[test]
 fn a_window_that_changes_size_moves_the_settled_sheet_to_its_detent() {
     let mut rig = Rig::opened(&BOTH);
