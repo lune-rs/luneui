@@ -1,7 +1,8 @@
 //! `demo --dump <dir>`: the screens as PNGs, rendered headless (no window), for a person or a
 //! script that wants to see them without a phone. Five fixed states, 402x874 points at scale 3
 //! (1206x2622 pixels) with the phone's safe area, each after enough frames of app time for every
-//! transition to settle.
+//! transition to settle. With `--demo`, one PNG per mark of the showcase tour instead
+//! ([`write_tour`]), taken on the frame the mark passes.
 
 use std::path::Path;
 use std::time::Duration;
@@ -12,7 +13,7 @@ use lune_ui::gpu::{self, Gpu};
 use lune_ui::layout::Insets;
 
 use crate::frame_params;
-use crate::showcase::{Headless, Showcase, Tab};
+use crate::showcase::{Headless, Play, Showcase, Tab};
 
 /// The window's size in logical points: an iPhone 16 Pro's screen.
 pub const WINDOW: (f32, f32) = (402.0, 874.0);
@@ -46,6 +47,52 @@ pub fn write_all(dir: &Path) -> Result<(), String> {
         dump::write_png(&dir.join(format!("{name}.png")), size, &rgba)?;
     }
     Ok(())
+}
+
+/// What [`write_tour`] saw: the marks passed and how many checks held.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TourReport {
+    /// Marks whose check held.
+    pub ok: u32,
+    /// Marks passed.
+    pub total: u32,
+}
+
+/// Plays the showcase tour headless at 60 Hz of app time and writes `<mark>.png` into `dir` (made
+/// if it is missing) for every mark, on the frame the mark passes, with the touch discs drawn when
+/// `touches`. Prints a `demo mark <name> ok|FAIL <why>` line per mark and `demo end <ok>/<total>`,
+/// as the window does.
+pub fn write_tour(dir: &Path, touches: bool) -> Result<TourReport, String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let mut gpu = pollster::block_on(Gpu::new(gpu::instance(None), None))?;
+    let mut run = Headless::new(WINDOW, SCALE, SAFE);
+    run.demo.play(Play {
+        repeat: false,
+        touches,
+    });
+    let mut report = TourReport::default();
+    let frame = Duration::from_micros(16_667);
+    // The tour is under a minute; the bound only catches a player that never finishes.
+    for _ in 0..(5 * 60 * 60) {
+        let rendered = run.step(frame, Vec::new());
+        for mark in &rendered.marks {
+            let (rgba, size) = draw(&mut gpu, &mut run.text, &rendered.scene)?;
+            dump::write_png(&dir.join(format!("{}.png", mark.name)), size, &rgba)?;
+            report.total += 1;
+            match &mark.result {
+                Ok(()) => {
+                    report.ok += 1;
+                    println!("demo mark {} ok", mark.name);
+                }
+                Err(why) => println!("demo mark {} FAIL {why}", mark.name),
+            }
+        }
+        if rendered.finished {
+            println!("demo end {}/{}", report.ok, report.total);
+            return Ok(report);
+        }
+    }
+    Err("the tour did not finish".to_owned())
 }
 
 /// Draws `scene` into an offscreen target at the demo's size and returns its RGBA bytes.

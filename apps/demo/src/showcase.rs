@@ -18,6 +18,7 @@ use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark::THEME;
 use lune_ui::motion::{Cadence, MotionTier};
 use lune_ui::paint::Rect;
+use lune_ui::playback::{self, Advance, Player, Script};
 use lune_ui::scene::{LayerId, Scene};
 use lune_ui::shortcuts::Shortcuts;
 use lune_ui::strings::{DisplayFormat, StringTable};
@@ -63,6 +64,13 @@ const PANEL_RADIUS: f32 = 12.0;
 const SHEET_ROW: f32 = 48.0;
 /// The id of the search field's key, in the Home list's scope.
 const SEARCH_KEY: &str = "search";
+/// A swipe button's least width: the Archive and Delete buttons are this wide, so a row swiped
+/// open on its trailing edge rests `2 * ACTION_W` from its right edge.
+const ACTION_W: f32 = 74.0;
+/// The bottom sheet's grabber band and the room it keeps under the top inset: its own constants,
+/// which the script needs to aim at the grabber.
+const SHEET_BAND: f32 = 20.0;
+const SHEET_TOP_GAP: f32 = 10.0;
 
 /// The three tabs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -146,6 +154,34 @@ impl Layout {
             search,
             list: Rect::new(0.0, list_y, w, (tab_rect.y - list_y).max(0.0)),
         }
+    }
+
+    /// The point at the share (`fx`, `fy`) of Home's list.
+    pub fn list_point(&self, fx: f32, fy: f32) -> (f32, f32) {
+        (
+            self.list.x + self.list.w * fx,
+            self.list.y + self.list.h * fy,
+        )
+    }
+
+    /// The point at the share (`fx`, `fy`) of the pager's card.
+    pub fn card_point(&self, fx: f32, fy: f32) -> (f32, f32) {
+        let c = self.card();
+        (c.x + c.w * fx, c.y + c.h * fy)
+    }
+
+    /// How far a row's swipe leaves it open on its trailing edge: both buttons.
+    pub fn trailing_open(&self) -> f32 {
+        2.0 * ACTION_W
+    }
+
+    /// The middle of the bottom sheet's grabber with the sheet at detent `i` (0 the half, 1 the
+    /// full): the sheet's height is that share of the window's height less the top inset and
+    /// 10 points, and the grabber is the band at its top.
+    pub fn sheet_grabber(&self, i: usize) -> (f32, f32) {
+        let tallest = (self.size.1 - self.safe.top - SHEET_TOP_GAP).max(0.0);
+        let height = if i == 0 { 0.5 * tallest } else { tallest };
+        (self.size.0 / 2.0, self.size.1 - height + SHEET_BAND / 2.0)
     }
 
     /// The middle of tab `i`'s item in the tab bar.
@@ -368,6 +404,10 @@ pub struct Showcase {
     pub slider: f32,
     /// What a row's swipe button did last, with the row's title.
     pub last_action: Option<(RowAction, String)>,
+    /// The row resting open (or opening) and the edge it is open on.
+    pub open_row: Option<(u32, SwipeEdge)>,
+    /// How many times the sheet closed itself (a drag, the scrim, Escape).
+    pub dismissals: u32,
     /// Focus the search field when it is next drawn (the shell's `--focus-field`).
     pub want_focus: bool,
     next_id: u32,
@@ -387,6 +427,9 @@ struct Asked {
     options: bool,
     refresh: bool,
     action: Option<(u32, SwipeEdge, usize)>,
+    /// The list was drawn this frame; `row_open` is what its rows said.
+    listed: bool,
+    row_open: Option<(u32, SwipeEdge)>,
 }
 
 /// `r` moved right by `dx`.
@@ -427,6 +470,8 @@ impl Showcase {
             toggles: [true, false],
             slider: 0.3,
             last_action: None,
+            open_row: None,
+            dismissals: 0,
             want_focus: false,
             next_id: MESSAGES.len() as u32,
         }
@@ -507,8 +552,12 @@ impl Showcase {
         if asked.refresh && self.refresh_since.is_none() {
             self.refresh_since = Some(ui.time());
         }
+        if asked.listed {
+            self.open_row = asked.row_open;
+        }
         if let Some((id, edge, i)) = asked.action {
             self.apply_action(id, edge, i);
+            self.open_row = None;
         }
     }
 
@@ -615,6 +664,9 @@ impl Showcase {
                     if let Some((edge, i)) = swipe.action {
                         asked.action = Some((row.id, edge, i));
                     }
+                    if let Some(edge) = swipe.open {
+                        asked.row_open = Some((row.id, edge));
+                    }
                 }
                 if shown.is_empty() {
                     let t = *ui.theme();
@@ -631,6 +683,7 @@ impl Showcase {
             },
         );
         self.list_offset = res.scroll.offset.1;
+        asked.listed = true;
         if res.refresh {
             asked.refresh = true;
         }
@@ -713,6 +766,9 @@ impl Showcase {
         });
         if done {
             open = false;
+        }
+        if res.dismissed {
+            self.dismissals += 1;
         }
         self.sheet_open = open;
         self.sheet_detent = res.detent;
@@ -857,6 +913,276 @@ fn message_row(ui: &mut Ui<'_>, row: &Row, r: Rect) -> bool {
     tap.enabled && tap.clicked
 }
 
+// ---- The showcase tour ----
+
+/// The marks of [`script`], in order: each names a state [`Showcase::check`] holds.
+pub const MARKS: [&str; 16] = [
+    "home",
+    "scrolled",
+    "top",
+    "refreshed",
+    "row-open",
+    "archived",
+    "detail",
+    "sheet-half",
+    "sheet-full",
+    "sheet-closed",
+    "back",
+    "cards",
+    "page-2",
+    "page-1",
+    "settings",
+    "end",
+];
+
+fn ms(n: u64) -> Duration {
+    Duration::from_millis(n)
+}
+
+/// A pause before each next gesture, so a recording reads.
+const BEAT: Duration = Duration::from_millis(700);
+
+/// The showcase tour for a window laid out as `l`: every point comes from the layout the screens
+/// use, so it fits the desktop window and the phone alike. Each gesture keeps clear of the
+/// pointer's thresholds (a tap is under the long press, a drag settles before the lift so
+/// nothing flings, a swipe is fast enough to), and every mark waits for the motion it names to
+/// come to rest.
+pub fn script(l: &Layout) -> Script {
+    let mut s = Script::new();
+    // A first frame must pass before a gesture: the pointer reads the frame before it.
+    s.wait(ms(1500)).mark("home");
+
+    // A fling up the list, and one back down to its top. The finger alone takes the list 400
+    // points up, and the way back covers less than that, so a finger never pulls past the top
+    // (which would refresh); the fling does the rest.
+    s.wait(BEAT);
+    s.swipe(l.list_point(0.5, 0.90), l.list_point(0.5, 0.25), ms(270))
+        .wait(ms(2600))
+        .mark("scrolled");
+    s.wait(BEAT);
+    s.swipe(l.list_point(0.5, 0.30), l.list_point(0.5, 0.90), ms(160))
+        .wait(ms(2600))
+        .mark("top");
+
+    // Pull the list down past the refresh point and let go: 1.5 s of work, then a new row.
+    s.wait(BEAT);
+    let pull = l.list_point(0.5, 0.05);
+    s.drag(pull, (pull.0, pull.1 + 240.0), ms(600))
+        .wait(REFRESH_WORK + ms(1300))
+        .mark("refreshed");
+
+    // Open the second row's trailing buttons, and tap Archive.
+    s.wait(BEAT);
+    let row = l.row_center(1, 0.0);
+    let from = (l.list.x + l.list.w * 0.9, row.1);
+    let open = l.trailing_open() + 12.0;
+    s.drag(from, (from.0 - open, row.1), ms(400))
+        .wait(ms(900))
+        .mark("row-open");
+    s.wait(BEAT);
+    s.tap((l.list.right() - 1.5 * ACTION_W, row.1))
+        .wait(ms(1000))
+        .mark("archived");
+
+    // Into the first row's detail, its options sheet at half height, then full, then away.
+    s.wait(BEAT);
+    s.tap(l.row_center(0, 0.0)).wait(ms(1200)).mark("detail");
+    s.wait(BEAT);
+    s.tap(l.action_center()).wait(ms(1200)).mark("sheet-half");
+    s.wait(BEAT);
+    let (half, full) = (l.sheet_grabber(0), l.sheet_grabber(1));
+    s.drag(half, full, ms(500))
+        .wait(ms(1000))
+        .mark("sheet-full");
+    s.wait(BEAT);
+    s.swipe(full, (full.0, l.size.1 - 20.0), ms(160))
+        .wait(ms(1200))
+        .mark("sheet-closed");
+
+    // Back to the list by the edge swipe.
+    s.wait(BEAT);
+    let mid = l.body.y + l.body.h / 2.0;
+    s.swipe((8.0, mid), (l.size.0 * 0.85, mid), ms(220))
+        .wait(ms(1200))
+        .mark("back");
+
+    // Cards: two cards on, one back.
+    s.wait(BEAT);
+    s.tap(l.tab_item_center(1)).wait(ms(900)).mark("cards");
+    let (right, left) = (l.card_point(0.8, 0.5), l.card_point(0.2, 0.5));
+    s.wait(BEAT);
+    s.swipe(right, left, ms(170)).wait(ms(1000));
+    s.swipe(right, left, ms(170)).wait(ms(1000)).mark("page-2");
+    s.wait(BEAT);
+    s.swipe(left, right, ms(170)).wait(ms(1000)).mark("page-1");
+
+    // Settings: the second switch on, the slider to 80 %.
+    s.wait(BEAT);
+    s.tap(l.tab_item_center(2)).wait(ms(900));
+    s.tap(l.toggle_center(1)).wait(ms(700));
+    let (lo, hi, y) = l.slider_track();
+    let at = |f: f32| (lo + (hi - lo) * f, y);
+    s.drag(at(0.3), at(0.8), ms(700))
+        .wait(ms(900))
+        .mark("settings");
+
+    // Home again: the tour ends where it began.
+    s.wait(BEAT);
+    s.tap(l.tab_item_center(0)).wait(ms(1200)).mark("end");
+    s
+}
+
+impl Showcase {
+    /// Whether the app is in the state `mark` names (the marks of [`script`]): `Ok`, or what
+    /// differed, in a sentence.
+    pub fn check(&self, mark: &str) -> Result<(), String> {
+        let mut bad: Vec<String> = Vec::new();
+        macro_rules! want {
+            ($ok:expr, $($arg:tt)*) => {
+                let held: bool = $ok;
+                if !held {
+                    bad.push(format!($($arg)*));
+                }
+            };
+        }
+        let at_top = self.list_offset.abs() < 0.5;
+        match mark {
+            "home" | "top" | "back" | "end" => {
+                want!(self.tab == Tab::Home, "tab is {:?}, want Home", self.tab);
+                want!(self.depth == 1, "depth is {}, want 1", self.depth);
+                if mark != "back" {
+                    want!(at_top, "list offset is {:.1}, want 0", self.list_offset);
+                }
+                if matches!(mark, "back" | "end") {
+                    want!(!self.sheet_open, "the sheet is open");
+                }
+                if mark == "end" {
+                    want!(self.open_row.is_none(), "a row is still open");
+                }
+            }
+            "scrolled" => {
+                want!(
+                    self.list_offset > 300.0,
+                    "list offset is {:.1}, want over 300",
+                    self.list_offset
+                );
+            }
+            "refreshed" => {
+                want!(
+                    self.refreshes == 1,
+                    "refreshes is {}, want 1",
+                    self.refreshes
+                );
+                want!(self.rows.len() == 31, "{} rows, want 31", self.rows.len());
+                want!(self.refresh_since.is_none(), "a refresh is still running");
+            }
+            "row-open" => {
+                let second = self.rows.get(1).map(|r| r.id);
+                let open = self.open_row.map(|o| (Some(o.0), o.1));
+                want!(
+                    open == Some((second, SwipeEdge::Trailing)),
+                    "open row is {:?}, want row 2 open on the trailing edge",
+                    self.open_row
+                );
+            }
+            "archived" => {
+                let gone = MESSAGES[0].0;
+                want!(
+                    !self.rows.iter().any(|r| r.title == gone),
+                    "row {gone:?} is still listed"
+                );
+                want!(self.rows.len() == 30, "{} rows, want 30", self.rows.len());
+                let last = self.last_action.as_ref().map(|a| (a.0, a.1.as_str()));
+                want!(
+                    last == Some((RowAction::Archive, gone)),
+                    "last action is {:?}, want Archive of {gone:?}",
+                    self.last_action
+                );
+                want!(self.open_row.is_none(), "a row is still open");
+            }
+            "detail" => {
+                want!(self.tab == Tab::Home, "tab is {:?}, want Home", self.tab);
+                want!(self.depth == 2, "depth is {}, want 2", self.depth);
+                want!(!self.sheet_open, "the sheet is open");
+                want!(
+                    self.selected == self.rows.first().map(|r| r.id),
+                    "selected row is {:?}, want the first",
+                    self.selected
+                );
+            }
+            "sheet-half" | "sheet-full" => {
+                let detent = usize::from(mark == "sheet-full");
+                want!(self.sheet_open, "the sheet is closed");
+                want!(
+                    self.sheet_detent == Some(detent),
+                    "sheet detent is {:?}, want {detent}",
+                    self.sheet_detent
+                );
+            }
+            "sheet-closed" => {
+                want!(!self.sheet_open, "the sheet is open");
+                want!(
+                    self.sheet_detent.is_none(),
+                    "sheet detent is {:?}, want none",
+                    self.sheet_detent
+                );
+                want!(self.dismissals >= 1, "the sheet was never dismissed");
+                want!(self.depth == 2, "depth is {}, want 2", self.depth);
+            }
+            "cards" | "page-2" | "page-1" => {
+                let page = match mark {
+                    "cards" => 0,
+                    "page-2" => 2,
+                    _ => 1,
+                };
+                want!(self.tab == Tab::Cards, "tab is {:?}, want Cards", self.tab);
+                want!(self.page == page, "page is {}, want {page}", self.page);
+            }
+            "settings" => {
+                want!(
+                    self.tab == Tab::Settings,
+                    "tab is {:?}, want Settings",
+                    self.tab
+                );
+                want!(
+                    self.toggles == [true, true],
+                    "toggles are {:?}, want both on",
+                    self.toggles
+                );
+                want!(
+                    (0.75..=0.85).contains(&self.slider),
+                    "slider is {:.3}, want 0.75 to 0.85",
+                    self.slider
+                );
+            }
+            other => bad.push(format!("no mark named {other:?}")),
+        }
+        if bad.is_empty() {
+            Ok(())
+        } else {
+            Err(bad.join("; "))
+        }
+    }
+}
+
+/// What a run plays: the tour, and how.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Play {
+    /// Play the tour again when it ends, from a fresh [`Showcase`] and the same toolkit store.
+    pub repeat: bool,
+    /// Draw [`playback::draw_touches`] last in every frame.
+    pub touches: bool,
+}
+
+/// One mark the tour passed and what its check said.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkResult {
+    /// The mark's name.
+    pub name: String,
+    /// `Ok`, or what differed from the state the mark names.
+    pub result: Result<(), String>,
+}
+
 /// What the shell adds to a frame beyond the screens: the probes' clipboard requests and a wake.
 #[derive(Debug, Clone, Default)]
 pub struct Extras {
@@ -877,6 +1203,13 @@ pub struct Rendered {
     pub out: FrameOutput,
     /// The safe area the frame read.
     pub safe: Insets,
+    /// The marks the tour passed in this frame, each with its check (run on the state the frame
+    /// drew).
+    pub marks: Vec<MarkResult>,
+    /// A repeating tour wrapped in this frame: the app began from a fresh [`Showcase`].
+    pub restarted: bool,
+    /// A tour that does not repeat is over.
+    pub finished: bool,
 }
 
 /// What one frame needs besides the GPU: the toolkit's store, the two tables every frame reads and
@@ -888,6 +1221,9 @@ pub struct Demo {
     shortcuts: Shortcuts,
     /// The app's state.
     pub showcase: Showcase,
+    play: Option<Play>,
+    /// The tour's player, made on the first frame of a run that plays (it needs the layout).
+    player: Option<Player>,
 }
 
 impl Demo {
@@ -896,14 +1232,59 @@ impl Demo {
         Self::default()
     }
 
+    /// Plays the showcase tour from the next frame on: the script is built on that frame from
+    /// its size and safe area, and its events join the frame's own.
+    pub fn play(&mut self, play: Play) {
+        self.play = Some(play);
+        self.player = None;
+    }
+
+    /// Stops the tour's clock at app time `now` (the app went to the background).
+    pub fn pause(&mut self, now: Duration) {
+        if let Some(player) = &mut self.player {
+            player.pause(now);
+        }
+    }
+
+    /// Starts the tour's clock again at app time `now`: the time spent paused is not played.
+    pub fn resume(&mut self, now: Duration) {
+        if let Some(player) = &mut self.player {
+            player.resume(now);
+        }
+    }
+
     /// Runs one frame over `input` and returns what it drew and asked for. The input carries the
-    /// size, the scale, the time and the events (the safe area among them).
+    /// size, the scale, the time and the events (the safe area among them). While the tour plays
+    /// its due events are added to `input.events`, which is the only way they reach the screens.
     pub fn frame(
         &mut self,
-        input: &RawInput,
+        mut input: RawInput,
         text: &mut dyn TextSystem,
         extras: &Extras,
     ) -> Rendered {
+        let mut adv = Advance::default();
+        if let Some(play) = self.play {
+            if self.player.is_none() {
+                let safe = input
+                    .events
+                    .iter()
+                    .rev()
+                    .find_map(|e| match e {
+                        Event::SafeArea(i) => Some(*i),
+                        _ => None,
+                    })
+                    .unwrap_or(Insets::ZERO);
+                let tour = script(&Layout::new(input.size, safe));
+                self.player = Some(Player::new(tour).with_repeat(play.repeat));
+            }
+            if let Some(player) = &mut self.player {
+                adv = player.advance(input.time, &mut input.events);
+            }
+            if adv.restarted {
+                self.showcase = Showcase::new();
+            }
+        }
+        let input = &input;
         let config = FrameConfig {
             theme: THEME,
             tier: MotionTier::Full,
@@ -926,8 +1307,32 @@ impl Demo {
             ui.request_repaint_at(at);
         }
         self.showcase.draw(&mut ui, &layout);
+        if let (Some(play), Some(player)) = (self.play, &self.player) {
+            if play.touches {
+                playback::draw_touches(&mut ui, player);
+            }
+            if let Some(at) = adv.next {
+                ui.request_repaint_at(at);
+            }
+        }
         let (scene, out) = ui.finish();
-        Rendered { scene, out, safe }
+        // A mark's state is what this frame drew, after the events up to the mark.
+        let marks = adv
+            .marks
+            .iter()
+            .map(|name| MarkResult {
+                name: name.clone(),
+                result: self.showcase.check(name),
+            })
+            .collect();
+        Rendered {
+            scene,
+            out,
+            safe,
+            marks,
+            restarted: adv.restarted,
+            finished: adv.finished,
+        }
     }
 }
 
@@ -968,8 +1373,14 @@ impl Headless {
     }
 
     /// One frame `dt` after the last, with `events` after the safe area.
-    pub fn step(&mut self, dt: Duration, mut events: Vec<Event>) -> Rendered {
-        self.time += dt;
+    pub fn step(&mut self, dt: Duration, events: Vec<Event>) -> Rendered {
+        self.step_to(self.time + dt, events)
+    }
+
+    /// One frame at app time `now` (no earlier than the last), with `events` after the safe
+    /// area.
+    pub fn step_to(&mut self, now: Duration, mut events: Vec<Event>) -> Rendered {
+        self.time = self.time.max(now);
         events.insert(0, Event::SafeArea(self.safe));
         let input = RawInput {
             size: self.size,
@@ -978,7 +1389,7 @@ impl Headless {
             focused: true,
             events,
         };
-        self.demo.frame(&input, &mut self.text, &Extras::default())
+        self.demo.frame(input, &mut self.text, &Extras::default())
     }
 
     /// `frames` frames `dt` apart with no events; returns the last.

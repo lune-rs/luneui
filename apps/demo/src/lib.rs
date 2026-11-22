@@ -35,7 +35,7 @@ use lune_ui::scene::FrameParams;
 use lune_ui::surface::{Acquired, SurfaceOptions, WindowSurface};
 use lune_ui::text::TextCache;
 
-use showcase::{Demo, Extras};
+use showcase::{Demo, Extras, MarkResult, Play};
 
 /// The accessibility bridge, behind the `access` feature. Without the feature every call is a
 /// no-op, which is the null bridge: the demo runs, with nothing for a screen reader.
@@ -170,6 +170,17 @@ pub struct Options {
     /// On frame 2 write `luneui-probe-<pid>` to the clipboard, on frame 4 read it back, and print
     /// `probe clipboard_write <text>` and `probe clipboard <text>` (or `unavailable`).
     pub probe_clipboard: bool,
+    /// Play the showcase tour hands-free through the frame's input events (`playback`), printing
+    /// `demo mark <name> ok` or `demo mark <name> FAIL <reason>` at each mark and
+    /// `demo end <ok>/<total>` at the end; live input still works while it plays.
+    pub demo: bool,
+    /// With `demo`: play the tour again when it ends, from a fresh app state (`demo loop <n>`).
+    pub repeat: bool,
+    /// With `demo`: draw a disc under each scripted contact, for a recording.
+    pub touches: bool,
+    /// With `demo`: exit the event loop after `demo end`, with an error when a mark failed.
+    /// Desktop only: on iOS and Android the loop cannot return, so it is ignored there.
+    pub exit_after_demo: bool,
 }
 
 impl Default for Options {
@@ -182,6 +193,10 @@ impl Default for Options {
             pause: true,
             focus_field: false,
             probe_clipboard: false,
+            demo: false,
+            repeat: false,
+            touches: false,
+            exit_after_demo: false,
         }
     }
 }
@@ -304,8 +319,48 @@ struct Shown {
     access: access::Access,
 }
 
+/// What the tour has reported so far.
+#[derive(Debug, Default)]
+struct Tour {
+    /// Marks that passed, and marks passed in all.
+    ok: u32,
+    total: u32,
+    /// Restarts of a repeating tour.
+    loops: u32,
+    /// `demo end` has been printed.
+    ended: bool,
+}
+
+impl Tour {
+    /// Prints the marks of a frame and the restart or end it reports; true on the frame the tour
+    /// ends.
+    fn report(&mut self, marks: &[MarkResult], restarted: bool, finished: bool) -> bool {
+        if restarted {
+            self.loops += 1;
+            println!("demo loop {}", self.loops);
+        }
+        for mark in marks {
+            self.total += 1;
+            match &mark.result {
+                Ok(()) => {
+                    self.ok += 1;
+                    println!("demo mark {} ok", mark.name);
+                }
+                Err(why) => println!("demo mark {} FAIL {why}", mark.name),
+            }
+        }
+        if finished && !self.ended {
+            self.ended = true;
+            println!("demo end {}/{}", self.ok, self.total);
+            return true;
+        }
+        false
+    }
+}
+
 struct App {
     options: Options,
+    tour: Tour,
     shown: Option<Shown>,
     /// The screens and what one frame needs besides the GPU.
     demo: Demo,
@@ -477,8 +532,11 @@ impl App {
         if self.options.focus_field && self.presented == 0 {
             self.demo.showcase.want_focus = true;
         }
-        let rendered = self.demo.frame(&input, text, &extras);
+        let rendered = self.demo.frame(input, text, &extras);
         let (display, out, safe) = (rendered.scene, rendered.out, rendered.safe);
+        let tour_ended = self
+            .tour
+            .report(&rendered.marks, rendered.restarted, rendered.finished);
         if output.apply(window, &out, s) {
             event_loop.exit();
         }
@@ -516,6 +574,10 @@ impl App {
         {
             self.want_frame = true;
         }
+        if LOOP_RETURNS && tour_ended && self.options.exit_after_demo {
+            event_loop.exit();
+            return Ok(());
+        }
         if LOOP_RETURNS && let Some(n) = self.options.frames {
             if self.presented >= n {
                 event_loop.exit();
@@ -538,6 +600,7 @@ impl ApplicationHandler for App {
             probe_line("lifecycle", "resumed");
         }
         self.paused = false;
+        self.demo.resume(self.start.elapsed());
         if let Some(shown) = &self.shown {
             if self.options.probe {
                 probe_window("resumed", &shown.window, &shown.surface);
@@ -563,6 +626,8 @@ impl ApplicationHandler for App {
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        // The tour's clock stops with the app: a background of any length replays no burst.
+        self.demo.pause(self.start.elapsed());
         // Stop drawing. The surface stays: on iOS its layer survives the background, so the frame
         // that follows `resumed` draws into it as before (docs/mobile.md, life cycle).
         if self.options.pause {
@@ -662,11 +727,19 @@ impl ApplicationHandler for App {
 
 /// Runs the demo on `event_loop` until its window closes. On iOS `run_app` never returns.
 pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
+    let mut demo = Demo::new();
+    if options.demo {
+        demo.play(Play {
+            repeat: options.repeat,
+            touches: options.touches,
+        });
+    }
     let mut app = App {
         proxy: event_loop.create_proxy(),
         options,
+        tour: Tour::default(),
         shown: None,
-        demo: Demo::new(),
+        demo,
         start: Instant::now(),
         presented: 0,
         clipboard: if cfg!(target_os = "ios") {
@@ -683,7 +756,23 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     event_loop
         .run_app(&mut app)
         .map_err(|e| format!("event loop: {e}"))?;
-    app.error.map_or(Ok(()), Err)
+    if let Some(e) = app.error {
+        return Err(e);
+    }
+    if options.demo && options.exit_after_demo && LOOP_RETURNS {
+        let t = &app.tour;
+        if !t.ended {
+            return Err("demo: the window closed before the tour ended".to_owned());
+        }
+        if t.ok != t.total {
+            return Err(format!(
+                "demo: {} of {} marks failed",
+                t.total - t.ok,
+                t.total
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The Android entry point: the one symbol android-activity's native glue looks up. It builds the
