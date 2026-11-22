@@ -76,6 +76,27 @@ environment. The app:
 `apps/gallery` is the worked example: `apps/gallery/src/window.rs` (the window, the surface, the frame
 loop), `popover.rs` (a tray host), `smoke.rs` and `main.rs`.
 
+## Mobile apps
+
+What an app adds to run on a phone, with `apps/demo` as the reference (`apps/demo/src/lib.rs`, `apps/demo/ios/Info.plist`). A desktop app adds none of it. This section is standing: it lists what a phone app needs now; the release sections below keep their history.
+
+For iOS, and so for iOS 27: iOS 27 refuses at launch an app built with its SDK that lacks the scene manifest (D354).
+
+- `Info.plist` with `UILaunchScreen` and a `UIApplicationSceneManifest` holding one `UIWindowSceneSessionRoleApplication` configuration named `Default Configuration`. Copy `apps/demo/ios/Info.plist` (D354).
+- `mobile::attach_to_scene(&window)` once, right after the window is created. It is idempotent (D354).
+- `translator.set_touch_enabled(true)`, once per window. Touch is off until an app asks (D16).
+- After every `translator.take(..)`: `Event::SafeArea(mobile::safe_area(&window))` and `Event::KeyboardInset(keyboard.inset())`, where `keyboard` is a `mobile::KeyboardInset::new(&window, wake)` the app keeps alive (D355, D357).
+- The clipboard: `Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))` in place of `Clipboard::new()` (D358).
+- No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface`; on `resumed` clear the stop and ask for a frame (D356).
+- Redraws from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle. A `Repaint::At` that comes due (`StartCause::ResumeTimeReached`) becomes a frame (D356).
+
+For Android (nothing has run on Android yet; M8 is the milestone that runs it):
+
+- The app's own `Cargo.toml` enables winit's `android-native-activity` feature for `target_os = "android"` (`apps/demo/Cargo.toml`).
+- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both.
+
+Demo mode: the core's `playback` module (D415, R-core-13) plays a scripted tour through `RawInput.events` against the app's time, and `playback::draw_touches` is an opt-in indicator for a recording. `docs/demo-mode.md` says how to run the demo's tour, record it and write one for an app.
+
 ## Unverified here
 
 The tests run against scripted input and fake adapters. What only a real OS shows is not ticked
@@ -376,7 +397,7 @@ An iOS app is a new target. `apps/demo` is the reference wiring, and the iOS-onl
 - An accessibility bridge, if the app has one, created before the attach (D359).
 - Each frame, after `translator.take(..)`: `Event::SafeArea(mobile::safe_area(&window))` and `Event::KeyboardInset(keyboard.inset())`, where `keyboard` is a `mobile::KeyboardInset::new(&window, wake)` the app keeps alive (D355, D357).
 - The keyboard's `wake` only wakes the app: it sets a flag that `about_to_wait` turns into a frame, and calls `request_redraw` (D357).
-- Touch on with `translator.set_touch_enabled(true)`, once per window, as in 0.7.1 (the demo leaves it off).
+- Touch on with `translator.set_touch_enabled(true)`, once per window, as in 0.7.1 (the demo leaves it off; 0.7.5's demo turns it on).
 - The clipboard: `Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))` in place of `Clipboard::new()` (D358).
 - No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface` (its CAMetalLayer survives the background); on `resumed` clear the stop and ask for a frame (D356).
 - Every frame is requested from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle; a `Repaint::At` that comes due is turned into a frame (D356).
