@@ -4,8 +4,11 @@
 #            (needs that rustup target installed; prints the `rustup target add` hint when it is not)
 #   macos    cargo clippy --workspace --all-targets --locked --target aarch64-apple-darwin -- -D warnings
 #            (compile check only, no run; needs that rustup target installed, same hint when it is not)
-#   linux    fmt --check, clippy --locked -D warnings, test --locked, in a rust:1.92 container with
-#            the repo mounted read-only. Target, cargo and rustup state live in the named volumes
+#   linux    fmt --check, clippy --locked -D warnings, test --locked --no-fail-fast, in a rust:1.92
+#            container with the repo mounted read-only (D414: the test
+#            the_real_decisions_file_has_the_known_changing_rows is skipped, as CI skips it, D412:
+#            it reads docs/DECISIONS.md, a link into the agent-docs store outside the mount).
+#            Target, cargo and rustup state live in the named volumes
 #            luneui-linux-{target,cargo,rustup}: created if missing, never removed. The container
 #            is --rm. Skipped (not failed) when docker is missing, the daemon is not running, or
 #            --skip-linux is given. This script never starts Docker.
@@ -114,7 +117,7 @@ else
       run() { echo "+ $*"; "$@" || { echo "FAILED: $*" >&2; exit 1; }; }
       run cargo fmt --all -- --check
       run cargo clippy --workspace --all-targets --locked -- -D warnings
-      run cargo test --workspace --locked
+      run cargo test --workspace --locked --no-fail-fast -- --skip the_real_decisions_file_has_the_known_changing_rows
       echo "check-targets linux: all passed"
     '; then
     echo "linux: passed"
