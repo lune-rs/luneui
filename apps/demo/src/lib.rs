@@ -201,6 +201,40 @@ impl Default for Options {
     }
 }
 
+/// The window flags' usage line, printed when an Android launch-arguments file does not parse.
+pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--demo [--loop | --exit-after-demo] [--touches]]";
+
+/// The options the window flags ask for, or `None` for an argument that is not understood or a
+/// combination that makes no sense. The command line's `--dump` is not a window flag: the binary
+/// reads it before calling this.
+pub fn parse_window_args(args: impl Iterator<Item = String>) -> Option<Options> {
+    let mut options = Options::default();
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--probe" => options.probe = true,
+            "--frames" => options.frames = Some(args.next()?.parse().ok()?),
+            "--no-scene-attach" => options.scene_attach = false,
+            "--draw-while-suspended" => options.pause = false,
+            "--focus-field" => options.focus_field = true,
+            "--probe-clipboard" => options.probe_clipboard = true,
+            "--demo" => options.demo = true,
+            "--loop" => options.repeat = true,
+            "--touches" => options.touches = true,
+            "--exit-after-demo" => options.exit_after_demo = true,
+            _ => return None,
+        }
+    }
+    // The tour's own flags need the tour; a loop never ends, so it cannot exit after it.
+    if (options.repeat || options.exit_after_demo) && !options.demo {
+        return None;
+    }
+    if options.repeat && options.exit_after_demo {
+        return None;
+    }
+    Some(options)
+}
+
 /// Whether this platform's event loop can return, so `Options::frames` applies.
 const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android")));
 
@@ -279,6 +313,30 @@ fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
     let (sw, sh) = surface.size();
     probe_line("surface_size", format!("{sw}x{sh}"));
     probe_line("surface_format", format!("{:?}", surface.format()));
+}
+
+/// Prints `probe content_rect <l>,<t>,<r>,<b> window <w>x<h> scale <s>` (the activity's content
+/// rect in physical pixels, the native window's size and scale) when it differs from `seen`.
+#[cfg(target_os = "android")]
+fn probe_content_rect(window: &Window, seen: &mut String) {
+    use winit::platform::android::WindowExtAndroid;
+
+    let r = window.content_rect();
+    let inner = window.inner_size();
+    let line = format!(
+        "{},{},{},{} window {}x{} scale {}",
+        r.left,
+        r.top,
+        r.right,
+        r.bottom,
+        inner.width,
+        inner.height,
+        window.scale_factor()
+    );
+    if line != *seen {
+        probe_line("content_rect", &line);
+        *seen = line;
+    }
 }
 
 /// The demo's fonts: the gallery's own files, loaded in a fixed order.
@@ -379,6 +437,9 @@ struct App {
     /// The last frame, or an event since, asks for another: `about_to_wait` requests it. A request
     /// made inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
     want_frame: bool,
+    /// The last `probe content_rect` line's values, to print again only when they change.
+    #[cfg(target_os = "android")]
+    content_rect_seen: String,
     error: Option<String>,
 }
 
@@ -506,6 +567,10 @@ impl App {
         input
             .events
             .push(Event::SafeArea(mobile::safe_area(window)));
+        #[cfg(target_os = "android")]
+        if self.options.probe {
+            probe_content_rect(window, &mut self.content_rect_seen);
+        }
         let kb = keyboard.inset();
         input.events.push(Event::KeyboardInset(kb));
         if kb != self.last_keyboard {
@@ -751,6 +816,8 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
         want_frame: false,
+        #[cfg(target_os = "android")]
+        content_rect_seen: String::new(),
         error: None,
     };
     event_loop
@@ -775,6 +842,27 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     Ok(())
 }
 
+/// The options the launch-arguments file asks for (D420): `files/launch-args` in the app's internal
+/// data directory, one flag per line (blank lines skipped, a line's words are separate arguments),
+/// written by `scripts/android-emu.sh` before `am start`. The file is deleted once read, so a launch
+/// from the home screen runs with no flags. An absent or unreadable file means no flags; a file
+/// that does not parse is an `Err`.
+#[cfg(target_os = "android")]
+fn launch_options(app: &winit::platform::android::activity::AndroidApp) -> Result<Options, ()> {
+    let Some(path) = app.internal_data_path().map(|d| d.join("launch-args")) else {
+        return Ok(Options::default());
+    };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(Options::default());
+    };
+    let _ = std::fs::remove_file(&path);
+    let args = text
+        .lines()
+        .flat_map(|line| line.split_whitespace())
+        .map(str::to_owned);
+    parse_window_args(args).ok_or(())
+}
+
 /// The Android entry point: the one symbol android-activity's native glue looks up. It builds the
 /// event loop over the activity and runs the same [`run`] as the other targets.
 #[cfg(target_os = "android")]
@@ -785,6 +873,14 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
 fn android_main(app: winit::platform::android::activity::AndroidApp) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
 
+    let options = match launch_options(&app) {
+        Ok(o) => o,
+        Err(()) => {
+            println!("demo: bad launch arguments");
+            println!("{WINDOW_USAGE}");
+            return;
+        }
+    };
     let event_loop = match EventLoop::builder().with_android_app(app).build() {
         Ok(l) => l,
         Err(e) => {
@@ -792,7 +888,7 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
             return;
         }
     };
-    if let Err(e) = run(event_loop, Options::default()) {
+    if let Err(e) = run(event_loop, options) {
         eprintln!("{e}");
     }
 }

@@ -27,34 +27,20 @@ enum Mode {
 }
 
 /// What the command line asks for, or `None` for an argument that is not understood or a
-/// combination that makes no sense.
+/// combination that makes no sense. The window flags are [`demo::parse_window_args`]'s; only
+/// `--dump <dir>` is read here.
 fn parse_args(args: impl Iterator<Item = String>) -> Option<Mode> {
-    let mut options = Options::default();
     let mut dump: Option<PathBuf> = None;
+    let mut rest = Vec::new();
     let mut args = args;
     while let Some(arg) = args.next() {
-        match arg.as_str() {
-            "--dump" => dump = Some(PathBuf::from(args.next()?)),
-            "--probe" => options.probe = true,
-            "--frames" => options.frames = Some(args.next()?.parse().ok()?),
-            "--no-scene-attach" => options.scene_attach = false,
-            "--draw-while-suspended" => options.pause = false,
-            "--focus-field" => options.focus_field = true,
-            "--probe-clipboard" => options.probe_clipboard = true,
-            "--demo" => options.demo = true,
-            "--loop" => options.repeat = true,
-            "--touches" => options.touches = true,
-            "--exit-after-demo" => options.exit_after_demo = true,
-            _ => return None,
+        if arg == "--dump" {
+            dump = Some(PathBuf::from(args.next()?));
+        } else {
+            rest.push(arg);
         }
     }
-    // The tour's own flags need the tour; a loop never ends, so it cannot exit after it.
-    if (options.repeat || options.exit_after_demo) && !options.demo {
-        return None;
-    }
-    if options.repeat && options.exit_after_demo {
-        return None;
-    }
+    let options = demo::parse_window_args(rest.into_iter())?;
     if let Some(dir) = dump {
         // A dump has no window: only the tour's flags that shape it go with it.
         let plain = Options {

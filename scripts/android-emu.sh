@@ -1,0 +1,362 @@
+#!/usr/bin/env bash
+# Builds apps/demo as an APK, runs it on one Android emulator of its own and checks that a frame was
+# presented. Usage: scripts/android-emu.sh [--probe | --build-only] [--demo-arg <arg>] [--keep-booted | --delete-device]
+#   (default)       build and package target/android-emu/demo.apk, create the AVD if missing, boot it
+#                   headless, install, launch, wait up to 120 s for `presented 1` in
+#                   target/android-emu/stdout.log, take one screenshot (target/android-emu/shot-1.png),
+#                   force-stop the app, shut the emulator down.
+#   --probe         launch the demo with --probe (it prints `probe <key> <value>` lines, among them
+#                   `probe content_rect <l>,<t>,<r>,<b> window <w>x<h> scale <s>`), take shot-1.png 2 s after
+#                   `presented 1`, and write the `probe` and `presented` lines and the device's `wm size` and
+#                   `wm density` to target/android-emu/probe.txt.
+#   --build-only    build and package the APK and stop (no emulator, no AVD): the local link check.
+#   --demo-arg <a>  pass one more argument to the demo (repeatable), e.g. --focus-field.
+#   --keep-booted   leave the emulator booted at the end (and reuse one this script left on the port).
+#   --delete-device shut down and delete the AVD named below, then exit.
+# Packaging (D420) uses only the installed SDK, no Gradle and no cargo-apk: `cargo rustc --crate-type
+# cdylib` with the NDK's clang as linker, `aapt2 link` of apps/demo/android/AndroidManifest.xml (no
+# Java), the library stripped and zipped in, `zipalign`, `apksigner` with a debug key made once under
+# target/android-emu/.
+# Launch arguments (D420): the flags go one per line to the app's files/launch-args through `run-as`
+# before the launch; the app reads and deletes the file, so a launch from the home screen has no flags.
+# Logs: android-activity forwards the app's stdout to logcat's RustStdoutStderr tag; the script follows
+# that tag into target/android-emu/stdout.log (and keeps a bounded `logcat -d` in logcat.txt).
+# The AVD is named luneui-demo-pixel7 (pixel_7, system-images;android-34;google_apis;arm64-v8a;
+# LUNEUI_ANDROID_AVD picks another name for an AVD of its own), `hw.keyboard=no` so the soft keyboard
+# shows, booted with `-no-window -no-audio -no-boot-anim -no-snapshot -port 5580 -gpu <mode>`
+# (LUNEUI_ANDROID_GPU, default swiftshader_indirect). Every adb call is `-s emulator-5580`.
+# Setup: ANDROID_HOME or ANDROID_SDK_ROOT (else ~/Library/Android/sdk); the newest NDK under
+# $SDK/ndk or ANDROID_NDK_HOME; JDK 17 from LUNEUI_ANDROID_JAVA_HOME, JAVA_HOME, `java_home -v 17` or
+# Homebrew's openjdk@17.
+# Never: touches another AVD or another serial, runs `adb kill-server`, opens the emulator window,
+# drives its UI, records video, takes more than three screenshots, or writes outside target/android-emu/
+# (cargo's own target dir, the new AVD in ~/.android/avd and the debug key aside). A serial already on
+# port 5580 that is not this AVD is exit 2.
+# Exit codes: 0 passed; 1 a check failed (build, boot, launch, no frame); 2 usage or setup (a tool, the
+# rustup target, the image or a foreign serial on the port is missing or in the way).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
+AVD="${LUNEUI_ANDROID_AVD:-luneui-demo-pixel7}"
+GPU="${LUNEUI_ANDROID_GPU:-swiftshader_indirect}"
+IMAGE="system-images;android-34;google_apis;arm64-v8a"
+DEVICE=pixel_7
+PORT=5580
+SERIAL="emulator-$PORT"
+TARGET=aarch64-linux-android
+API=26
+PLATFORM=android-34
+PKG=rs.lune.luneui.demo
+ACTIVITY="$PKG/android.app.NativeActivity"
+OUT="$ROOT/target/android-emu"
+MANIFEST="$ROOT/apps/demo/android/AndroidManifest.xml"
+KEYSTORE="$OUT/debug.keystore"
+
+usage() {
+  echo "usage: scripts/android-emu.sh [--probe | --build-only] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
+  exit 2
+}
+
+keep=0
+delete=0
+probe=0
+build_only=0
+demo_args=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --probe) probe=1 ;;
+    --build-only) build_only=1 ;;
+    --demo-arg)
+      [ "$#" -ge 2 ] || usage
+      demo_args+=("$2")
+      shift
+      ;;
+    --keep-booted) keep=1 ;;
+    --delete-device) delete=1 ;;
+    *) usage ;;
+  esac
+  shift
+done
+if [ "$build_only" -eq 1 ] && { [ "$probe" -eq 1 ] || [ "$delete" -eq 1 ]; }; then
+  usage
+fi
+
+booted_by_us=0
+emu_pid=""
+follower_pid=""
+ADB=""
+
+adb_s() { "$ADB" -s "$SERIAL" "$@"; }
+
+stop_follower() {
+  if [ -n "$follower_pid" ]; then
+    kill "$follower_pid" >/dev/null 2>&1 || true
+    wait "$follower_pid" 2>/dev/null || true
+    follower_pid=""
+  fi
+}
+
+# Shuts this script's emulator down (the console's `emu kill`, then the process we started if it is
+# still there after 30 s).
+shutdown_emulator() {
+  adb_s emu kill >/dev/null 2>&1 || true
+  if [ -n "$emu_pid" ]; then
+    for _ in $(seq 1 60); do
+      kill -0 "$emu_pid" >/dev/null 2>&1 || break
+      sleep 0.5
+    done
+    if kill -0 "$emu_pid" >/dev/null 2>&1; then
+      kill "$emu_pid" >/dev/null 2>&1 || true
+    fi
+  fi
+}
+
+cleanup() {
+  stop_follower
+  if [ "$booted_by_us" -eq 1 ] && [ "$keep" -eq 0 ]; then
+    shutdown_emulator
+  fi
+}
+trap cleanup EXIT
+
+fail() {
+  echo "android-emu: FAILED ($1)" >&2
+  exit 1
+}
+
+setup_fail() {
+  echo "android-emu: setup: $1" >&2
+  exit 2
+}
+
+# --- the SDK, the NDK and JDK 17 -------------------------------------------------------------------
+SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
+[ -d "$SDK" ] || setup_fail "no Android SDK at $SDK (set ANDROID_HOME)"
+export ANDROID_HOME="$SDK" ANDROID_SDK_ROOT="$SDK"
+ADB="$SDK/platform-tools/adb"
+[ -x "$ADB" ] || setup_fail "no adb at $ADB"
+
+if [ -n "${ANDROID_NDK_HOME:-}" ]; then
+  NDK="$ANDROID_NDK_HOME"
+else
+  NDK="$(ls -d "$SDK"/ndk/*/ 2>/dev/null | sort -V | tail -n 1 | sed 's:/$::')"
+fi
+[ -n "$NDK" ] && [ -d "$NDK" ] || setup_fail "no NDK under $SDK/ndk (set ANDROID_NDK_HOME)"
+NDK_BIN="$(ls -d "$NDK"/toolchains/llvm/prebuilt/*/bin 2>/dev/null | head -n 1)"
+CLANG="$NDK_BIN/aarch64-linux-android$API-clang"
+[ -x "$CLANG" ] || setup_fail "no $CLANG in the NDK"
+[ -x "$NDK_BIN/llvm-strip" ] || setup_fail "no llvm-strip in the NDK"
+
+BT="$(ls -d "$SDK"/build-tools/*/ 2>/dev/null | sort -V | tail -n 1 | sed 's:/$::')"
+[ -n "$BT" ] && [ -x "$BT/aapt2" ] && [ -x "$BT/zipalign" ] && [ -x "$BT/apksigner" ] \
+  || setup_fail "no build-tools with aapt2, zipalign and apksigner under $SDK/build-tools"
+ANDROID_JAR="$SDK/platforms/$PLATFORM/android.jar"
+[ -f "$ANDROID_JAR" ] || setup_fail "no $ANDROID_JAR (sdkmanager \"platforms;$PLATFORM\")"
+
+is_jdk17() { [ -x "$1/bin/java" ] && "$1/bin/java" -version 2>&1 | head -n 1 | grep -q '"17\.'; }
+JDK=""
+for cand in "${LUNEUI_ANDROID_JAVA_HOME:-}" "${JAVA_HOME:-}" \
+  "$(/usr/libexec/java_home -v 17 2>/dev/null || true)" \
+  /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
+  /usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home; do
+  if [ -n "$cand" ] && is_jdk17 "$cand"; then
+    JDK="$cand"
+    break
+  fi
+done
+[ -n "$JDK" ] || setup_fail "no JDK 17 (set LUNEUI_ANDROID_JAVA_HOME; apksigner, keytool and avdmanager need it)"
+export JAVA_HOME="$JDK"
+export PATH="$JDK/bin:$PATH"
+AVDMANAGER="$SDK/cmdline-tools/latest/bin/avdmanager"
+EMULATOR="$SDK/emulator/emulator"
+
+# The emulator serial's AVD name, or nothing when no emulator is on the port.
+serial_avd() {
+  "$ADB" devices 2>/dev/null | awk -v s="$SERIAL" '$1 == s { found = 1 } END { exit !found }' || return 0
+  adb_s emu avd name 2>/dev/null | tr -d '\r' | head -n 1
+}
+
+# --- --delete-device -------------------------------------------------------------------------------
+if [ "$delete" -eq 1 ]; then
+  [ -x "$AVDMANAGER" ] || setup_fail "no avdmanager at $AVDMANAGER"
+  on_port="$(serial_avd)"
+  if [ "$on_port" = "$AVD" ]; then
+    echo "android-emu: shutting down $AVD on $SERIAL"
+    shutdown_emulator
+    sleep 3
+  fi
+  if "$AVDMANAGER" list avd -c 2>/dev/null | grep -qx "$AVD"; then
+    "$AVDMANAGER" delete avd -n "$AVD" || fail "delete avd"
+    echo "android-emu: deleted $AVD"
+  else
+    echo "android-emu: no AVD named $AVD"
+  fi
+  exit 0
+fi
+
+rustup target list --installed 2>/dev/null | grep -qx "$TARGET" \
+  || setup_fail "rustup target missing (run: rustup target add $TARGET)"
+
+# --- build and package (D1) ------------------------------------------------------------------------
+mkdir -p "$OUT"
+echo "android-emu: building demo for $TARGET (release cdylib)"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CLANG"
+cargo rustc -p demo --lib --crate-type cdylib --release --target "$TARGET" --locked || fail "build"
+SO="${CARGO_TARGET_DIR:-$ROOT/target}/$TARGET/release/libdemo.so"
+[ -f "$SO" ] || fail "no library at $SO"
+
+STAGE="$OUT/stage"
+rm -rf "$STAGE"
+mkdir -p "$STAGE/lib/arm64-v8a"
+"$NDK_BIN/llvm-strip" --strip-unneeded -o "$STAGE/lib/arm64-v8a/libdemo.so" "$SO" || fail "llvm-strip"
+if ! "$NDK_BIN/llvm-readelf" --dyn-syms "$STAGE/lib/arm64-v8a/libdemo.so" | grep -q ' ANativeActivity_onCreate$'; then
+  fail "libdemo.so does not export ANativeActivity_onCreate"
+fi
+
+if [ ! -f "$KEYSTORE" ]; then
+  # A throwaway debug key for the local APK, never a release key.
+  keytool -genkeypair -keystore "$KEYSTORE" -storepass android -keypass android -alias luneui-debug \
+    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=luneui debug" >/dev/null 2>&1 || fail "keytool"
+fi
+
+rm -f "$OUT/base.apk" "$OUT/unaligned.apk" "$OUT/demo.apk" "$OUT/demo.apk.idsig"
+"$BT/aapt2" link --debug-mode -I "$ANDROID_JAR" --manifest "$MANIFEST" --version-code 1 --version-name 1.0 \
+  -o "$OUT/base.apk" || fail "aapt2 link"
+cp "$OUT/base.apk" "$OUT/unaligned.apk"
+(cd "$STAGE" && zip -X -q "$OUT/unaligned.apk" lib/arm64-v8a/libdemo.so) || fail "zip"
+"$BT/zipalign" -f -p 4 "$OUT/unaligned.apk" "$OUT/demo.apk" || fail "zipalign"
+"$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass pass:android --key-pass pass:android "$OUT/demo.apk" \
+  || fail "apksigner sign"
+"$BT/apksigner" verify "$OUT/demo.apk" || fail "apksigner verify"
+echo "android-emu: libdemo.so $(wc -c < "$STAGE/lib/arm64-v8a/libdemo.so" | tr -d ' ') bytes stripped, demo.apk $(wc -c < "$OUT/demo.apk" | tr -d ' ') bytes"
+
+if [ "$build_only" -eq 1 ]; then
+  echo "android-emu: passed (build only)"
+  exit 0
+fi
+
+# --- the AVD and the emulator (D11) ----------------------------------------------------------------
+[ -x "$AVDMANAGER" ] || setup_fail "no avdmanager at $AVDMANAGER"
+[ -x "$EMULATOR" ] || setup_fail "no emulator at $EMULATOR"
+[ -d "$SDK/system-images/android-34/google_apis/arm64-v8a" ] \
+  || setup_fail "system image missing (sdkmanager \"$IMAGE\")"
+
+"$ADB" start-server >/dev/null 2>&1 || setup_fail "adb start-server"
+on_port="$(serial_avd)"
+if [ -n "$on_port" ] && [ "$on_port" != "$AVD" ]; then
+  setup_fail "$SERIAL is the emulator '$on_port', not $AVD: stop it or free port $PORT"
+fi
+
+if ! "$AVDMANAGER" list avd -c 2>/dev/null | grep -qx "$AVD"; then
+  echo "android-emu: creating $AVD ($DEVICE, $IMAGE)"
+  echo no | "$AVDMANAGER" create avd -n "$AVD" -k "$IMAGE" -d "$DEVICE" >"$OUT/avdmanager.log" 2>&1 \
+    || { tail -n 5 "$OUT/avdmanager.log" >&2; setup_fail "could not create the AVD $AVD"; }
+fi
+AVD_CONFIG="$HOME/.android/avd/$AVD.avd/config.ini"
+if [ -f "$AVD_CONFIG" ]; then
+  # The soft keyboard shows only with no hardware keyboard on the AVD.
+  if grep -q '^hw.keyboard=' "$AVD_CONFIG"; then
+    sed -i.bak 's/^hw.keyboard=.*/hw.keyboard=no/' "$AVD_CONFIG" && rm -f "$AVD_CONFIG.bak"
+  else
+    echo "hw.keyboard=no" >> "$AVD_CONFIG"
+  fi
+fi
+
+if [ -z "$on_port" ]; then
+  echo "android-emu: booting $AVD on $SERIAL (-gpu $GPU)"
+  boot_start=$SECONDS
+  nohup "$EMULATOR" -avd "$AVD" -no-window -no-audio -no-boot-anim -no-snapshot -port "$PORT" -gpu "$GPU" \
+    >"$OUT/emulator.log" 2>&1 < /dev/null &
+  emu_pid=$!
+  booted_by_us=1
+  for _ in $(seq 1 600); do
+    if ! kill -0 "$emu_pid" >/dev/null 2>&1; then
+      tail -n 10 "$OUT/emulator.log" >&2 || true
+      fail "the emulator exited while booting (log $OUT/emulator.log)"
+    fi
+    [ "$(adb_s shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
+    sleep 0.5
+  done
+  [ "$(adb_s shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] \
+    || fail "no sys.boot_completed within 300 s (log $OUT/emulator.log)"
+  echo "android-emu: booted in $((SECONDS - boot_start)) s"
+else
+  echo "android-emu: reusing $AVD on $SERIAL"
+fi
+adb_s shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+adb_s shell wm dismiss-keyguard >/dev/null 2>&1 || true
+
+# --- install, launch arguments, launch (D4, D5) ----------------------------------------------------
+adb_s install -r "$OUT/demo.apk" >"$OUT/install.log" 2>&1 || { cat "$OUT/install.log" >&2; fail "install"; }
+adb_s shell am force-stop "$PKG" >/dev/null 2>&1 || true
+
+app_args=()
+if [ "$probe" -eq 1 ]; then
+  app_args=(--probe)
+fi
+app_args+=(${demo_args[@]+"${demo_args[@]}"})
+if [ "${#app_args[@]}" -gt 0 ]; then
+  printf '%s\n' "${app_args[@]}" \
+    | adb_s shell "run-as $PKG sh -c 'mkdir -p files && cat > files/launch-args'" \
+    || fail "could not write the launch arguments with run-as"
+else
+  adb_s shell "run-as $PKG rm -f files/launch-args" >/dev/null 2>&1 || true
+fi
+
+rm -f "$OUT/stdout.log" "$OUT/logcat.txt" "$OUT/shot-1.png" "$OUT/probe.txt"
+adb_s logcat -c >/dev/null 2>&1 || true
+: > "$OUT/stdout.log"
+adb_s logcat -v raw -s RustStdoutStderr:I >> "$OUT/stdout.log" 2>/dev/null &
+follower_pid=$!
+
+adb_s shell am start -W -n "$ACTIVITY" >"$OUT/am-start.log" 2>&1 || { cat "$OUT/am-start.log" >&2; fail "am start"; }
+grep -q '^Status: ok' "$OUT/am-start.log" || { cat "$OUT/am-start.log" >&2; fail "am start did not report Status: ok"; }
+
+seen=0
+for _ in $(seq 1 240); do
+  if grep -q "presented 1 " "$OUT/stdout.log" 2>/dev/null; then
+    seen=1
+    break
+  fi
+  sleep 0.5
+done
+dump_logcat() {
+  adb_s logcat -d -v threadtime -t 3000 > "$OUT/logcat.txt" 2>/dev/null || true
+}
+if [ "$seen" -ne 1 ]; then
+  dump_logcat
+  echo "--- stdout.log (tail) ---" >&2
+  tail -n 20 "$OUT/stdout.log" >&2 || true
+  echo "--- logcat (errors, tail) ---" >&2
+  grep -E ' (E|F) |FATAL|Abort|SIGSEGV|panicked' "$OUT/logcat.txt" | tail -n 20 >&2 || true
+  fail "no 'presented 1' within 120 s (full logcat in $OUT/logcat.txt)"
+fi
+grep "^presented " "$OUT/stdout.log" | head -n 3 || true
+
+if [ "$probe" -eq 1 ]; then
+  grep -q "^probe inner_size " "$OUT/stdout.log" || fail "no 'probe inner_size' line"
+  sleep 2
+else
+  sleep 1
+fi
+adb_s exec-out screencap -p > "$OUT/shot-1.png" 2>/dev/null || fail "screenshot"
+[ -s "$OUT/shot-1.png" ] || fail "empty screenshot"
+echo "android-emu: screenshot $OUT/shot-1.png ($(wc -c < "$OUT/shot-1.png" | tr -d ' ') bytes)"
+
+if [ "$probe" -eq 1 ]; then
+  {
+    echo "# device"
+    adb_s shell wm size | tr -d '\r'
+    adb_s shell wm density | tr -d '\r'
+    echo "# stdout.log"
+    grep "^probe \|^presented " "$OUT/stdout.log" || true
+  } > "$OUT/probe.txt"
+  echo "android-emu: probe lines in $OUT/probe.txt ($(grep -c '^probe ' "$OUT/probe.txt" || true) lines)"
+fi
+
+dump_logcat
+adb_s shell am force-stop "$PKG" >/dev/null 2>&1 || true
+stop_follower
+echo "android-emu: passed"
