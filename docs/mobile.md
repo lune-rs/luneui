@@ -13,6 +13,31 @@ The phone targets are a rustup target each: `rustup target add aarch64-apple-ios
 - `lune-ui-winit --features accesskit` also passes clippy for `aarch64-apple-ios-sim` (`accesskit_ios` 0.2.0 is pulled in); input for M4's accessibility bridge.
 - An iOS binary is built with `IPHONEOS_DEPLOYMENT_TARGET=17.0` (the simulator script sets it). Nothing here signs for a real device.
 
+## Setting up a Mac from zero
+
+What a fresh Apple-silicon Mac needs before `scripts/ios-sim.sh` and `scripts/android-emu.sh` run. Everything lives under the home directory; nothing needs sudo except Xcode itself. The scripts create their own devices (`luneui-demo-iphone`, `luneui-demo-pixel7`) and `--delete-device` removes them, so the install below is only the toolchain.
+
+iOS: Xcode with its command-line tools, the simulator runtime the script asks for (`xcodebuild -downloadPlatform iOS` for the newest; `LUNEUI_IOS_RUNTIME` picks another), and `rustup target add aarch64-apple-ios-sim aarch64-apple-ios`. A runtime is removed with `xcrun simctl runtime delete`.
+
+Android (2026-11-22, SDK 34, NDK 26.3, about 9 GB in `~/Library/Android/sdk`; no Android Studio, no Gradle, no cargo-apk):
+
+```bash
+rustup target add aarch64-linux-android
+brew install openjdk@17          # the system java may be 11: too old for the SDK tools
+mkdir -p ~/Library/Android/sdk/cmdline-tools && cd "$(mktemp -d)"
+curl -sSLO https://dl.google.com/android/repository/commandlinetools-mac-11076708_latest.zip
+unzip -q commandlinetools-mac-*.zip && mv cmdline-tools ~/Library/Android/sdk/cmdline-tools/latest
+export ANDROID_HOME=~/Library/Android/sdk JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+S=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+yes | $S --licenses
+$S "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.3.11579264" "emulator" \
+   "system-images;android-34;google_apis;arm64-v8a"
+```
+
+The script finds the SDK at `$ANDROID_HOME` or `~/Library/Android/sdk` and the JDK at Homebrew's `openjdk@17`. Check with `scripts/android-emu.sh --build-only` (no emulator). A missing piece stops it with exit 2 and a message saying what is missing (for a missing platform or system image, the `sdkmanager` line to run). Your own AVDs are never used or changed.
+
+Gotchas: the emulator runs headless with `-gpu swiftshader_indirect`, so frames are slow (about 60 ms; the tour is built for that, D423). A Play Services dialog can take focus a few seconds after boot; the script retries its inputs. An APK signed with another checkout's debug key will not install over an older one: `adb -s emulator-5580 uninstall rs.lune.luneui.demo`, then rerun.
+
 ## Wiring an iOS app
 
 What an app adds to the toolkit's iOS layer, with the demo's code as the reference: `docs/consuming.md`, "0.7.2 to 0.7.3: iOS platform layer" (D353 to D360). The readings below are the demo's, on the simulator.

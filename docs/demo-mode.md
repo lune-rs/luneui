@@ -39,13 +39,13 @@ Android emulator: `scripts/android-emu.sh --demo` builds the APK (`--build-only`
 
 ## Recording
 
-Agents never record. A recording is the user's.
+Nothing in the scripts records, and an agent records only when the user asks for it (as for `docs/images/mobile-demo.mp4`, 2026-11-22), on the devices the scripts created and never on the Mac's screen.
 
 On macOS: run `cargo run -p demo -- --demo --loop --touches` with the window (402x874 points) in view. Record that window with OBS (a window capture) or the system's screen recorder. Keep the pointer outside the window, so the only pointer on the recording is the touch discs. Stop the recording by hand; a loop never ends on its own.
 
 On the simulator: run `scripts/ios-sim.sh --demo --keep-booted`, which leaves `luneui-demo-iphone` booted once the tour has run. Find the device's id with `xcrun simctl list devices | grep luneui-demo-iphone`. Then start the recording on that id, `xcrun simctl io <udid> recordVideo <file>`, and in a second shell relaunch the app with the loop: `xcrun simctl launch --terminate-running-process <udid> rs.lune.luneui.demo --demo --touches --loop`. Stop the recording with Ctrl-C. The run with `--keep-booted` leaves the device up; `scripts/ios-sim.sh --delete-device` deletes it when you have finished.
 
-On the Android emulator: a recording is the user's, made with `adb shell screenrecord` on the emulator's serial (`adb -s emulator-5580 shell screenrecord /sdcard/demo.mp4`, stopped by Ctrl-C, then `adb pull`). `scripts/android-emu.sh --demo --keep-booted` leaves the emulator up after the tour, so the recording can start on it; agents never run `screenrecord`. The script runs one tour only; `--demo-arg --loop` would pass the loop flag to the app, unverified on Android.
+On the Android emulator: a recording is the user's, made with `adb shell screenrecord` on the emulator's serial (`adb -s emulator-5580 shell screenrecord /sdcard/demo.mp4`, stopped by Ctrl-C, then `adb pull`). `scripts/android-emu.sh --demo --keep-booted` leaves the emulator up after the tour, so the recording can start on it; an agent runs `screenrecord` only when the user asks. The script runs one tour only; `--demo-arg --loop` would pass the loop flag to the app, unverified on Android.
 
 ## A script for your own app
 
@@ -79,4 +79,13 @@ What an app adds to play its own tour (`apps/demo/src/showcase.rs` is the refere
 - A real device: the tour's feel and frame rate on a 120 Hz panel, the GPU's cost, and a real finger. The simulator's frame rate was 60000 mHz, and the tour presented about 23 frames a second on average (`docs/mobile.md`, M7 reading).
 - A live finger on the simulator: not driven by an agent. The tour's touches enter through `RawInput.events`, not through the simulator's input.
 - The desktop live run (`cargo run -p demo -- --demo --exit-after-demo`) on a logged-in, unlocked session: unverified here (the windows were occluded in the session that ran it); the headless test runs the same marks.
-- A recording: the user's, not made here.
+- A recording: made on request only (see "Recording"); the desktop window one is the user's.
+
+## How the side-by-side video was made
+
+`docs/images/mobile-demo.mp4` (46 s, 1920x1080, iOS left and Android right) and its still `mobile-demo.png`. Redo it after a visible change:
+
+1. iOS: `scripts/ios-sim.sh --demo --keep-booted`, then `xcrun simctl io <udid> recordVideo --codec h264 ios.mov &`, `xcrun simctl launch --terminate-running-process <udid> rs.lune.luneui.demo --demo --touches`, wait about 52 s, `kill -INT` the recorder. The tour runs once (43 s); the file is 1206x2622.
+2. Android: `scripts/android-emu.sh --demo --keep-booted`, then write the flags into the app (`printf -- '--demo\n--touches\n' | adb -s emulator-5580 shell "run-as rs.lune.luneui.demo sh -c 'mkdir -p files && cat > files/launch-args'"`), start `adb -s emulator-5580 shell screenrecord --time-limit 55 --bit-rate 6000000 /sdcard/demo.mp4` in the background, `am start -n rs.lune.luneui.demo/android.app.NativeActivity`, wait 60 s, `adb pull`, and remove `files/launch-args`. `screenrecord` writes only on a screen change, so it gives about 6 frames a second on the software GPU; the video repeats frames to 30 fps. Do not start it with `monkey`: it records the home screen.
+3. Compose with ffmpeg. This ffmpeg has no `drawtext`, so draw the labels into a 1920x1080 background PNG with Pillow (`python3 -I`), then `ffmpeg -loop 1 -i bg.png -i ios.mov -i android.mp4 -filter_complex "[1:v]fps=30,scale=-2:890,setpts=PTS-STARTPTS[a];[2:v]fps=30,scale=-2:890,setpts=PTS-STARTPTS[b];[0:v][a]overlay=x=(480-w/2):y=110:eof_action=pass[t];[t][b]overlay=x=(1440-w/2):y=110:eof_action=pass[o]" -map "[o]" -r 30 -c:v libx264 -pix_fmt yuv420p -crf 20 -t 46 out.mp4`. The still is one frame (`-ss 20 -frames:v 1`).
+4. Shut both devices down and delete them (`--delete-device`); delete the raw recordings.
