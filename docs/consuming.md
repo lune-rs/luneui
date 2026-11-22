@@ -513,6 +513,25 @@ No migration map: nothing an app already calls changes.
 
 **Unverified here.** A device. A real finger: the scripted touches enter through `RawInput.events`, not through the simulator's or the OS's input. 120 Hz on a panel: the simulator reports 60 Hz, and the 120 Hz schedule is headless.
 
+## 0.7.5 to 0.7.6: Android run time
+
+D420 to D424. Additive, hence 0.7.6: no public item changes, so **nothing breaks** and an app needs nothing changed. The release gives `lune-ui-platform`'s existing mobile API an Android body, runs `apps/demo` on an Android emulator and adds `scripts/android-emu.sh`; the release is D424.
+
+What is new (no item of the five library crates is added, removed or re-signed; the doc comments say what Android does):
+
+- `mobile::safe_area(&window)` on Android reads winit's `content_rect()` against the native window's size and scale, in logical pixels, each side clamped at 0 (D7, D422).
+- `mobile::KeyboardInset` on Android is a split of the same content rect against the smallest bottom inset seen at the window's size (D8 branch a). winit sends no event for it, so `on_change` never runs and the app sees a change on its next frame; call `safe_area` before `inset` each frame, as the demo does.
+- `mobile::Pasteboard` on Android is `ClipboardManager` through JNI, with no Java class (D9, D422). Any Java exception, a null or a missing context is `Err(())`.
+- Two direct dependencies of `lune-ui-platform`, `jni` 0.22 and `ndk-context` 0.1, under its Android target table. Both were already in `Cargo.lock` through `android-activity`: the lock gains two dependency edges and no package. Desktop and iOS builds do not see them.
+- The demo (`apps/demo`, not library API): `android/AndroidManifest.xml`, a launch-arguments file the app reads and deletes (`files/launch-args`), the surface dropped on `suspended` and rebuilt on `resumed` (D421), probe lines for touch, text and the content rect, and a tour that holds at the emulator's frame rate (D423).
+- `scripts/android-emu.sh`: packages the demo as an APK with the installed SDK (no Gradle, no Java), creates and boots its own AVD `luneui-demo-pixel7`, and checks a frame (`--probe`), a smoke (`--smoke`), the keyboard (`--keyboard`), the tour (`--demo`) and landscape (`--landscape`); `--build-only` is the local link check, `--delete-device` removes the AVD (D420, D423). `docs/mobile.md` says how to read it.
+
+No migration map: nothing an app already calls changes. An app that wants Android copies the standing "Mobile apps" section above.
+
+**Readings.** On the API 34 emulator with `-gpu swiftshader_indirect` (`docs/mobile.md`, "M8 reading"): the demo presents a frame (wgpu on Vulkan, SwiftShader, 1080x2400 at scale 2.625); the safe area is `0, 107.8, 0, 24` at rest; the keyboard inset reads 336.4 with the keyboard up and the safe area's bottom stays the one at rest; the clipboard round trip reads back what it wrote; `adb shell input` taps and swipes reach the widgets through the OS path; the life cycle gives `resumed suspended resumed` with no frame between the last two and a drawn screen after; `scripts/android-emu.sh --smoke`, `--keyboard`, `--smoke --landscape` and `--demo` pass (the tour 16/16 in 43 s). The stripped `libdemo.so` grew by 30,256 bytes and the APK by 12,288; desktop binaries do not change. The tour gained a closing nudge because the emulator draws about every 61 ms, where the pointer reads a swipe's release as still (D423).
+
+**Unverified here.** A real device and its GPU; 120 Hz. Typing on the soft keyboard's own keys (IME composition; `input text` proves the key path only). TalkBack: accessibility is not wired on Android (D10). Other API levels and 16 KB page-size devices. `-gpu host`: it presented 5 frames and stalled.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
