@@ -1203,6 +1203,8 @@ pub struct Rendered {
     pub out: FrameOutput,
     /// The safe area the frame read.
     pub safe: Insets,
+    /// Where the frame laid everything out (its size and safe area).
+    pub layout: Layout,
     /// The marks the tour passed in this frame, each with its check (run on the state the frame
     /// drew).
     pub marks: Vec<MarkResult>,
@@ -1329,6 +1331,7 @@ impl Demo {
             scene,
             out,
             safe,
+            layout,
             marks,
             restarted: adv.restarted,
             finished: adv.finished,
