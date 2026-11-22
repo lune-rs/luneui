@@ -17,6 +17,7 @@ summary: Glass context menu with open and close motion
 
 - Glass context menu (R-overlay-1).
 - Open and close motion with the app passing time in (R-motion-1).
+- Placed inside the safe area and above the keyboard under touch (R-overlay-5, D365).
 - Wane — Variants: plain; with a two-line header (`__header`: name with a status dot, status line); danger item (`c-menu__item--danger`, `--err` text; Quit Wane); chevron hints (submenu); shortcut hints (11 px quaternary) (R-overlay-1)
 - Wane — States: item rest; hover (`--popup-item-hover`); pressed (`--popup-item-pressed`); disabled (`--menu-disabled`); menu opening and closing (motion below). (R-overlay-1)
 - Wane — Sizes: Min width 190, padding 5, radius 9 (`--radius-menu`), 1 px `--popup-border-soft` (white at .08; user, 2026-11-04), fill `--menu-glass` (rgb 44 44 44 / .616); items 28 high, radius 4, padding 0 8, label 12 (`--font-menu`), icon slot 14 (13 px glyph), hint 11; separator slot 11 high with a 1 px line. (R-overlay-1)
@@ -122,6 +123,7 @@ Never animated: the rows themselves, the pressed fill, and the panel's size (the
 - `menu-anchored`: under its button, `Side::Bottom`, `PlaceAlign::Start`, gap 4.
 - `menu-anchored-flipped`: the same near the window's bottom, flipped above.
 - `tray-menu-window` (M10, `platform.tray-icon`): `Ui::menu_window`, the menu filling a window of its own from its corner, over a flat stand-in for the desktop, settled.
+- `phone-widgets-safe-area-menu`: a long press at y 20, inside a 62 px safe area: the menu opens below the safe area's top edge, settled.
 
 ### Painter primitives
 

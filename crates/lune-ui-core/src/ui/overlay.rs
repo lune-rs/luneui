@@ -74,6 +74,10 @@ pub(crate) struct OverlayRec {
     pub(crate) phase: RecPhase,
     pub(crate) exit: Option<ExitPainter>,
     pub(crate) saved_focus: Option<WidgetId>,
+    /// It opened (or last reopened) while the pointer kind was a touch, so it holds the text
+    /// widget it took the focus from (`Ui::held_by_overlay`, D368); a later press of another
+    /// kind does not change it.
+    pub(crate) opened_by_touch: bool,
     pub(crate) called: bool,
     /// The scope it was last called in was disabled: it and its exit draw at `DISABLED_ALPHA`.
     pub(crate) disabled: bool,
@@ -86,6 +90,7 @@ impl std::fmt::Debug for OverlayRec {
             .field("tag", &self.tag)
             .field("phase", &self.phase)
             .field("saved_focus", &self.saved_focus)
+            .field("opened_by_touch", &self.opened_by_touch)
             .finish_non_exhaustive()
     }
 }
@@ -324,6 +329,7 @@ impl<'a> Ui<'a> {
         let now = self.time();
         let (tokens, tier) = (self.config.theme.motion, self.config.tier);
         let focused = self.store.focus.focused;
+        let touch = self.pointer_kind() == crate::input::PointerKind::Touch;
         let outside = self.painter.hit_context().0 == LayerId::Outside as usize;
         let mut index = match self.store.overlays.iter().position(|o| o.id == id) {
             Some(i) => i,
@@ -340,6 +346,7 @@ impl<'a> Ui<'a> {
                     },
                     exit: None,
                     saved_focus: focused,
+                    opened_by_touch: touch,
                     called: false,
                     disabled: false,
                 });
@@ -374,6 +381,7 @@ impl<'a> Ui<'a> {
         if reopened {
             rec.reopen(now, &tokens, tier);
             rec.saved_focus = focused;
+            rec.opened_by_touch = touch;
             self.opened.push(id);
         }
         rec.opts = OverlayOptions { layer, ..*options };
@@ -464,6 +472,7 @@ impl<'a> Ui<'a> {
             let rec = &mut store.overlays[i];
             if rec.active() && !rec.called {
                 let (tag, saved, anchor) = (rec.tag, rec.saved_focus, rec.opts.anchor);
+                let by_touch = rec.opened_by_touch;
                 let keep = rec.start_closing(now, tokens, tier);
                 super::focus::restore_on_close(store, registered, &live, tag, saved, anchor);
                 let in_closing = |id: WidgetId| {
@@ -479,8 +488,11 @@ impl<'a> Ui<'a> {
                 let heirs: Vec<usize> = (i + 1..store.overlays.len())
                     .filter(|&j| store.overlays[j].saved_focus.is_some_and(in_closing))
                     .collect();
+                // An heir takes the closing overlay's place in the chain from the widget its
+                // saved focus names, so it holds that widget as the closing one did (D368).
                 for j in heirs {
                     store.overlays[j].saved_focus = saved;
+                    store.overlays[j].opened_by_touch = by_touch;
                 }
                 if !keep {
                     store.overlays.remove(i);

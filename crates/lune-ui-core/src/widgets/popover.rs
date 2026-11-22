@@ -135,6 +135,23 @@ pub fn place(req: &PlaceRequest) -> Placement {
     }
 }
 
+/// `rect` kept inside `bounds` (less `margin`) on both axes, its start winning when it does not fit:
+/// [`place`] leaves a panel that fits where the anchor put it, which under a safe area is behind
+/// the notch. `rect` itself when `bounds` is the whole `window` (D365).
+pub(crate) fn keep_in_bounds(rect: Rect, window: Rect, bounds: Rect, margin: f32) -> Rect {
+    if bounds == window {
+        return rect;
+    }
+    let along =
+        |start: f32, len: f32, lo: f32, hi: f32| start.min(hi - len - margin).max(lo + margin);
+    Rect::new(
+        along(rect.x, rect.w, bounds.x, bounds.right()),
+        along(rect.y, rect.h, bounds.y, bounds.bottom()),
+        rect.w,
+        rect.h,
+    )
+}
+
 /// What a popover draws behind its content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Surface {
@@ -225,8 +242,14 @@ impl<'a> Ui<'a> {
         options: &PopoverOptions,
         content: impl FnOnce(&mut Ui<'a>, Rect) -> R,
     ) -> (OverlayFrame, Placement, R) {
-        let window = self.painter().window;
-        let placement = place(&options.request(window));
+        let window = self.overlay_bounds();
+        let mut placement = place(&options.request(window));
+        placement.rect = keep_in_bounds(
+            placement.rect,
+            self.painter().window,
+            window,
+            options.margin,
+        );
         let rect = placement.rect;
         let origin = (rect.x, rect.y);
         let surface = options.surface;

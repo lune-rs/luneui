@@ -31,7 +31,7 @@ pub struct FilterOptions<'a> {
 
 What [`Ui::filter_bar`](../ui.md#method.Ui.filter_bar) is given besides its rect and text.
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:35`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:36`
 
 **Fields**
 
@@ -69,7 +69,7 @@ pub const CLEAR: f32 = 18.0;
 
 The clear button's side and its icon.
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:26`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:27`
 
 <a id="constant.CLEAR_ICON"></a>
 ### Constant `CLEAR_ICON`
@@ -78,7 +78,7 @@ Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:26`
 pub const CLEAR_ICON: f32 = 12.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:27`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:28`
 
 <a id="constant.ICON"></a>
 ### Constant `ICON`
@@ -89,7 +89,7 @@ pub const ICON: f32 = 14.0;
 
 The search icon and the space between it and the text.
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:23`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:24`
 
 <a id="constant.ICON_GAP"></a>
 ### Constant `ICON_GAP`
@@ -98,7 +98,7 @@ Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:23`
 pub const ICON_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:24`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:25`
 
 <a id="constant.PADDING"></a>
 ### Constant `PADDING`
@@ -107,7 +107,7 @@ Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:24`
 pub const PADDING: (f32, f32);
 ```
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:21`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:22`
 
 <a id="constant.RADIUS"></a>
 ### Constant `RADIUS`
@@ -118,5 +118,5 @@ pub const RADIUS: f32 = 4.0;
 
 The surface's corner radius and padding.
 
-Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:20`
+Source: `crates/lune-ui-core/src/widgets/filter_bar.rs:21`
 

@@ -465,6 +465,44 @@ fn a_press_on_an_actionable_link_raises_it_once_and_starts_no_selection() {
     assert_eq!(r.out.cursor, CursorIcon::Pointer, "the hand over a link");
 }
 
+/// A finger follows a link at the tap, not at the press, and a touch that moves away follows
+/// nothing (D362).
+#[test]
+fn a_touch_follows_an_actionable_link_on_the_tap_only() {
+    let items = link_doc();
+    let blocks = [MdBlock::Paragraph(&items)];
+    let (x, y) = on_link();
+
+    let mut h = drawn(&blocks, &live());
+    h.input.touch_start(1, x, y);
+    assert_eq!(
+        run(&mut h, &blocks, &live()).r.link,
+        None,
+        "not on the press"
+    );
+    h.input.touch_end(1, x, y);
+    assert_eq!(
+        run(&mut h, &blocks, &live()).r.link.as_deref(),
+        Some("docs/a.md"),
+        "on the tap"
+    );
+    assert_eq!(run(&mut h, &blocks, &live()).r.link, None, "once");
+
+    let mut h = drawn(&blocks, &live());
+    h.input.touch_start(1, x, y);
+    run(&mut h, &blocks, &live());
+    for k in 1..=3 {
+        h.input.touch_move(1, x, y + 30.0 * k as f32);
+        assert_eq!(run(&mut h, &blocks, &live()).r.link, None);
+    }
+    h.input.touch_end(1, x, y + 90.0);
+    assert_eq!(
+        run(&mut h, &blocks, &live()).r.link,
+        None,
+        "a drag opens nothing"
+    );
+}
+
 /// A press raises the link; the document is disabled while the button is held; the release after
 /// it raises nothing more (the capture outlives the frame in which the response lies).
 #[test]

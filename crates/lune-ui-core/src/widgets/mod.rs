@@ -4,6 +4,7 @@
 pub mod badge;
 pub mod banner;
 pub mod bar_chart;
+pub mod bottom_sheet;
 pub mod button;
 pub mod callout;
 pub mod caption;
@@ -28,12 +29,16 @@ pub mod lane_graph;
 pub mod list_row;
 pub mod markdown;
 pub mod menu;
+pub mod nav_bar;
 pub mod nav_item;
+pub mod nav_stack;
 pub mod page;
+pub mod pager;
 pub mod panel;
 pub mod pie_chart;
 pub mod popover;
 pub mod progress;
+pub mod pull_to_refresh;
 pub mod radio_group;
 pub mod row;
 pub mod scroll_area;
@@ -53,6 +58,8 @@ pub mod stat;
 pub mod status_dot;
 pub mod stepper;
 pub mod steps;
+pub mod swipe_actions;
+pub mod tab_bar;
 pub mod tab_strip;
 pub mod table;
 pub mod text_area;
@@ -67,6 +74,8 @@ pub mod verdict_row;
 pub mod virtual_list;
 
 mod input_box;
+
+pub(crate) mod gesture_track;
 
 pub use button::{button, button_width};
 pub use checkbox::checkbox;

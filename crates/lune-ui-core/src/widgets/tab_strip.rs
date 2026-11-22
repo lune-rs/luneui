@@ -29,7 +29,7 @@ use crate::chrome::{self, TabSpan};
 use crate::color::{Rgba, with_alpha};
 use crate::drag::{DropResult, Metrics, ReorderDrag, Strip};
 use crate::icon;
-use crate::input::NamedKey;
+use crate::input::{NamedKey, PointerKind};
 use crate::motion::{Easing, Kind, Motion, MotionTier, Reduce, Time, Token};
 use crate::paint::{Painter, Rect, StrokeStyle, Xform};
 use crate::text::{Spec, Style};
@@ -582,6 +582,7 @@ impl Ui<'_> {
             )
         };
 
+        let touch = self.pointer_kind() == PointerKind::Touch;
         let mut responses = Vec::with_capacity(f.tabs.len());
         let mut close_responses = Vec::with_capacity(f.tabs.len());
         for (i, (tab, item)) in f.tabs.iter().zip(f.items).enumerate() {
@@ -592,6 +593,10 @@ impl Ui<'_> {
                 ..Sense::DRAG
             };
             let resp = self.interact(item.id, rect, sense);
+            // A tab claims no drag axis under a finger (D362): in a strip that scrolls a pan
+            // scrolls it, in one that fits a drag reorders (M3 D6), and a long press arms a
+            // reorder in either.
+            self.set_drag_axes(item.id, false, false);
             let mut node = Node::new(item.id, Role::Tab, tab.title, rect);
             node.description = Some(tab.title.to_owned());
             if resp.enabled {
@@ -635,8 +640,14 @@ impl Ui<'_> {
             // next; a Control, Alt or Command chord on them stays a shortcut (D157).
             let keyed =
                 self.activation_keys(item.id, resp.enabled, &[NamedKey::Enter, NamedKey::Space]);
-            let activated =
-                resp.enabled && (resp.press_started || (resp.clicked && !pressed_here) || keyed);
+            // A finger activates at the tap, so a pan that scrolls the strip activates nothing
+            // (D362); a mouse activates on the press.
+            let pointed = if touch {
+                resp.clicked
+            } else {
+                resp.press_started || (resp.clicked && !pressed_here)
+            };
+            let activated = resp.enabled && (pointed || keyed);
             if activated {
                 events.push(TabEvent::Activate(tab.key));
             }

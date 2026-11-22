@@ -13,6 +13,7 @@ mod a11y;
 mod badge;
 mod banner;
 mod bar_chart;
+mod bottom_sheet;
 mod button;
 mod callout;
 mod checkbox;
@@ -46,12 +47,16 @@ mod locale;
 mod markdown;
 mod menu;
 pub(crate) mod motion;
+mod nav_bar;
 mod nav_item;
+mod nav_stack;
+mod pager;
 mod panel;
 mod pie_chart;
 mod popover;
 mod primitives;
 mod progress;
+mod pull_to_refresh;
 mod radio_group;
 mod recipes;
 pub(crate) mod reference;
@@ -72,6 +77,8 @@ mod stat;
 mod status_dot;
 mod stepper;
 mod steps;
+mod swipe_actions;
+mod tab_bar;
 mod tab_strip;
 mod table;
 mod text_edit;
@@ -82,6 +89,7 @@ mod toggle;
 mod toolbar;
 mod tooltip;
 mod touch;
+mod touch_widgets;
 mod tray;
 mod tree_view;
 mod ui;
@@ -186,6 +194,14 @@ pub(crate) static PAGES: &[&Page] = &[
     &crate::showcase::labs::depth::PAGE,
     &crate::showcase::labs::banding::PAGE,
     &recipes::PAGE,
+    &touch_widgets::PAGE,
+    &nav_bar::PAGE,
+    &tab_bar::PAGE,
+    &bottom_sheet::PAGE,
+    &nav_stack::PAGE,
+    &pager::PAGE,
+    &swipe_actions::PAGE,
+    &pull_to_refresh::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

@@ -13,6 +13,7 @@ use std::hash::Hash;
 use super::button::IconButton;
 use super::field::{FieldChrome, FieldOptions, FieldResponse};
 use crate::icon;
+use crate::input::PointerKind;
 use crate::paint::Rect;
 use crate::ui::{Sense, Ui, WidgetId};
 
@@ -113,7 +114,14 @@ impl Ui<'_> {
                 self.request_focus(id);
             }
         }
-        if surface.press_started {
+        // A finger asks for focus at the tap, so a pan that scrolls past the bar raises no
+        // keyboard (D362); a mouse asks on the press.
+        let asks = if self.pointer_kind() == PointerKind::Touch {
+            surface.clicked
+        } else {
+            surface.press_started
+        };
+        if asks {
             self.request_focus(id);
         }
         out

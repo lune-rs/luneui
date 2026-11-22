@@ -3983,6 +3983,7 @@ mod m10 {
     type Rgb = [u8; 3];
 
     // What `extras` draws beyond the controls and `more`.
+    use lune_ui_core::widgets::bottom_sheet::BottomSheet;
     use lune_ui_core::widgets::callout::CalloutOptions;
     use lune_ui_core::widgets::caption::CaptionOptions;
     use lune_ui_core::widgets::command_palette::{Palette, PaletteRow, PaletteSection};
@@ -3994,11 +3995,13 @@ mod m10 {
     use lune_ui_core::widgets::kanban_board::{BoardOptions, KanbanCard, KanbanColumn};
     use lune_ui_core::widgets::markdown::{MdBlock, MdInline, MdOptions};
     use lune_ui_core::widgets::menu::{MenuItem, MenuRow};
+    use lune_ui_core::widgets::nav_bar::{NavAction, NavBar};
     use lune_ui_core::widgets::page::PageOptions;
     use lune_ui_core::widgets::popover::{PlaceAlign, PopoverOptions, Side, Surface};
     use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
     use lune_ui_core::widgets::settings_page::SettingsPage;
     use lune_ui_core::widgets::stat::StatOptions;
+    use lune_ui_core::widgets::tab_bar::TabBarItem;
     use lune_ui_core::widgets::table::{Cell, ColumnWidth, TableColumn, TableOptions};
     use lune_ui_core::widgets::toolbar::ToolbarOptions;
     use lune_ui_core::widgets::virtual_list::{RowKey, SelectionMode};
@@ -4468,6 +4471,26 @@ mod m10 {
                     &[],
                     "Rail",
                 );
+                // The phone chrome (D370): a navigation bar with a back button and an action, and
+                // a bottom tab bar with a badge on the item that is not selected.
+                let nav_actions = [NavAction::new(icon::SEARCH, "Search")];
+                ui.nav_bar(
+                    "nav",
+                    Rect::new(340.0, 200.0, 400.0, 106.0),
+                    &NavBar::new("Title")
+                        .with_back("Back")
+                        .with_actions(&nav_actions),
+                );
+                let mut tab = 0;
+                ui.tab_bar(
+                    "tabs",
+                    Rect::new(340.0, 400.0, 400.0, 83.0),
+                    &[
+                        TabBarItem::new(icon::SEARCH, "One"),
+                        TabBarItem::new(icon::GEAR, "Two").with_badge("3"),
+                    ],
+                    &mut tab,
+                );
                 let o = ScrollOptions {
                     extent: Some((300.0, 900.0)),
                     ..ScrollOptions::default()
@@ -4755,6 +4778,71 @@ mod m10 {
                     PopoverOptions::new(Rect::new(20.0, 400.0, 100.0, 30.0), (200.0, 100.0));
                 o.surface = Surface::Glass;
                 ui.popover("pop", &o, |_, _| ());
+                // A bottom sheet (D371): the scrim, the frosted surface, the grabber and a
+                // swatch of content, all from the theme.
+                let mut sheet_open = true;
+                ui.bottom_sheet(
+                    "sheet",
+                    &mut sheet_open,
+                    &BottomSheet::new("Sheet"),
+                    |ui, rect| {
+                        let c = ui.theme().surface_selected;
+                        ui.painter().fill(
+                            Rect::new(rect.x + 16.0, rect.y + 16.0, 120.0, 24.0),
+                            4.0,
+                            c,
+                        );
+                    },
+                );
+                // A navigation stack (D372) at rest: it paints nothing of its own (the shade and the
+                // shadow of a move are the theme's scrim), the level's fill is the page's.
+                ui.nav_stack("stack", Rect::new(0.0, 0.0, 200.0, 300.0), 1, |ui, _, r| {
+                    let c = ui.theme().surface_selected;
+                    ui.painter().fill(r, 0.0, c);
+                });
+                // A pager (D373): the page's own fill and the dots, the current one in the accent.
+                let mut pager_page = 1;
+                ui.pager(
+                    "pager",
+                    Rect::new(0.0, 0.0, 200.0, 300.0),
+                    3,
+                    &mut pager_page,
+                    &lune_ui_core::widgets::pager::PagerOptions::new("Pager"),
+                    |ui, _, r| {
+                        let c = ui.theme().surface_selected;
+                        ui.painter().fill(r, 0.0, c);
+                    },
+                );
+                // A swipe row at rest (D374): its content's own fill; the buttons draw only while
+                // uncovered (`widget_swipe_actions.rs` draws them under a theme of its own).
+                let swipe_actions =
+                    [
+                        lune_ui_core::widgets::swipe_actions::SwipeAction::new("Delete")
+                            .with_tone(Tone::Err),
+                    ];
+                ui.swipe_actions(
+                    "swipe",
+                    Rect::new(0.0, 320.0, 200.0, 48.0),
+                    &lune_ui_core::widgets::swipe_actions::SwipeActions::new()
+                        .with_trailing(&swipe_actions),
+                    |ui, r| {
+                        let c = ui.theme().surface_selected;
+                        ui.painter().fill(r, 0.0, c);
+                    },
+                );
+                // A pull to refresh holding its band (D375): the spinner's glyph from the theme.
+                ui.pull_to_refresh(
+                    "refresh",
+                    Rect::new(0.0, 0.0, 200.0, 300.0),
+                    true,
+                    &lune_ui_core::widgets::scroll_area::ScrollOptions::default(),
+                    |_, _| {
+                        (
+                            (),
+                            lune_ui_core::widgets::scroll_area::Extent::new(200.0, 300.0),
+                        )
+                    },
+                );
                 let rows = [PaletteRow {
                     key: 1,
                     text: "Reload",

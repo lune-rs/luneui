@@ -51,6 +51,10 @@ const UNCITED: &[(&str, &str)] = &[
 #[cfg(test)]
 const SHARED_WIDGET_HELPERS: &[(&str, &str)] = &[
     (
+        "gesture_track.rs",
+        "the motion core of the mobile components: a track that follows a finger and settles, and the pan region (D369)",
+    ),
+    (
         "input_box.rs",
         "the private chrome shared by the combo box, the stepper and the field",
     ),
@@ -1713,14 +1717,14 @@ mod tests {
             }
         }
         assert!(cited >= 8, "the table cites {cited} tests");
-        // The mobile rules still open are slots: nothing claims to enforce them. The mobile program
-        // fills them as it decides them (M3 filled four of the seven).
-        assert!(
+        // The mobile program has decided every mobile rule (M3 filled four of the seven, M5 the last
+        // three), so no row is left as an open slot.
+        assert_eq!(
             rules
                 .iter()
                 .filter(|r| r.kind == RuleKind::MobileSlot)
-                .count()
-                >= 3
+                .count(),
+            0
         );
     }
 }

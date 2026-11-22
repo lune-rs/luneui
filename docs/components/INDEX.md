@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 103 |
+| done | 110 |
 | external | 4 |
-| **total** | **109** |
+| **total** | **116** |
 
 ## core
 
@@ -78,6 +78,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [widget.form-field](widget/form-field.md) | Form field (label, control, hint) | done | wane | Form field: label above a control, hint below; error state rings the control and colours the hint in err |
 | [widget.label](widget/label.md) | Label | done | luneterm, wane | Label: UI-font text at the theme base size; colour from the caller; section and title roles from the font scale |
 | [widget.list-row-badge](widget/list-row-badge.md) | List rows with status badges | done | lunegit, wane | Master list row: name, value and sub-line with a badge in the head; rest transparent, hover surface-hover, selected surface-selected |
+| [widget.nav-bar](widget/nav-bar.md) | Navigation bar | done | any | Navigation bar of a phone screen: a 44 px row at the bottom of the rect the app gives it, with a back button, an elided title and up to three action buttons |
 | [widget.nav-item](widget/nav-item.md) | Navigation item | done | wane | Navigation item: 32 px row, secondary text at rest, surface-selected fill and bright text when active, no accent bar |
 | [widget.radio-group](widget/radio-group.md) | Radio group | done | wane | Radio group: vertical 16 px rings, accent ring and 6 px dot when selected; arrow keys move the selection inside the group |
 | [widget.row](widget/row.md) | Row (setting row, list item row) | done | wane | Row: setting row (title, description, control at right, min 56 high) or compact item row (32 high, four columns); hover tints the row; rows are not clickable |
@@ -89,6 +90,8 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [widget.status-dot](widget/status-dot.md) | Status dot | done | wane | Status dot: static 8 px circle in ok, warn, err, data or paused tone; never alone, a word beside it carries the meaning |
 | [widget.stepper](widget/stepper.md) | Numeric stepper | done | luneterm, wane | Numeric stepper: value with minus and plus buttons; clamping and step size belong to the app |
 | [widget.steps](widget/steps.md) | Wizard steps | done | wane | Wizard steps: four 32 px rows in the sidebar slot with upcoming, current and done states; not clickable |
+| [widget.swipe-actions](widget/swipe-actions.md) | Swipe row actions | done | any | Swipe row actions of a phone list: a row whose content a finger slides sideways to uncover trailing or leading buttons, with a full swipe, and the secondary click or long press the app answers with its menu |
+| [widget.tab-bar](widget/tab-bar.md) | Bottom tab bar | done | any | Bottom tab bar of a phone screen: a 49 px row of equal items (glyph, label, optional badge) at the top of the rect the app gives it, one tab stop with roving focus |
 | [widget.tab-strip](widget/tab-strip.md) | Tab strip | done | luneterm, lunegit | Tab strip: tabs with close, new-tab button, overflow scrolling, drag reorder, and the connected tab outline with a running cue |
 | [widget.text-field](widget/text-field.md) | Text field | done | luneterm, wane | Single-line text box: 32 px, radius 6, placeholder, caret when focused; variants fill, small, mono, password, search and date; editing engine from text.text-edit |
 | [widget.toggle](widget/toggle.md) | Toggle switch | done | luneterm, wane | On/off switch: 40x20 track, accent fill when on, knob slides between ends |
@@ -99,6 +102,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
+| [overlay.bottom-sheet](overlay/bottom-sheet.md) | Bottom sheet | done | any | Modal bottom sheet of a phone screen: slides up to a detent, follows a finger, springs to the detent a release picks or off the screen to dismiss |
 | [overlay.command-palette](overlay/command-palette.md) | Command palette | done | lunegit | 640 px search dialog over commits, branches, tags, stash, reflog, repos, settings and commands, with prefix filters |
 | [overlay.dialog](overlay/dialog.md) | Modal dialog | done | luneterm, wane | Modal dialog card: dim blurred backdrop, 448 px frosted glass card, darker footer, app-supplied body |
 | [overlay.dropdown](overlay/dropdown.md) | Drop-down list | done | luneterm, wane | Combo drop-down option list that flips above its anchor near the window bottom |
@@ -114,8 +118,11 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
 | [layout.icon-rail](layout/icon-rail.md) | Icon rail | done | lunegit | Narrow icon column of 40 px toolbar buttons that switch the side panels and toggle the terminal, with a notification badge |
+| [layout.nav-stack](layout/nav-stack.md) | Navigation stack | done | any | Navigation stack of a phone app: the app's levels, the top one pushed in from the right, popped back out by a call or an edge swipe, the level below following by a third with a shade and a shadow |
 | [layout.page](layout/page.md) | Page card (header, scroll body, footer) | done | wane | The card that holds a screen: header with title and actions, scrolling body, optional pinned footer |
+| [layout.pager](layout/pager.md) | Pager | done | any | Pager of a phone screen: pages side by side that a finger swipes between one at a time with a rubber band at the ends, and a row of dots with one tab stop |
 | [layout.panel](layout/panel.md) | Panel (group box) | done | wane | Outline-only group box with title, meta, body and action footer |
+| [layout.pull-to-refresh](layout/pull-to-refresh.md) | Pull to refresh | done | any | Pull to refresh of a phone list: a scroll area that reports refresh when a finger pulls its content 64 px past the top and lets go, and holds a spinner in a 56 px band while the app refreshes |
 | [layout.recipes](layout/recipes.md) | Screen design recipes | done | any | Seven screens (list, table, panel, page, sidebar, form, dialog) built from the composites and the layout functions, each a function to copy and a scene to dump at any window size |
 | [layout.scroll-area](layout/scroll-area.md) | Scroll area | done | any | Scrolling region: per-id offset, wheel and trackpad scrolling, scroll-into-view, follow-tail, offset kept across content replacement |
 | [layout.settings-page](layout/settings-page.md) | Settings page layout | done | luneterm | Settings page shell: a 20 px content host for the current section, a restart banner that reveals on demand, and the rows and sections built from toolkit widgets |

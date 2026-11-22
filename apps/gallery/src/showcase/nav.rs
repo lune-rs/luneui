@@ -84,6 +84,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "stack",
             "scroll-area",
             "touch",
+            "touch-widgets",
             "virtual-list",
             "page",
             "panel",
@@ -146,6 +147,19 @@ pub(crate) const GROUPS: &[Group] = &[
             "lab-json",
             "lab-depth",
             "lab-banding",
+        ],
+    },
+    // The phone components (milestone 6): a group of its own after Labs, so no row above moves.
+    Group {
+        name: "Mobile",
+        pages: &[
+            "nav-bar",
+            "tab-bar",
+            "bottom-sheet",
+            "nav-stack",
+            "pager",
+            "swipe-actions",
+            "pull-to-refresh",
         ],
     },
 ];

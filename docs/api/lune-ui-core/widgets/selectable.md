@@ -16,7 +16,8 @@ or a double press selects all of it, the fill covers all of what is drawn, and C
 of `full`. Navigation keys do nothing there, so a partial selection cannot exist.
 
 A value is no tab stop (`skip_tab`): a press or an assistive technology focuses it. The
-selection fill draws only while it is focused, and a focus loss clears the selection.
+selection fill draws only while it is focused, and a focus loss clears the selection, except to
+the app's edit menu that a touch opened from it, which holds it until focus returns (D364).
 
 Source: `crates/lune-ui-core/src/widgets/selectable.rs:1`
 

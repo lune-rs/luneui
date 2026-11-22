@@ -10,19 +10,23 @@
 //! of `full`. Navigation keys do nothing there, so a partial selection cannot exist.
 //!
 //! A value is no tab stop (`skip_tab`): a press or an assistive technology focuses it. The
-//! selection fill draws only while it is focused, and a focus loss clears the selection.
+//! selection fill draws only while it is focused, and a focus loss clears the selection, except to
+//! the app's edit menu that a touch opened from it, which holds it until focus returns (D364).
 
 use std::hash::Hash;
 use std::ops::Range;
 
-use super::field::{EditConfig, NodeFacts, Shown, begin_edit, edit_node, edit_pointer, end_edit};
+use super::field::{
+    EditConfig, HandleSpace, NodeFacts, Shown, begin_edit, edit_handles, edit_node, edit_pointer,
+    end_edit,
+};
 use super::selection;
 use super::text_lines::range_boxes;
 use crate::access::{Action, Node, Role, State, TextValue, Value};
-use crate::input::CursorIcon;
+use crate::input::{CursorIcon, PointerKind};
 use crate::paint::Rect;
 use crate::text::{Spec, joined_text};
-use crate::text_edit::{EditCommand, EditFlags};
+use crate::text_edit::{EditActions, EditCommand, EditFlags};
 use crate::ui::{Response, Sense, Ui};
 
 /// A value takes hover, clicks, drags and focus, but no Tab stop.
@@ -73,21 +77,40 @@ impl Ui<'_> {
             if h > 0.0 { h } else { rect.h },
         );
         let r = self.interact(id, hit, SELECT_SENSE);
-        let focused = r.focused;
+        // The text claims no axis: a touch drag on it is a pan of what holds it (D364).
+        self.set_drag_axes(id, false, false);
         // The key focus, kept in a disabled scope: the keys are taken there and nothing acts (D140).
         let held = self.focus_state().0 == Some(id);
+        // The app's edit menu holds the text while it has the key focus: the selection stays for
+        // Copy and is drawn, as focus returns to the text when the menu closes (D364).
+        let kept = self.held_by_overlay(id);
+        let focused = r.focused || kept;
         // Positional whenever the runs join to `full`, one run or many (D11); only a text that
         // differs from it (an elided one) is selected whole.
         let positioned = !spec.runs.is_empty() && joined_text(spec) == full;
         let ink = t.text_selection;
 
         if positioned {
-            let held = (focused, held);
+            let held = (focused, held || kept);
             self.selectable_positional(id, hit, &r, rect, spec, full, name, &[], held, false);
         } else {
-            let mut selected = self.persistent::<WholeSelection>(id).0 && held;
-            if r.press_started {
+            let mut selected = self.persistent::<WholeSelection>(id).0 && (held || kept);
+            // A mouse selects at the press; a finger at the tap or the long press, so a pan
+            // selects nothing (D364).
+            let touch = self.pointer_kind() == PointerKind::Touch;
+            if (r.press_started && !touch) || (touch && (r.clicked || r.secondary_clicked)) {
                 selected = true;
+            }
+            // The app's edit commands (D364): Select all and Copy, as their keys; a disabled
+            // scope drops them (D140).
+            for cmd in self.take_edit_commands(id) {
+                match cmd {
+                    EditCommand::SelectAll if r.enabled => selected = true,
+                    EditCommand::Copy if r.enabled && selected => {
+                        self.clipboard_write(full.to_owned());
+                    }
+                    _ => {}
+                }
             }
             if held {
                 let act = r.enabled;
@@ -114,6 +137,7 @@ impl Ui<'_> {
                 }
             }
             self.persistent::<WholeSelection>(id).0 = selected;
+            self.publish_edit_actions(id, EditActions::whole(selected));
             let shown = selected && focused;
             if shown {
                 let row = [Rect::new(rect.x, rect.y, w, h)];
@@ -164,13 +188,15 @@ impl Ui<'_> {
             if h > 0.0 { h } else { rect.h },
         );
         let r = self.interact(id, hit, SELECT_SENSE);
+        self.set_drag_axes(id, false, false);
         let held = self.focus_state().0 == Some(id);
         let full = joined_text(spec);
         let name = strip_pads(&full, 0..full.chars().count(), pads);
         if spec.runs.is_empty() {
             return r;
         }
-        let held = (r.focused, held);
+        let kept = self.held_by_overlay(id);
+        let held = (r.focused || kept, held || kept);
         self.selectable_positional(id, hit, &r, rect, spec, &full, &name, pads, held, true);
         if r.hovered || r.pressed {
             self.set_cursor(CursorIcon::Text);
@@ -233,6 +259,13 @@ impl Ui<'_> {
             .collect();
         selection::paint(self.painter(), &rows, (false, false), ink);
         self.painter().text(spec, rect.x, rect.y);
+        let space = HandleSpace {
+            origin: (rect.x, rect.y),
+            drawn: (rect.x, rect.y),
+            clip_x: None,
+            ink: self.theme().fg_primary,
+        };
+        edit_handles(self, id, &cfg, &mut st, &mut text, space, focused);
         let facts = NodeFacts {
             role: Role::StaticText,
             name,

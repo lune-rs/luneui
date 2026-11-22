@@ -21,5 +21,5 @@ pub const LAZY_HOVER_DWELL: std::time::Duration;
 
 The minimum continuous hover before lazily built hover content is built (C5's 150 ms). Not the tooltip delay, which is `MotionTokens::tooltip_delay`.
 
-Source: `crates/lune-ui-core/src/widgets/tooltip.rs:18`
+Source: `crates/lune-ui-core/src/widgets/tooltip.rs:20`
 

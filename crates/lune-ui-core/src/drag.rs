@@ -115,6 +115,11 @@ struct Glue {
 }
 
 /// The reorder gesture's state machine.
+///
+/// Under a finger, claim no drag axis for the items that feed it
+/// ([`Ui::set_drag_axes`](crate::ui::Ui::set_drag_axes)`(id, false, false)`): in a strip or column
+/// that scrolls, a pan then scrolls it and a tap selects, and a long press arms the reorder; where
+/// nothing scrolls on the drag's axis, the drag reorders at once, as a mouse drag does (D362).
 #[derive(Debug, Clone, Default)]
 pub struct ReorderDrag {
     armed: bool,

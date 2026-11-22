@@ -24,6 +24,7 @@ selection or clipboard. Lunegit gets all of it from Avalonia's `TextBox`; the to
 - IME composition integrated with the edit state (R-text-4).
 - Edit state with undo history as persistent state that survives keep-alive (R-core-8).
 - Caret and hit queries on the text system (`text.shaping`, `TextSystem`, C2).
+- Touch editing: tap caret, word on double tap and long press, handles, and the app's edit menu through `Ui::edit_actions` (R-text-7, D364).
 
 ## Existing code
 
@@ -119,6 +120,10 @@ None: the engine has no text of its own. A cut, copy and paste context menu, if 
 - `text-edit-error`: invalid field (ring in the error colour), settled.
 - `text-edit-focus-ring`: focus gained, t = 90 ms (half of `fast`).
 - `text-edit-hover`: pointer enters the box, t = 60 ms (half of `instant`).
+- `phone-widgets-field-tap`: a tap in a one-line field: the caret is at the tap and the field has focus, settled.
+- `phone-widgets-field-long-press`: a press held on a word and lifted: the word is selected and the two selection handles show, settled.
+- `phone-widgets-handle-drag`: the end handle dragged right: the selection grows with it, settled.
+- `phone-widgets-edit-menu`: the same long press with the app's own menu: Cut, Copy, Paste and Select all, the rows `Ui::edit_actions` allows, open above the field (the menu takes focus, so the field draws no selection while it is open), settled.
 
 ### Painter primitives
 

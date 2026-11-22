@@ -2000,3 +2000,74 @@ fn the_hold_on_a_focused_row_lapses_when_the_list_is_not_drawn() {
         assert_eq!(n, 0, "scrolled_out={scrolled_out}: the row's state went");
     }
 }
+
+fn single(count: usize) -> ListOptions<'static> {
+    ListOptions {
+        selection: SelectionMode::Single,
+        ..opts(count)
+    }
+}
+
+#[test]
+fn a_touch_pan_from_a_row_selects_nothing_and_a_tap_selects_it() {
+    // 100 rows scroll: the pan scrolls the list.
+    let o = single(100);
+    let mut h = harness();
+    run(&mut h, &o);
+    run(&mut h, &o);
+    let (x, y) = over(2);
+    h.input.touch_start(1, x, y);
+    assert!(run(&mut h, &o).state.selection.is_empty());
+    let mut last = None;
+    for k in 1..=3 {
+        h.input.touch_move(1, x, y - 30.0 * k as f32);
+        last = Some(run(&mut h, &o));
+    }
+    h.input.touch_end(1, x, y - 90.0);
+    let lift = run(&mut h, &o);
+    assert!(lift.state.selection.is_empty(), "a pan selects nothing");
+    assert!(last.is_some_and(|r| r.r.offset > 20.0), "the list scrolled");
+
+    // A tap selects the row on the lift, not on the press.
+    let mut h = harness();
+    run(&mut h, &o);
+    run(&mut h, &o);
+    h.input.touch_start(1, x, y);
+    assert!(run(&mut h, &o).state.selection.is_empty());
+    h.input.touch_end(1, x, y);
+    let lift = run(&mut h, &o);
+    assert_eq!(lift.state.selection, BTreeSet::from([key(2)]));
+    assert!(lift.r.response.changed);
+
+    // A mouse press selects at once.
+    let mut h = harness();
+    run(&mut h, &o);
+    h.input.pointer_to(x, y).press(P);
+    assert_eq!(run(&mut h, &o).state.selection, BTreeSet::from([key(2)]));
+}
+
+#[test]
+fn a_touch_drag_over_the_rows_of_a_list_that_fits_does_not_drag_select() {
+    // Multi mode; five rows fit in the viewport, so nothing takes the touch as a pan.
+    let o = opts(5);
+    let mut h = harness();
+    run(&mut h, &o);
+    run(&mut h, &o);
+    let (x, y) = over(0);
+    h.input.touch_start(1, x, y);
+    run(&mut h, &o);
+    for k in 1..=4 {
+        h.input.touch_move(1, x, y + ROW * k as f32);
+        assert!(run(&mut h, &o).state.selection.is_empty());
+    }
+    h.input.touch_end(1, x, y + ROW * 4.0);
+    assert!(run(&mut h, &o).state.selection.is_empty());
+
+    // The mouse's drag still selects the range.
+    let mut h = harness();
+    run(&mut h, &o);
+    h.input.pointer_to(x, y).press(P);
+    run(&mut h, &o);
+    h.input.pointer_to(x, y + ROW * 2.0);
+    assert_eq!(run(&mut h, &o).state.selection.len(), 3);
+}

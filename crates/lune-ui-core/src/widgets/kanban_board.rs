@@ -1093,6 +1093,9 @@ impl Ui<'_> {
             ..Sense::DRAG
         };
         let r = self.interact(id, rect, sense);
+        // A card claims no drag axis under a finger (D362): in a column that scrolls a pan
+        // scrolls it, and a long press arms the move.
+        self.set_drag_axes(id, false, false);
         let mut node = Node::new(id, Role::ListItem, card.title, rect);
         node.states.insert(State::Focusable);
         for action in [

@@ -2063,3 +2063,51 @@ fn the_chevron_turns_with_the_block_too() {
     let open = run_with(&mut h, &o, |_| {});
     assert!(tip(&open.scene) > 0.0, "pointing down: wider than tall");
 }
+
+#[test]
+fn a_chevron_toggles_on_a_touch_tap_and_not_on_the_press() {
+    let at = chevron_at(0, TREE.y);
+    let mut h = UiHarness::new(WIN);
+    run(&mut h, &ROWS);
+    run(&mut h, &ROWS);
+    h.input.touch_start(1, at.0, at.1);
+    let press = run(&mut h, &ROWS);
+    assert_eq!(press.r.toggled, None, "the press toggles nothing");
+    assert!(press.st.expanded.is_empty() && press.st.selected.is_empty());
+    h.input.touch_end(1, at.0, at.1);
+    let lift = run(&mut h, &ROWS);
+    assert_eq!(lift.r.toggled, Some(A), "the tap toggles");
+    assert!(lift.st.expanded.contains(&A));
+    assert!(lift.st.selected.is_empty(), "a chevron selects nothing");
+
+    // A press that leaves its row before the lift toggles nothing.
+    let mut h = UiHarness::new(WIN);
+    run(&mut h, &ROWS);
+    run(&mut h, &ROWS);
+    h.input.touch_start(1, at.0, at.1);
+    run(&mut h, &ROWS);
+    h.input.touch_move(1, at.0 + 120.0, at.1 + 3.0 * ROW);
+    run(&mut h, &ROWS);
+    h.input.touch_end(1, at.0 + 120.0, at.1 + 3.0 * ROW);
+    let lift = run(&mut h, &ROWS);
+    assert_eq!(lift.r.toggled, None);
+    assert!(lift.st.expanded.is_empty());
+
+    // A tap on a row's label selects it on the lift.
+    let label = (TREE.x + 120.0, TREE.y + ROW + ROW / 2.0);
+    let mut h = UiHarness::new(WIN);
+    run(&mut h, &ROWS);
+    run(&mut h, &ROWS);
+    h.input.touch_start(1, label.0, label.1);
+    assert!(run(&mut h, &ROWS).st.selected.is_empty());
+    h.input.touch_end(1, label.0, label.1);
+    let lift = run(&mut h, &ROWS);
+    assert_eq!(lift.st.selected, BTreeSet::from([B]));
+    assert_eq!(lift.r.toggled, None);
+
+    // A mouse press on the chevron toggles at once.
+    let mut h = UiHarness::new(WIN);
+    run(&mut h, &ROWS);
+    h.input.pointer_to(at.0, at.1).press(P);
+    assert_eq!(run(&mut h, &ROWS).r.toggled, Some(A));
+}

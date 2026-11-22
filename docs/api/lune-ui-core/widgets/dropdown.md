@@ -22,7 +22,7 @@ pub struct DropdownOptions {
 
 How [`Ui::dropdown_with`](../ui.md#method.Ui.dropdown_with) differs from [`Ui::dropdown`](../ui.md#method.Ui.dropdown).
 
-Source: `crates/lune-ui-core/src/widgets/dropdown.rs:163`
+Source: `crates/lune-ui-core/src/widgets/dropdown.rs:164`
 
 **Fields**
 
@@ -52,7 +52,7 @@ pub struct DropdownResponse {
 
 What a dropdown frame reports.
 
-Source: `crates/lune-ui-core/src/widgets/dropdown.rs:125`
+Source: `crates/lune-ui-core/src/widgets/dropdown.rs:126`
 
 **Fields**
 
@@ -92,7 +92,7 @@ pub fn dropdown<H: Copy + PartialEq, S: AsRef<str>>(
 A list of options under (or, near the window's bottom edge, over) `anchor`. `options` pairs
 each text with whether it can be picked; `hit` names the hit region of option `i`.
 
-Source: `crates/lune-ui-core/src/widgets/dropdown.rs:92`
+Source: `crates/lune-ui-core/src/widgets/dropdown.rs:93`
 
 <a id="fn.paint"></a>
 ### Function `paint`
@@ -110,7 +110,7 @@ pub fn paint<H: Copy + PartialEq, S: AsRef<str>>(
 Draws the panel and its rows, without hit regions. `hot[i]` is the hover (or keyboard
 highlight) fill of option `i`; it applies to an enabled row that is not the selected one.
 
-Source: `crates/lune-ui-core/src/widgets/dropdown.rs:79`
+Source: `crates/lune-ui-core/src/widgets/dropdown.rs:80`
 
 <a id="fn.panel_rect"></a>
 ### Function `panel_rect`
@@ -133,5 +133,5 @@ pub fn row_rect(panel: Rect, i: usize) -> Rect
 
 Option `i`'s row inside `panel`.
 
-Source: `crates/lune-ui-core/src/widgets/dropdown.rs:35`
+Source: `crates/lune-ui-core/src/widgets/dropdown.rs:36`
 

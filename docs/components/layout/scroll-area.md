@@ -22,6 +22,7 @@ behaviours (`ScrollOffsetPreserver`, `AutoScrollBehavior`); the toolkit has to o
 - Scroll regions that keep offset (R-layout-2).
 - Offset as persistent state under keep-alive (R-core-8).
 - The scrollbar widget draws the thumb (R-widget-2).
+- Under the on-screen keyboard: the range extended by the covered part and the focused field revealed (R-overlay-5, D365).
 
 ## Existing code
 
@@ -120,6 +121,7 @@ None: the area has no text of its own.
 - `phone-touch-landed`: the same flick after the decay's end (about 3 s): at rest, settled.
 - `phone-touch-rubber-band`: the finger pulled 150 px past the top and holds: the list is stretched by less than the pull, settled.
 - `phone-touch-bounce`: 100 ms after that pull is let go: the list is springing back, moving.
+- `phone-widgets-keyboard`: a tap in a box low in a full-window page, then a keyboard 300 px high: the page extends its range by the covered part and scrolls the box above the keyboard, settled.
 
 ### Painter primitives
 

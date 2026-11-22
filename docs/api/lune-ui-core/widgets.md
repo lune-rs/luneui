@@ -14,6 +14,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`badge`](widgets/badge.md) - A static tag (`widget.badge`): 18 px high, radius 8, a one px tone border, 11 px Medium text on a 16 px line, an optional leading status dot.
 - [`banner`](widgets/banner.md) - A banner and an empty state that take the caller's own text (`widget.banner-empty-state`).
 - [`bar_chart`](widgets/bar_chart.md) - The stacked bar chart (`data.bar-chart`, D164, D165): painter rectangles with value transitions.
+- [`bottom_sheet`](widgets/bottom_sheet.md) - The bottom sheet of a phone screen (`overlay.bottom-sheet`, D371): a modal surface that slides up from the window's bottom edge to a detent, follows a finger that drags it, and springs to the detent t...
 - [`button`](widgets/button.md) - Button control and its label width.
 - [`callout`](widgets/callout.md) - A tinted block of text with an icon and a tone (`widget.callout`).
 - [`caption`](widgets/caption.md) - The window's caption buttons through the `Ui` (`platform.window`, D240): minimize, maximize or restore, close, right-aligned along the top of a borderless window.
@@ -38,12 +39,16 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`list_row`](widgets/list_row.md) - A list row with a trailing badge, drawn inside the virtual list (`widget.list-row-badge`).
 - [`markdown`](widgets/markdown.md) - The markdown preview (`text.markdown-preview`, D12): a block model drawn in a window.
 - [`menu`](widgets/menu.md) - Luneium's glass context menu (`ContextMenu.css`, `Popup.css`) and its motion, with the row variants (header, danger, disabled, chevron), the keys and the one highlight they share with the pointer, and...
+- [`nav_bar`](widgets/nav_bar.md) - The navigation bar of a phone screen (`widget.nav-bar`, D370): a back button, a title and up to three action buttons on a 44 px row.
 - [`nav_item`](widgets/nav_item.md) - A navigation item and the list that owns the group (`widget.nav-item`, D121).
+- [`nav_stack`](widgets/nav_stack.md) - The navigation stack of a phone app (`layout.nav-stack`, D372): the levels of a drill-down, the top one drawn, pushed in from the right edge, popped back out by a call or by a finger's swipe from the ...
 - [`page`](widgets/page.md) - The page card (`layout.page`, D148): header, a vertically scrolling body and an optional pinned footer, with a keyed swap of the body.
+- [`pager`](widgets/pager.md) - The pager of a phone screen (`layout.pager`, D373): pages side by side that a finger swipes between, with a row of dots under them.
 - [`panel`](widgets/panel.md) - The panel (`layout.panel`, D148): an outlined group box with a title and a meta line, a body in one of five kinds and an optional action footer.
 - [`pie_chart`](widgets/pie_chart.md) - The pie chart (`data.pie-chart`, D164, D166): a fan of sectors with value transitions.
 - [`popover`](widgets/popover.md) - Anchored placement ([`place`](widgets/popover.md#fn.place)) and the popover ([`Ui::popover`](ui.md#method.Ui.popover)): a rect of known size next to an anchor, flipped and shifted to stay inside the w...
 - [`progress`](widgets/progress.md) - A progress track (`data.progress`): 4 px high, radius 4, `surface_overlay` track, a fill in a tone (neutral is `accent`; square at its leading edge, clipped by the track), an optional head (name left,...
+- [`pull_to_refresh`](widgets/pull_to_refresh.md) - Pull to refresh of a phone list (`layout.pull-to-refresh`, D375): a [`Ui::scroll_area`](ui.md#method.Ui.scroll_area) that reports `refresh` when a finger pulls its content down past the top by 64 px a...
 - [`radio_group`](widgets/radio_group.md) - A group of radio options with one roving stop (`widget.radio-group`, D120).
 - [`row`](widgets/row.md) - A hover-lit row with a leading, a body and a trailing part (`widget.row`).
 - [`scroll_area`](widgets/scroll_area.md) - The scroll area (`layout.scroll-area`): a clipped viewport over taller or wider content, with a per-id offset kept by the `Ui` (persistent state, so it survives a hidden tab under `keep_alive`), smoot...
@@ -63,6 +68,8 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`status_dot`](widgets/status_dot.md) - A small filled dot in a status tone (`widget.status-dot`): 8 px, no glow, ring or pulse.
 - [`stepper`](widgets/stepper.md) - NumericUpDown control: a value with − and + buttons in an input box.
 - [`steps`](widgets/steps.md) - A numbered sequence of steps with a done state (`widget.steps`).
+- [`swipe_actions`](widgets/swipe_actions.md) - Swipe row actions of a phone list (`widget.swipe-actions`, D374): a row whose content a finger slides sideways to uncover buttons under it, trailing ones on a leftward swipe and leading ones on a righ...
+- [`tab_bar`](widgets/tab_bar.md) - The bottom tab bar of a phone screen (`widget.tab-bar`, D370): equal-width items of a glyph, a label and an optional badge on a 49 px row.
 - [`tab_strip`](widgets/tab_strip.md) - Tabs with close, overflow, drag reorder, the outline and a busy cue (`widget.tab-strip`).
 - [`table`](widgets/table.md) - The data table (`data.table`, D162): a sortable header over a virtualized body on the list frame (`ListStyle`, D161).
 - [`text_area`](widgets/text_area.md) - The multi-line text box: the [field](widgets/field.md#fn.field)'s box and engine over a [scroll area](widgets/scroll_area.md).

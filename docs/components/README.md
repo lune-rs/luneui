@@ -55,13 +55,13 @@ fills in and nothing enforces yet. Cells hold no `|`.
 | test-cited | a `done` entry cites at least one existing test as `<file>.rs::<fn>` on its Build line | D47 | `apps/gallery/src/catalogue.rs::every_done_entry_holds_its_evidence` | auto:test-cited |
 | pixel-gate | a change to an existing component's drawing passes `scripts/pixel-gate.sh` with every changed scene named and a DECISIONS row | hard rule 8, D254 | by review | review |
 | api-docs | `scripts/gen-api-docs.sh` is run after a public API or doc-comment change | D287 | by review | review |
-| touch-hit-area | a control answers a touch pointer within a 44 pt area, in hit testing only (the drawing stays) | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
-| no-hover-only | no action or hint exists only on hover | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| touch-hit-area | a control answers a touch pointer within a 44 pt area, in hit testing only (the drawing stays) | D361 | `crates/lune-ui-core/tests/ui_touch_widgets.rs::a_touch_outside_a_small_button_clicks_it_and_a_mouse_press_there_does_not`, `crates/lune-ui-core/tests/ui_touch_widgets.rs::a_small_control_inside_a_larger_one_wins_within_reach_of_a_finger`, `crates/lune-ui-core/tests/ui_touch_widgets.rs::the_target_stops_at_the_clip_the_region_was_registered_under` | test |
+| no-hover-only | no action or hint exists only on hover | D363 | `crates/lune-ui-core/tests/widget_tooltip.rs::a_finger_resting_500_ms_shows_the_tooltip_and_the_mouse_dwell_is_unchanged`, `crates/lune-ui-core/tests/ui_touch_widgets.rs::a_tab_close_is_reached_by_touch_through_a_tap_on_its_tab` | test |
 | touch-drag-arbitration | a scrolling composite inside another decides per axis who takes a touch drag, like the wheel; a drag widget claims the axes it uses with `Ui::set_drag_axes`, so a pan on the other axis reaches the scroll region | D349, D350 | `crates/lune-ui-core/src/ui/pan_tests.rs::nested_regions_split_a_pan_by_axis`, `crates/lune-ui-core/src/ui/pan_tests.rs::a_drag_widget_claiming_horizontal_only_yields_a_vertical_pan_and_keeps_a_horizontal_one` | test |
 | long-press-context | a long press reports `context` through `secondary_clicked`, the same path as D292 | D348, D292 | `crates/lune-ui-core/tests/ui_gestures.rs::a_long_press_on_a_tab_is_its_context` | test |
 | safe-area-and-keyboard | a screen draws inside `Ui::safe_area()` and lifts by `Ui::keyboard_inset()` (the latching is tested in `ui_touch.rs`, a screen's use of it is not) | D344, D345 | by review | review |
 | pointer-kind | behaviour that differs for touch reads `Ui::pointer_kind()` (the reading is tested in `ui_touch.rs::pointer_kind_follows_touch_and_the_mouse_press_after_the_window`, a widget's use of it is not) | D343, D344 | by review | review |
-| non-exhaustive-structs | a public options struct is `#[non_exhaustive]` so a field added later breaks no app | pending (luneui-rs/mobile-support) | by review | [mobile slot] |
+| non-exhaustive-structs | a public options struct is `#[non_exhaustive]` so a field added later breaks no app | D364, D342 | by review | review |
 <!-- checklist:end -->
 
 To add a rule, add one row: a unique kebab-case `rule`, what it asks, its D-rows, what enforces it
@@ -70,6 +70,8 @@ check function of that id in the component check (`apps/gallery/src/catalogue.rs
 when the table and the checks disagree. The mobile program fills its `[mobile slot]` rows here, in
 this one table; a row keeps its marker until the program has decided the rule, and then it is held
 like any other row, by a test, a check or a review (M3 decided four: two by test, two by review).
+The mobile program has filled every slot: M5 decided its three rows (D361, D363, D364), so no row
+carries the marker now.
 
 ## Id rule
 

@@ -54,7 +54,8 @@ use crate::widgets::scroll_area::ScrollPhysics;
 use access::Routed;
 use keys::KeyPress;
 use overlay::Dismissal as D;
-use pointer::{Ctx, HitRecord, PanReading, PointerFrame, topmost};
+use pointer::{Ctx, HitRecord, PointerFrame, topmost, touch_target};
+pub(crate) use pointer::{LONG_PRESS, PanReading};
 
 /// The opacity of a disabled subtree.
 pub(crate) const DISABLED_ALPHA: f32 = 0.4;
@@ -218,6 +219,30 @@ fn loses_focus(opts: &OverlayOptions, tag: u32, hits: &[HitRecord], to: Option<W
         && !to.is_some_and(|id| hits.iter().any(|h| h.id == id && h.tag >= tag))
 }
 
+/// What a touch press settles by the frame's events so far (D361): focus on the widget it armed
+/// when its tap, long press or drag start came, and, when a long-pressed touch began to drag, the
+/// dismissal of the top overlay that dismisses on an outside press and opened after the press
+/// (the menu its long press opened), unless the dragged widget is in it.
+fn touch_effects(
+    store: &mut UiStore,
+    pointer: &mut PointerFrame,
+    hits: &[HitRecord],
+    top_press: Option<Active>,
+    dismissed: &mut BTreeMap<WidgetId, Dismissal>,
+) {
+    if let Some(id) = pointer.touch_focus.take() {
+        store.focus.focused = Some(id);
+    }
+    if let Some((dragged, floor)) = pointer.spent_drag.take()
+        && let Some(t) = top_press
+        && t.opts.dismiss_on_outside_press
+        && t.tag > floor
+        && !hits.iter().any(|h| h.id == dragged && h.tag == t.tag)
+    {
+        dismissed.entry(t.id).or_insert(D::OutsidePress);
+    }
+}
+
 /// Dismisses, for focus loss, every active overlay that asks for it and does not hold `to`.
 fn focus_loss(
     active: &[Active],
@@ -329,6 +354,7 @@ impl<'a> Ui<'a> {
                 kind: PointerKind::Mouse,
             };
             store.pointer.tick(&cx, &mut pointer);
+            touch_effects(store, &mut pointer, &hits, top_press, &mut dismissed);
             let steps = store.touch.reduce(&input.events, input.time);
             for step in &steps {
                 let ev = match step {
@@ -354,7 +380,11 @@ impl<'a> Ui<'a> {
                         pressed: true,
                         modifiers,
                     } => {
-                        let target = topmost(&hits, *pos, &eligible);
+                        let target = if cx.kind == PointerKind::Touch {
+                            touch_target(&hits, *pos, &eligible)
+                        } else {
+                            topmost(&hits, *pos, &eligible)
+                        };
                         store.focus.visible = false;
                         store.focus.keyboard = false;
                         // A press on a toast is never outside: the toast layer belongs to no
@@ -383,7 +413,15 @@ impl<'a> Ui<'a> {
                         if let Some(h) = target.filter(|h| {
                             h.enabled && h.sense.focusable && h.layer != LayerId::Toast as usize
                         }) {
-                            store.focus.focused = Some(h.id);
+                            if cx.kind == PointerKind::Touch && store.pointer.held() == Some(h.id) {
+                                // D361: a touch focuses at its tap, long press or drag start, not
+                                // on the press, so a pan over a form focuses nothing.
+                                store.pointer.arm_touch(Some(h.id), store.next_tag);
+                            } else {
+                                store.focus.focused = Some(h.id);
+                            }
+                        } else if cx.kind == PointerKind::Touch {
+                            store.pointer.arm_touch(None, store.next_tag);
                         }
                     }
                     Event::PointerButton {
@@ -559,6 +597,7 @@ impl<'a> Ui<'a> {
                     }
                     _ => {}
                 }
+                touch_effects(store, &mut pointer, &hits, top_press, &mut dismissed);
             }
             store.pointer.settle(&cx, &mut pointer);
         }
@@ -582,7 +621,12 @@ impl<'a> Ui<'a> {
 
         let focus_at_begin = (store.focus.focused, store.focus.visible);
         let window = Rect::new(0.0, 0.0, input.size.0, input.size.1);
-        let painter = Painter::new(input.scale, window, text, pointer.hovered, config.theme);
+        let mut painter = Painter::new(input.scale, window, text, pointer.hovered, config.theme);
+        painter.set_bounds(overlay_bounds(
+            window,
+            store.safe_area,
+            store.keyboard_inset,
+        ));
         Ui {
             store,
             input,
@@ -714,8 +758,12 @@ impl<'a> Ui<'a> {
         }
         let mut hits = Vec::with_capacity(painter.hits.len());
         let mut rects = BTreeMap::new();
-        for (i, (&(rect, id), &(layer, tag))) in
-            painter.hits.iter().zip(painter.hit_meta()).enumerate()
+        for (i, ((&(rect, id), &(layer, tag)), &clip)) in painter
+            .hits
+            .iter()
+            .zip(painter.hit_meta())
+            .zip(painter.hit_clips())
+            .enumerate()
         {
             if tag == SUPPRESSED {
                 continue;
@@ -751,6 +799,7 @@ impl<'a> Ui<'a> {
                 pan_axes,
                 moving,
                 order,
+                clip,
             });
             rects.insert(id, rect);
         }
@@ -902,6 +951,18 @@ impl<'a> Ui<'a> {
     /// disables IME); the last call wins.
     pub fn set_ime_area(&mut self, area: Option<Rect>) {
         self.ime_area = area;
+    }
+
+    /// The rect menus, popovers, tooltips, toasts, the dialog card and the palette place
+    /// inside: the window inset by the safe area, its bottom by the larger of the safe area's and
+    /// the keyboard's. The window itself when both are zero (D365).
+    pub(crate) fn overlay_bounds(&self) -> Rect {
+        self.painter.bounds()
+    }
+
+    /// The input method area the frame has set so far, in window space.
+    pub(crate) fn frame_ime_area(&self) -> Option<Rect> {
+        self.ime_area
     }
 
     /// The pointer's position in logical pixels, or `None` when it is outside the window.
@@ -1207,6 +1268,16 @@ impl<'a> Ui<'a> {
         }
     }
 
+    /// The touch press in flight, for a tooltip's rest rule (D363).
+    pub(crate) fn touch_rest(&self) -> Option<pointer::TouchRest> {
+        self.store.pointer.touch_rest()
+    }
+
+    /// How the last touch press ended, for a tooltip's linger (D363).
+    pub(crate) fn touch_end(&self) -> Option<pointer::TouchEnd> {
+        self.store.pointer.touch_end()
+    }
+
     /// Which axes a touch drag on `id` is the widget's own, from the next frame on (D349): a
     /// touch that starts on the widget and travels along an axis it claims drags the widget; along
     /// one it does not, a scroll region under it with content on that axis takes the touch
@@ -1398,4 +1469,85 @@ impl<'a> Ui<'a> {
     pub fn clipboard_read(&mut self) {
         self.clipboard_read = true;
     }
+
+    /// Queues `cmd` for the text widget `id` (a text field, text area, code editor or selectable
+    /// text), for an app whose own menu offers Cut, Copy, Paste and Select all (D364): the widget
+    /// runs it at its next call, through the path its keys take, so Copy and Cut write the
+    /// clipboard and Paste asks for a read (answered while the widget holds the focus) as the
+    /// shortcuts do. A command queued after the widget ran this frame runs in the next frame,
+    /// which this call asks for. A command due in a frame the widget is not called in is dropped,
+    /// never run later; a widget in a disabled scope drops its commands; a command the widget
+    /// does not take in its state ([`EditActions`](crate::text_edit::EditActions)) does nothing.
+    pub fn edit_command(&mut self, id: WidgetId, cmd: crate::text_edit::EditCommand) {
+        let frame = self.store.frame;
+        let requests = self.transient::<store::EditRequests>(id);
+        let late = requests.ran == Some(frame);
+        requests.queued.push((frame + u64::from(late), cmd));
+        if late {
+            self.request_catch_up();
+        }
+    }
+
+    /// Which of Cut, Copy, Paste and Select all the text widget `id` takes now, as it last ran
+    /// (this frame or the last one): what an app's own edit menu offers (D364). `None` for an id
+    /// that is not a text widget drawn in either frame.
+    pub fn edit_actions(&self, id: WidgetId) -> Option<crate::text_edit::EditActions> {
+        let key = (id, std::any::TypeId::of::<store::EditRequests>());
+        let requests = self
+            .store
+            .transient
+            .get(&key)?
+            .value
+            .downcast_ref::<store::EditRequests>()?;
+        let (frame, actions) = requests.actions?;
+        (frame + 1 >= self.store.frame).then_some(actions)
+    }
+
+    /// Takes the commands queued for the text widget `id` that are due this frame, dropping those
+    /// whose frame passed, and notes that the widget ran.
+    pub(crate) fn take_edit_commands(
+        &mut self,
+        id: WidgetId,
+    ) -> Vec<crate::text_edit::EditCommand> {
+        let frame = self.store.frame;
+        let requests = self.transient::<store::EditRequests>(id);
+        requests.ran = Some(frame);
+        let queued = std::mem::take(&mut requests.queued);
+        let mut due = Vec::new();
+        for (at, cmd) in queued {
+            if at == frame {
+                due.push(cmd);
+            } else if at > frame {
+                requests.queued.push((at, cmd));
+            }
+        }
+        due
+    }
+
+    /// Publishes what the text widget `id` takes now, for [`Self::edit_actions`].
+    pub(crate) fn publish_edit_actions(
+        &mut self,
+        id: WidgetId,
+        actions: crate::text_edit::EditActions,
+    ) {
+        let frame = self.store.frame;
+        self.transient::<store::EditRequests>(id).actions = Some((frame, actions));
+    }
+}
+
+/// `window` inset by `safe` on every side, its bottom by the larger of `safe.bottom` and the
+/// keyboard's: `window` itself when both are zero (D365).
+fn overlay_bounds(window: Rect, safe: Insets, keyboard: Insets) -> Rect {
+    if safe == Insets::ZERO && keyboard == Insets::ZERO {
+        return window;
+    }
+    let clean = |v: f32| if v.is_finite() { v.max(0.0) } else { 0.0 };
+    let bottom = clean(safe.bottom).max(clean(keyboard.bottom));
+    let (l, t, r) = (clean(safe.left), clean(safe.top), clean(safe.right));
+    Rect::new(
+        window.x + l,
+        window.y + t,
+        (window.w - l - r).max(0.0),
+        (window.h - t - bottom).max(0.0),
+    )
 }

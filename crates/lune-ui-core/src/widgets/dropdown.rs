@@ -4,7 +4,7 @@
 use std::hash::Hash;
 
 use super::label;
-use super::popover::{PlaceAlign, PlaceRequest, Side, glass_panel, place};
+use super::popover::{PlaceAlign, PlaceRequest, Side, glass_panel, keep_in_bounds, place};
 use super::scroll_area::{Bars, Extent, Reveal, ScrollOptions, Target, centre_target};
 use crate::access::{Action, Node, Role, State};
 use crate::icon;
@@ -18,7 +18,7 @@ const ITEM_H: f32 = 32.0;
 /// The list's panel for `n` options under (or, near the window's bottom edge, over) `anchor`:
 /// the anchor's width, gap 4, margin 8, never shifted sideways.
 pub fn panel_rect<H: Copy + PartialEq>(p: &Painter<'_, H>, anchor: Rect, n: usize) -> Rect {
-    place(&PlaceRequest {
+    let panel = place(&PlaceRequest {
         anchor,
         size: (anchor.w, n as f32 * ITEM_H + 8.0),
         side: Side::Bottom,
@@ -26,9 +26,10 @@ pub fn panel_rect<H: Copy + PartialEq>(p: &Painter<'_, H>, anchor: Rect, n: usiz
         gap: 4.0,
         margin: 8.0,
         shift: false,
-        window: p.window,
+        window: p.bounds(),
     })
-    .rect
+    .rect;
+    keep_in_bounds(panel, p.window, p.bounds(), 8.0)
 }
 
 /// Option `i`'s row inside `panel`.

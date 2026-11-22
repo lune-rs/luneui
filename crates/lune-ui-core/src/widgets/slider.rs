@@ -16,7 +16,7 @@ use std::hash::Hash;
 use super::focus_ring::{self, RingKind};
 use crate::access::{AccessValue, Action, Node, Role, State, Value};
 use crate::color::Rgba;
-use crate::input::{FocusEvent, Key, NamedKey};
+use crate::input::{FocusEvent, Key, NamedKey, PointerKind};
 use crate::motion::{Easing, Kind, Motion, Reduce};
 use crate::paint::{Painter, Rect};
 use crate::theme::Theme;
@@ -241,6 +241,10 @@ pub fn fraction(rect: Rect, value: f32, opts: &SliderOptions<'_>) -> f32 {
     usable(rect, value, opts).map_or(0.0, |s| s.fraction(value))
 }
 
+/// Where the last press began: a touch's tap sets the value there, the touch being gone by its lift.
+#[derive(Debug, Default)]
+struct TapAt(Option<(f32, f32)>);
+
 /// The fraction the knob last aimed at: what tells an app-driven change from the widget's own.
 #[derive(Debug, Default)]
 struct Aimed(f32);
@@ -261,6 +265,12 @@ impl Ui<'_> {
         let id = self.id(key);
         let pos = id.with("pos");
         let mut r = self.interact(id, hit_rect(rect), SENSE);
+        // A slider drags along x only (D362): a vertical pan over it scrolls the area under it.
+        self.set_drag_axes(id, true, false);
+        let touch = self.pointer_kind() == PointerKind::Touch;
+        if r.press_started {
+            self.transient::<TapAt>(id).0 = r.press_pos;
+        }
 
         // A value that is not the one this widget left behind is the app's: it snaps, first, so a
         // key step in the same frame starts from it.
@@ -271,11 +281,20 @@ impl Ui<'_> {
 
         let stops = usable(rect, *value, opts);
         // The release frame counts: the event carries the pointer's last move.
-        let following = r.pressed || r.press_started || r.clicked || r.drag_stopped;
+        // Under a finger the value follows a drag from the slop on and a tap at its lift, never
+        // the press itself: a pan that scrolls the area leaves the value alone (D362).
+        let following = if touch {
+            r.dragged || r.drag_started || r.clicked || r.drag_stopped
+        } else {
+            r.pressed || r.press_started || r.clicked || r.drag_stopped
+        };
         let mut next = *value;
         if following {
+            // A touch is gone on the frame of its lift, so a tap reads where it began (D362).
             let at = if r.press_started {
                 r.press_pos
+            } else if touch && r.clicked {
+                self.transient::<TapAt>(id).0
             } else {
                 self.pointer_pos()
             };

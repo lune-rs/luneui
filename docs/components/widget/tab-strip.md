@@ -25,6 +25,7 @@ rename and close policy.
 - Close-confirm uses the modal dialog (R-overlay-1); rename is a dialog with a text field in Lunegit (R-widget-1).
 - Reorder through `infra.drag-and-drop` (R-infra-5); scrolling through `layout.scroll-area` (R-layout-2).
 - A tab control as one of the controls Lunegit has that the toolkit lacks (R-widget-2).
+- Under a finger: a pan scrolls the strip, a tap activates, and the close is reached on the active tab (R-widget-6, D362, D363).
 
 ## Existing code
 
@@ -146,6 +147,7 @@ The confirm and rename dialog texts, "Duplicate Tab" and "Copy Working Directory
 - `tab-strip-settle`: released tab settling, t = 90 ms.
 - `tab-strip-content-swap`: activation of tab 3, outgoing and incoming content at t = 125 ms (half of `base`).
 - `tab-strip-switch-mid`: the same activation, captured 90 ms (half of `fast`) after the strip first draws the new active tab (t = 106 ms; the click frame still draws the old key): the notch is half way between tab 2 and tab 3, moving.
+- `phone-widgets-tabs-pan`: a finger moved 170 px left from the second tab of an overflowing strip: the strip scrolled, no tab was activated and nothing reordered, settled.
 
 ### Painter primitives
 

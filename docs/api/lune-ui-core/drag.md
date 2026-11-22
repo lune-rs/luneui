@@ -49,7 +49,7 @@ pub struct Column<'a> {
 
 One column of a board: its horizontal extent and its cards' vertical midpoints.
 
-Source: `crates/lune-ui-core/src/drag.rs:455`
+Source: `crates/lune-ui-core/src/drag.rs:460`
 
 **Fields**
 
@@ -83,7 +83,7 @@ pub struct DragFrame {
 
 One frame of a reorder gesture, from [`Ui::drag_gesture`](ui.md#method.Ui.drag_gesture).
 
-Source: `crates/lune-ui-core/src/drag.rs:629`
+Source: `crates/lune-ui-core/src/drag.rs:634`
 
 **Fields**
 
@@ -124,7 +124,7 @@ pub struct DropTarget {
 
 Where a free drag would drop: a column and the insertion index within it.
 
-Source: `crates/lune-ui-core/src/drag.rs:464`
+Source: `crates/lune-ui-core/src/drag.rs:469`
 
 **Fields**
 
@@ -153,7 +153,7 @@ pub struct FreeDrag {
 The free two-axis drag's state machine (a card between columns): the card stays in place,
 dimmed, while a drop line shows the insertion slot.
 
-Source: `crates/lune-ui-core/src/drag.rs:506`
+Source: `crates/lune-ui-core/src/drag.rs:511`
 
 **Methods and associated items**
 
@@ -224,7 +224,7 @@ pub struct FreeFrame {
 
 One frame of a free gesture, from [`Ui::free_drag_gesture`](ui.md#method.Ui.free_drag_gesture).
 
-Source: `crates/lune-ui-core/src/drag.rs:653`
+Source: `crates/lune-ui-core/src/drag.rs:658`
 
 **Fields**
 
@@ -307,7 +307,12 @@ pub struct ReorderDrag {
 
 The reorder gesture's state machine.
 
-Source: `crates/lune-ui-core/src/drag.rs:119`
+Under a finger, claim no drag axis for the items that feed it
+([`Ui::set_drag_axes`](ui.md#method.Ui.set_drag_axes)`(id, false, false)`): in a strip or column
+that scrolls, a pan then scrolls it and a tap selects, and a long press arms the reorder; where
+nothing scrolls on the drag's axis, the drag reorders at once, as a mouse drag does (D362).
+
+Source: `crates/lune-ui-core/src/drag.rs:124`
 
 **Methods and associated items**
 
@@ -403,7 +408,7 @@ pub struct Strip<'a> {
 
 The strip a reorder item sits in, for [`Ui::drag_gesture`](ui.md#method.Ui.drag_gesture).
 
-Source: `crates/lune-ui-core/src/drag.rs:619`
+Source: `crates/lune-ui-core/src/drag.rs:624`
 
 **Fields**
 
@@ -480,7 +485,7 @@ pub enum FreeResult {
 
 What a finished free gesture means.
 
-Source: `crates/lune-ui-core/src/drag.rs:492`
+Source: `crates/lune-ui-core/src/drag.rs:497`
 
 **Variants**
 
@@ -521,7 +526,7 @@ pub fn drop_index(card_mids: &[f64], pointer_y: f64) -> usize
 The insertion index for a pointer at `pointer_y`: the number of `card_mids` above it. NaN mids
 and a non-finite pointer count nothing.
 
-Source: `crates/lune-ui-core/src/drag.rs:471`
+Source: `crates/lune-ui-core/src/drag.rs:476`
 
 <a id="fn.drop_target"></a>
 ### Function `drop_target`
@@ -533,7 +538,7 @@ pub fn drop_target(columns: &[Column<'_>], pointer_x: f64, pointer_y: f64) -> Op
 The first column whose range `[x, x + w)` holds `pointer_x`, with the insertion index at
 `pointer_y`; `None` outside every column or for a non-finite pointer.
 
-Source: `crates/lune-ui-core/src/drag.rs:477`
+Source: `crates/lune-ui-core/src/drag.rs:482`
 
 <a id="fn.edge_step"></a>
 ### Function `edge_step`
@@ -547,7 +552,7 @@ negative within [`AUTO_SCROLL_ZONE`](drag.md#constant.AUTO_SCROLL_ZONE) of `lo` 
 `can_hi`, ramping linearly to [`AUTO_SCROLL_MAX`](drag.md#constant.AUTO_SCROLL_MAX) at the edge and past it; else 0, also for a
 coordinate that is not finite.
 
-Source: `crates/lune-ui-core/src/drag.rs:440`
+Source: `crates/lune-ui-core/src/drag.rs:445`
 
 <a id="fn.paint_drop_line"></a>
 ### Function `paint_drop_line`
@@ -559,7 +564,7 @@ pub fn paint_drop_line<H: Copy + PartialEq>(p: &mut Painter<'_, H>, rect: Rect, 
 Paints the drop line: [`DROP_LINE_THICKNESS`](drag.md#constant.DROP_LINE_THICKNESS) tall, `accent`, across `rect`'s width and centred
 vertically in it (`rect` is the gap between two cards).
 
-Source: `crates/lune-ui-core/src/drag.rs:897`
+Source: `crates/lune-ui-core/src/drag.rs:902`
 
 ## Constants
 

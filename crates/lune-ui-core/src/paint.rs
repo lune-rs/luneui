@@ -261,6 +261,9 @@ impl PainterState {
 pub struct Painter<'a, H> {
     pub s: f32,
     pub window: Rect,
+    /// Where an overlay places itself: `window` inset by the safe area and the keyboard, which
+    /// `Ui` sets; `window` itself for a painter used on its own (D365).
+    bounds: Rect,
     /// The display list painted so far: every layer and the backdrop request.
     pub scene: Scene,
     /// The fixed layer drawing is on, and what a hit records.
@@ -281,6 +284,9 @@ pub struct Painter<'a, H> {
     xforms: Vec<Xform>,
     /// `(layer, tag)` per entry of `hits`, kept in step by [`Self::hit`].
     hit_meta: Vec<(usize, u32)>,
+    /// The rect clip each entry of `hits` was cut by, in window space, kept in step by
+    /// [`Self::hit`]; a touch target grown past its region is cut by it again (D361).
+    hit_clips: Vec<Option<Rect>>,
     hit_tag: u32,
     recording: Option<Vec<Op>>,
 }
@@ -315,6 +321,7 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
         Self {
             s,
             window,
+            bounds: window,
             scene: Scene::default(),
             layer: 0,
             slot: None,
@@ -327,9 +334,20 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
             theme,
             xforms: Vec::new(),
             hit_meta: Vec::new(),
+            hit_clips: Vec::new(),
             hit_tag: 0,
             recording: None,
         }
+    }
+
+    /// The rect an overlay places inside: `window` unless the `Ui` set it narrower (D365).
+    pub(crate) fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    /// Sets the rect [`Self::bounds`] returns.
+    pub(crate) fn set_bounds(&mut self, bounds: Rect) {
+        self.bounds = bounds;
     }
 
     fn rec(&mut self, op: impl FnOnce() -> Op) {
@@ -438,6 +456,12 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
     #[cfg(test)]
     pub(crate) fn set_hit_tag(&mut self, tag: u32) {
         self.hit_tag = tag;
+    }
+
+    /// The rect clip, in window space, for each entry of `hits`, in the same order. Valid while
+    /// `hits` is only appended to through [`Self::hit`].
+    pub(crate) fn hit_clips(&self) -> &[Option<Rect>] {
+        &self.hit_clips
     }
 
     /// `(layer index, tag)` for each entry of `hits`, in the same order. Valid while `hits` is only
@@ -1142,6 +1166,7 @@ impl<'a, H: Copy + PartialEq> Painter<'a, H> {
         let r = self.hit_rect(r);
         self.hits.push((r, h));
         self.hit_meta.push((self.layer, self.hit_tag));
+        self.hit_clips.push(self.clip.map(|c| self.tr(c)));
     }
 
     /// Whether the pointer is over `h`'s region.

@@ -438,6 +438,9 @@ if [ -z "$ONLY_PART" ]; then
   fi
   if [ "$TREE" = "$ROOT" ]; then
     HEAD_TARGET="$ROOT/target/api-docs"
+    # gen-api-docs.sh builds, clears and reads this directory under its own lock (D413): take it
+    # too, so the two never run in it together.
+    guard_lock "$HEAD_TARGET" check-compat
   else
     HEAD_TARGET="$S/head-target"
   fi

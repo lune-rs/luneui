@@ -450,6 +450,9 @@ pub(crate) enum Ev {
     TouchOn(u64, &'static [&'static str]),
     /// The window's safe area: the left, top, right and bottom insets in logical pixels.
     SafeArea(f32, f32, f32, f32),
+    /// The on-screen keyboard's height over the window's bottom edge, in logical pixels (0: it is
+    /// gone), dispatched as `Event::KeyboardInset` with only the bottom set.
+    KeyboardInset(f32),
 }
 
 /// The id of the widget at `path` under page `page`.
@@ -625,6 +628,9 @@ pub(crate) fn apply_event(
         }
         Ev::SafeArea(left, top, right, bottom) => {
             input.safe_area(Insets::new(*left, *top, *right, *bottom));
+        }
+        Ev::KeyboardInset(bottom) => {
+            input.keyboard_inset(Insets::new(0.0, 0.0, 0.0, *bottom));
         }
     }
     Ok(())
@@ -1056,10 +1062,10 @@ mod tests {
         ("recipes", "Remove upstream"),
     ];
 
-    /// Pages whose scenes open a modal or a popup list that fills the window (a dialog, a palette,
+    /// Pages whose scenes open a modal or a popup list that fills the window (a dialog, a sheet, a palette,
     /// a dropdown's scrolled rows): their nodes are an overlay's, so only their shapes and text
     /// on the base and page layers are checked.
-    const OVERLAY_PAGES: &[&str] = &["dialog", "dropdown", "command-palette"];
+    const OVERLAY_PAGES: &[&str] = &["dialog", "dropdown", "command-palette", "bottom-sheet"];
 
     /// Where the page's content lies on a stage: its semantic nodes' bounds and the shapes and
     /// text it draws on the base and page layers (overlay layers are left out), in the live

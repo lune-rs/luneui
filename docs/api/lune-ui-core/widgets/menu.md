@@ -138,7 +138,7 @@ pub struct MenuResponse {
 
 What a menu frame reports.
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:481`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:482`
 
 **Fields**
 
@@ -339,7 +339,7 @@ saturate 1.8), black 45 % over grey 165 @ 30 %, radius 9, inset 1 px ring, 6 px 
 28 px rows with radius 4, 12 px labels, 14 px icon slot, 11 px hints. `interactive` is off
 while the menu fades out.
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:421`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:422`
 
 <a id="fn.menu_close_anim"></a>
 ### Function `menu_close_anim`
@@ -409,7 +409,7 @@ pub fn menu_paint<H: Copy + PartialEq>(
 Draws the glass panel and its rows, untransformed and without hit regions. `looks[i]` is row
 `i`'s look (a missing entry is the look at rest).
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:407`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:408`
 
 <a id="fn.menu_size"></a>
 ### Function `menu_size`
@@ -435,7 +435,7 @@ pub const CLOSE: Motion;
 
 Close: dismiss, instant (the moved 120 ms), ease-in; Reduced fades opacity only.
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:469`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:470`
 
 <a id="constant.HEADER"></a>
 ### Constant `HEADER`
@@ -457,7 +457,7 @@ pub const HOVER: Motion;
 
 A row's fill as the pointer enters and leaves it; a key moves the highlight at once.
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:477`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:478`
 
 <a id="constant.MENU_IN"></a>
 ### Constant `MENU_IN`
@@ -489,5 +489,5 @@ pub const OPEN: Motion;
 
 Open: pop, fast, cubic-out; Reduced fades opacity only, still at Fast (menu.md's override).
 
-Source: `crates/lune-ui-core/src/widgets/menu.rs:461`
+Source: `crates/lune-ui-core/src/widgets/menu.rs:462`
 

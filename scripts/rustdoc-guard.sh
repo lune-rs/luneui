@@ -2,16 +2,18 @@
 # Sourced by gen-api-docs.sh and check-compat.sh: keeps their rustdoc runs from taking the machine
 # down. A rustdoc run once grew to 113 GB on a 32 GB Mac (swap and compression) and the cause was not
 # reproduced, so the scripts guard against it whatever the cause (D413):
-#   - one run at a time per build directory (a lock), so two runs never share a target directory;
+#   - one run at a time per build directory (a lock per directory; a script that builds in two takes
+#     both), so two runs never share a target directory;
 #   - CARGO_INCREMENTAL=0, so the build directory does not pile up incremental state;
-#   - a watchdog that kills any rustc or rustdoc started by this script whose memory footprint passes
+#   - a watchdog (macOS only: it reads top's macOS flags; elsewhere guard_watch says it is off) that
+#     kills any rustc or rustdoc started by this script whose memory footprint passes
 #     LUNEUI_RUSTDOC_MAX_GB (default 8), so the run fails and says why instead.
-# bash 3.2 safe. The caller calls guard_lock and guard_watch once each and runs guard_cleanup on exit,
-# which says what the watchdog killed, if anything.
+# bash 3.2 safe. The caller calls guard_lock once per build directory and guard_watch once, and runs
+# guard_cleanup on exit, which says what the watchdog killed, if anything.
 
 export CARGO_INCREMENTAL=0
 
-GUARD_LOCK=""
+GUARD_LOCKS=()
 GUARD_WATCH_PID=""
 GUARD_KILLED_FILE=""
 
@@ -23,27 +25,28 @@ guard_cleanup() {
   if guard_killed > /dev/null; then
     echo "memory guard: $(guard_killed); the run failed because of it (LUNEUI_RUSTDOC_MAX_GB raises the cap)" >&2
   fi
-  if [ -n "$GUARD_LOCK" ]; then rm -rf "$GUARD_LOCK"; fi
+  local l
+  for l in ${GUARD_LOCKS[@]+"${GUARD_LOCKS[@]}"}; do rm -rf "$l"; done
   if [ -n "$GUARD_KILLED_FILE" ]; then rm -f "$GUARD_KILLED_FILE"; fi
 }
 
 # guard_lock <build dir> <script name>: takes <build dir>.lock or exits 2 naming the run that holds it.
-# A lock whose holder is gone is taken over.
+# A lock whose holder is gone is taken over. Call it once per build directory the script builds in;
+# guard_cleanup releases every lock taken (never one that was refused).
 guard_lock() {
-  local dir="$1" name="$2" holder
+  local dir="$1" name="$2" lock="$1.lock" holder
   mkdir -p "$(dirname "$dir")"
-  GUARD_LOCK="$dir.lock"
-  if ! mkdir "$GUARD_LOCK" 2> /dev/null; then
-    holder="$(cat "$GUARD_LOCK/pid" 2> /dev/null || echo '')"
+  if ! mkdir "$lock" 2> /dev/null; then
+    holder="$(cat "$lock/pid" 2> /dev/null || echo '')"
     if [ -n "$holder" ] && kill -0 "$holder" 2> /dev/null; then
-      GUARD_LOCK=""
       echo "$name: another run (pid $holder) is using $dir; wait for it to end" >&2
       exit 2
     fi
-    rm -rf "$GUARD_LOCK"
-    mkdir "$GUARD_LOCK"
+    rm -rf "$lock"
+    mkdir "$lock"
   fi
-  echo "$$" > "$GUARD_LOCK/pid"
+  echo "$$" > "$lock/pid"
+  GUARD_LOCKS[${#GUARD_LOCKS[@]}]="$lock"
 }
 
 # guard_descendants: the pids of every process under this script.
@@ -55,10 +58,15 @@ guard_descendants() {
 
 # guard_watch <script name>: starts the watchdog in the background. The cap is LUNEUI_RUSTDOC_MAX_GB
 # (whole GB, default 8). The footprint is top's MEM column, which counts compressed memory (ps's RSS
-# does not, and read near zero for the 113 GB run).
+# does not, and read near zero for the 113 GB run). macOS only: `top -l 1 -stats` is its syntax, so
+# on any other system it prints that the watchdog is off and starts nothing.
 guard_watch() {
   local name="$1" cap_gb="${LUNEUI_RUSTDOC_MAX_GB:-8}"
   case "$cap_gb" in '' | *[!0-9]*) echo "$name: LUNEUI_RUSTDOC_MAX_GB must be a whole number of GB" >&2; exit 2 ;; esac
+  if [ "$(uname -s)" != Darwin ]; then
+    echo "$name: the memory watchdog is macOS only; not watching rustc and rustdoc here" >&2
+    return 0
+  fi
   GUARD_KILLED_FILE="$(mktemp "${TMPDIR:-/tmp}/rustdoc-guard.XXXXXX")"
   (
     cap_mb=$((cap_gb * 1024))

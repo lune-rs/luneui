@@ -39,7 +39,7 @@ pub struct FrameConfig<'a> {
 
 What the app hands a frame besides input and text: the look, the motion tier and the strings.
 
-Source: `crates/lune-ui-core/src/ui.rs:64`
+Source: `crates/lune-ui-core/src/ui.rs:65`
 
 **Fields**
 
@@ -434,7 +434,7 @@ pub struct Ui<'a> {
 
 One window's frame. Built by [`Ui::begin`](ui.md#method.Ui.begin), consumed by [`Ui::finish`](ui.md#method.Ui.finish).
 
-Source: `crates/lune-ui-core/src/ui.rs:131`
+Source: `crates/lune-ui-core/src/ui.rs:132`
 
 **Methods and associated items**
 
@@ -963,6 +963,16 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.nav_bar"></a>`pub fn nav_bar(&mut self, key: impl Hash, rect: Rect, bar: &NavBar<'_>) -> NavBarResponse`
+
+  A navigation bar under `key` over `rect`: the background fills the whole rect, a hairline
+  closes its bottom edge, and the [`HEIGHT`](widgets/nav_bar.md#constant.HEIGHT) px row at the bottom holds the back button, the
+  title and the actions (a rect shorter than the row lays it from the top and clips). The
+  node is a `Toolbar` named by the title, the buttons its children. Colours come from the
+  theme.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.nav_list"></a>
 
   ```rust
@@ -983,6 +993,34 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.nav_stack"></a>
+
+  ```rust
+  pub fn nav_stack(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      depth: usize,
+      page: impl FnMut(&mut Ui<'_>, usize, Rect),
+  ) -> NavStackResponse
+  ```
+
+  A navigation stack under `key` over `rect`: call it every frame with the number of levels
+  the app has (`depth`) and a `page` that draws level `level` (0 the root) in the rect it is
+  given, which moves while the stack does. Depth 0 draws nothing. See the module docs for the
+  motion, and for what a level must draw (an opaque background over its whole rect).
+
+- <a id="method.Ui.nav_stack_pop"></a>`pub fn nav_stack_pop(&mut self, key: impl Hash)`
+
+  Asks the navigation stack under `key` to pop its top level with the reverse of a push: its
+  next call takes the request. `key` is the one the stack was called with, in the same id
+  scope as the stack's own call (so a page that draws its own back button reports the tap
+  and the app calls this after the stack call, not from inside the `page` closure, whose
+  scope is the level's). Ignored while `depth` is below 2, and while a pop or a finger is
+  already moving the stack. The pop is over when [`NavStackResponse::popped`](widgets/nav_stack.md#structfield.NavStackResponse.popped) is set.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.page"></a>
 
   ```rust
@@ -1000,6 +1038,27 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
   Returns the body's scroll area response. The node is a `Group` named by the title
   (`opts.name` when set) described by the subtitle, over the actions, a `ScrollArea` body and
   a `Group` footer.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.pager"></a>
+
+  ```rust
+  pub fn pager(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      count: usize,
+      page: &mut usize,
+      opts: &PagerOptions<'_>,
+      draw: impl FnMut(&mut Ui<'_>, usize, Rect),
+  ) -> PagerResponse
+  ```
+
+  A pager under `key` over `rect`: `count` pages, `*page` the current one (clamped to the
+  last), `draw(ui, index, rect)` drawing page `index` in the rect it is given, which moves
+  while the pages do. With no pages it draws nothing. See the module docs for the gestures,
+  the motion and the dots; the node is a `Group` named by `opts.name`.
 
 `impl Ui<'_>`
 
@@ -1035,6 +1094,26 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
   A progress bar under `key`, the top left and width of `rect` (its height is ignored). The
   head, when set, takes its line first. Returns the height drawn. The node is `Progress`
   valued 0 to 100 (none when indeterminate), named by `opts.name` or the head's name.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.pull_to_refresh"></a>
+
+  ```rust
+  pub fn pull_to_refresh<R>(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      refreshing: bool,
+      opts: &ScrollOptions,
+      content: impl FnOnce(&mut Ui<'_>, &ScrollView) -> (R, Extent),
+  ) -> RefreshResponse<R>
+  ```
+
+  A scroll area under `key` over `rect` (as [`Ui::scroll_area`](ui.md#method.Ui.scroll_area), with the same `opts` and
+  `content`) that refreshes on a pull: see the module docs. `refreshing` is whether the
+  app's refresh is running; while it is, the area starts [`BAND`](widgets/pull_to_refresh.md#constant.BAND) px lower and shows the
+  spinner above.
 
 `impl Ui<'_>`
 
@@ -1343,6 +1422,44 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.swipe_actions"></a>
+
+  ```rust
+  pub fn swipe_actions<R>(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      actions: &SwipeActions<'_>,
+      row: impl FnOnce(&mut Ui<'_>, Rect) -> R,
+  ) -> SwipeResponse<R>
+  ```
+
+  A row under `key` over `rect` with `actions` under it. `row(ui, content)` draws the row's
+  content in `content`, `rect` shifted by the swipe and clipped to `rect`; the content
+  carries its own background. With no actions on either edge it is just the closure. See the
+  module docs for the gestures, the motion and the buttons.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.tab_bar"></a>
+
+  ```rust
+  pub fn tab_bar(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      items: &[TabBarItem<'_>],
+      selected: &mut usize,
+  ) -> TabBarResponse
+  ```
+
+  A bottom tab bar under `key` over `rect`: the background fills the whole rect, a hairline
+  closes its top edge and the [`HEIGHT`](widgets/tab_bar.md#constant.HEIGHT) px row at the top holds the `items`, equally wide.
+  `*selected` is the selected item; it is clamped for drawing and left alone while out of
+  range. The node is a `TabList`, the items `Tab` nodes, the selected one marked selected.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.tab_strip"></a>
 
   ```rust
@@ -1618,6 +1735,23 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
 
   Puts `text` on the clipboard; the last write of a frame is the one sent.
 
+- <a id="method.Ui.edit_actions"></a>`pub fn edit_actions(&self, id: WidgetId) -> Option<EditActions>`
+
+  Which of Cut, Copy, Paste and Select all the text widget `id` takes now, as it last ran
+  (this frame or the last one): what an app's own edit menu offers (D364). `None` for an id
+  that is not a text widget drawn in either frame.
+
+- <a id="method.Ui.edit_command"></a>`pub fn edit_command(&mut self, id: WidgetId, cmd: EditCommand)`
+
+  Queues `cmd` for the text widget `id` (a text field, text area, code editor or selectable
+  text), for an app whose own menu offers Cut, Copy, Paste and Select all (D364): the widget
+  runs it at its next call, through the path its keys take, so Copy and Cut write the
+  clipboard and Paste asks for a read (answered while the widget holds the focus) as the
+  shortcuts do. A command queued after the widget ran this frame runs in the next frame,
+  which this call asks for. A command due in a frame the widget is not called in is dropped,
+  never run later; a widget in a disabled scope drops its commands; a command the widget
+  does not take in its state ([`EditActions`](text_edit.md#struct.EditActions)) does nothing.
+
 - <a id="method.Ui.end_keep_alive"></a>`pub fn end_keep_alive(&mut self, key: impl std::hash::Hash)`
 
   Ends the keep-alive scope `key`: state kept only by it is dropped at this frame's finish
@@ -1807,6 +1941,30 @@ Source: `crates/lune-ui-core/src/ui.rs:131`
   overscroll at the ends and the spring that brings it back (D350). The default, outside any
   scope, is [`ScrollPhysics::default`]. A fling keeps the physics it started with. The outer
   value is back when `f` returns.
+
+`impl<'a> Ui<'a>`
+
+- <a id="method.Ui.bottom_sheet"></a>
+
+  ```rust
+  pub fn bottom_sheet<R>(
+      &mut self,
+      key: impl Hash,
+      open: &mut bool,
+      sheet: &BottomSheet<'_>,
+      content: impl FnOnce(&mut Ui<'a>, Rect) -> R,
+  ) -> SheetResponse<R>
+  ```
+
+  A bottom sheet under `key`: call it every frame. `open` false to true opens it at the
+  smallest detent; it stays up, sliding out when `open` is cleared, until it is out of the
+  window. A close the sheet decides (Escape, the scrim, a drag released to closed, an
+  assistive technology's dismiss) clears `open` itself and reports `dismissed` once.
+
+  `content` draws inside the content rect: below the grabber band and above the larger of
+  the safe area's bottom and the keyboard's, clipped to it. A scroll area in it takes the
+  vertical pans of a finger that starts on it; where it has nothing to scroll the pan drags
+  the sheet. See the module docs for the motion.
 
 `impl<'a> Ui<'a>`
 
@@ -2091,7 +2249,7 @@ pub struct UiStore {
 
 A window's retained `Ui` state: one per window, held by the app and lent to each frame.
 
-Source: `crates/lune-ui-core/src/ui/store.rs:34`
+Source: `crates/lune-ui-core/src/ui/store.rs:49`
 
 **Methods and associated items**
 

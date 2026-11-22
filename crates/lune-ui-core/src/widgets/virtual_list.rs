@@ -27,7 +27,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::access::{Action, Node, Role, State};
 use crate::color::{Rgba, with_alpha};
-use crate::input::{FocusEvent, Key, Modifiers, NamedKey};
+use crate::input::{FocusEvent, Key, Modifiers, NamedKey, PointerKind};
 use crate::motion::{Kind, Motion};
 use crate::paint::Rect;
 use crate::theme::Theme;
@@ -948,6 +948,7 @@ impl Ui<'_> {
         // Register and take input, so the whole window draws the frame's final selection.
         let mut slots = Vec::with_capacity(window.len());
         let mut pressing = false;
+        let touch = self.pointer_kind() == PointerKind::Touch;
         for index in window {
             let key = (rows.key)(index);
             let row_id = self.id(RowScope {
@@ -960,9 +961,17 @@ impl Ui<'_> {
             // A row claims no drag axis: a touch pan on it scrolls the list (D350). The mouse's
             // drag-select is untouched, since claims are read for touch only.
             self.set_drag_axes(row_id, false, false);
-            if r.press_started {
-                let primary = keymap.is_primary(r.press_modifiers);
-                out.changed |= st.press(index, r.press_modifiers, primary, rows);
+            // A finger selects at the tap, so a pan that scrolls the list selects nothing and a
+            // touch drag never drag-selects; a mouse selects on the press (D362).
+            let selects = if touch { r.clicked } else { r.press_started };
+            if selects {
+                let mods = if r.press_started {
+                    r.press_modifiers
+                } else {
+                    Modifiers::default()
+                };
+                let primary = keymap.is_primary(mods);
+                out.changed |= st.press(index, mods, primary, rows);
                 mem.press = Some(key);
                 mem.drag_end = Some(index);
                 self.request_focus(id);
@@ -972,7 +981,7 @@ impl Ui<'_> {
                 out.changed |= st.press(index, Modifiers::default(), false, rows);
             }
             pressing |= r.pressed;
-            if r.dragged && rows.mode() == SelectionMode::Multi {
+            if r.dragged && !touch && rows.mode() == SelectionMode::Multi {
                 // The pointer is in window coordinates, `rect` in the caller's space.
                 let top = self.painter().transformed(rect).y;
                 let to = self.pointer_pos().map_or(index, |(_, y)| {

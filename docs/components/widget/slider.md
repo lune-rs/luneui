@@ -18,6 +18,7 @@ summary: Slider: 4 px track with accent fill and a 12 px knob (14 hovered); look
 - Drawn through the painter and generic over the app's hit type (R-widget-5).
 - Arrow-key stepping and focus (R-widget-3); semantic node with the slider role (R-infra-4).
 - Value change under the motion tiers (R-motion-2).
+- Under a finger: the 44 pt target, the horizontal axis claimed alone and the value jump on the tap (R-widget-6, D362).
 
 ## Existing code
 
@@ -89,6 +90,8 @@ None: the slider has no text; the label is the owner's.
 - `slider-value-mid`: value one step up by keys, t = 90 ms (half of `fast`).
 - `slider-hover-mid`: knob rest → hover, t = 60 ms (half of `instant`).
 - `slider-focus-mid`: focus-visible on, t = 90 ms (half of `fast`).
+- `phone-widgets-slider-pan`: a finger moved 60 px up from the slider's track in a page that scrolls: the page scrolled 50 and the value is as it was (the slider claims only the horizontal axis), settled.
+- `phone-widgets-slider-drag`: the same finger moved along the track: the value follows it from the slop on and the page does not move, settled.
 
 ### Painter primitives
 

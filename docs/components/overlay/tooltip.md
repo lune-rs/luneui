@@ -101,6 +101,7 @@ None: the text is supplied by the app (Lunegit's are app strings such as `termin
 - `tooltip-pending`: the pointer 700 ms over the anchor, nothing drawn, t = 700 ms.
 - `tooltip-appearing`: t = 900 ms (800 ms delay plus half of `fast`).
 - `tooltip-dismissing`: pointer left, t = 60 ms (half of `instant`).
+- `phone-widgets-tooltip`: a finger resting 600 ms on an icon button: the tooltip shows under it, settled (D363).
 
 ### Painter primitives
 

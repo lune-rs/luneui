@@ -181,6 +181,54 @@ impl Ui<'_> {
         }
     }
 
+    /// Whether `id` is under an overlay it opened that has the key focus, as a touch's edit menu
+    /// does (D364): the focused widget is in an active overlay whose saved focus is `id`, or in
+    /// one whose saved focus is in such an overlay, and that overlay (the one whose saved focus
+    /// is `id`) opened under a touch. A text widget that is held this way keeps its selection,
+    /// its handles and its edit actions, because focus returns to it when the overlay closes.
+    /// How the overlay opened decides, not the latest press (D368): a mouse click on a row of a
+    /// menu a finger opened keeps the hold, so the row under the pointer is the row it picks. An
+    /// overlay a mouse opened never holds: that focus loss ends them as before. False in a
+    /// disabled scope.
+    pub(crate) fn held_by_overlay(&self, id: WidgetId) -> bool {
+        // No overlay a touch opened, none holds: the common case (every mouse-only frame) skips
+        // the walk over the hits.
+        let touch_opened = |o: &super::overlay::OverlayRec| o.active() && o.opened_by_touch;
+        if !self.enabled || !self.store.overlays.iter().any(touch_opened) {
+            return false;
+        }
+        let tag_of = |w: WidgetId| {
+            self.store
+                .prev_hits
+                .iter()
+                .filter(|h| h.id == w)
+                .map(|h| h.tag)
+                .max()
+        };
+        let Some(mut at) = self.store.focus.focused.filter(|f| *f != id) else {
+            return false;
+        };
+        for _ in 0..=self.store.overlays.len() {
+            let Some(tag) = tag_of(at) else {
+                return false;
+            };
+            let Some(rec) = self
+                .store
+                .overlays
+                .iter()
+                .find(|o| o.active() && o.tag == tag)
+            else {
+                return false;
+            };
+            match rec.saved_focus {
+                Some(s) if s == id => return rec.opened_by_touch,
+                Some(s) => at = s,
+                None => return false,
+            }
+        }
+        false
+    }
+
     /// Whether the focused widget is composing, so the keys left in the queue are the input
     /// method's.
     pub(crate) fn composing(&self) -> bool {

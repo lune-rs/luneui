@@ -39,7 +39,7 @@ use super::virtual_list::{HOVER, SELECTION, row_fill};
 use crate::access::{Action, Node, Role, State};
 use crate::color::Rgba;
 use crate::icon;
-use crate::input::{Event, FocusEvent, Key, NamedKey};
+use crate::input::{Event, FocusEvent, Key, NamedKey, PointerKind};
 use crate::motion::{Kind, Motion};
 use crate::paint::{Painter, Rect, StrokeStyle};
 use crate::text::{Spec, Style};
@@ -1096,6 +1096,7 @@ impl Ui<'_> {
 
         // Register and take input, so every row draws the frame's final selection.
         let mut pressing = false;
+        let touch = self.pointer_kind() == PointerKind::Touch;
         let mut toggled = false;
         let mut slots = Vec::with_capacity(view.len());
         for (n, v) in view.iter().enumerate().filter(|(_, v)| !v.block) {
@@ -1105,24 +1106,39 @@ impl Ui<'_> {
             let slot = slot_of(v);
             let r = self.interact(row_id, slot, Sense::CLICK);
             if r.press_started {
-                self.request_focus(id);
                 let chevron = Rect::new(slot.x + content_x(row.depth), slot.y, CHEVRON, ROW);
                 let chevron = self.painter().transformed(chevron);
                 let on_chevron =
                     row.has_children && r.press_pos.is_some_and(|(x, y)| chevron.contains((x, y)));
                 mem.press = Some((row.key, on_chevron));
+            }
+            let press = mem.press.filter(|(k, _)| *k == row.key);
+            // A finger acts at the tap, where the press began, so a pan that scrolls the tree
+            // selects and toggles nothing; a mouse acts on the press (D362).
+            let acts = if touch {
+                r.clicked && press.is_some()
+            } else {
+                r.press_started
+            };
+            if acts {
+                let on_chevron = press.is_some_and(|(_, c)| c);
+                self.request_focus(id);
                 if !on_chevron {
                     st.cursor = Some(row.key);
                     out.changed |= st.select(row.key);
                 }
-                let by_row = f.opts.toggle_on_row && row.has_children && r.press_count <= 1;
+                let again = if touch {
+                    r.double_clicked
+                } else {
+                    r.press_count > 1
+                };
+                let by_row = f.opts.toggle_on_row && row.has_children && !again;
                 if on_chevron || by_row {
                     st.toggle(row.key);
                     out.toggled = Some(row.key);
                     toggled = true;
                 }
             }
-            let press = mem.press.filter(|(k, _)| *k == row.key);
             // A click with no press of ours is an accessibility action.
             if r.clicked && press.is_none() {
                 let by_row = f.opts.toggle_on_row && row.has_children;

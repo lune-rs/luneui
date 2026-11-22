@@ -411,6 +411,48 @@ No `mobile::Lifecycle`: winit's `suspended` and `resumed` arrive under the manif
 
 **Unverified here.** A real device: 120 Hz, the GPU's cost, the safe area of other models, notches and the Dynamic Island. VoiceOver (D359). A finger: the 0.7.1 touch constants are starting values. Typed text through a live soft keyboard (D357). The iOS "Allow Paste" prompt for another app's text (D358). Landscape: the safe area was read on iOS 18.0 only (`docs/mobile.md`, R6). A scene the OS discards and reconnects, and rotation at run time, were not driven.
 
+## 0.7.3 to 0.7.4: touch-ready widgets and mobile components
+
+D361 to D376. Additive, hence 0.7.4: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and an app needs nothing changed. Touch stays off until an app calls `set_touch_enabled(true)` (D16): an app that never does sees no change, its mouse, keyboard and wheel frames are byte-identical. M5 (D361 to D368) made the existing widgets touch-ready and M6 (D369 to D375) added seven mobile components; the release is D376.
+
+Public additions (the only ones; the rest is crate-private or a gallery page):
+
+| item | what it is |
+| --- | --- |
+| `text_edit::EditActions` | `#[non_exhaustive]`, with `cut`, `copy`, `paste` and `select_all`: what a text widget takes now (D364) |
+| `Ui::edit_command(id, EditCommand)` | queues a command for a text widget (field, text area, code editor, selectable text), run at its next call through its own path, so `Paste` asks the clipboard as Cmd+V does (D364) |
+| `Ui::edit_actions(id)` | `Option<EditActions>`, as the widget last ran; `None` for an id that is not a text widget drawn in the last two frames (D364) |
+
+For an app that turned touch on, the touch rules (each read only for a touch press):
+
+- A touch press picks its widget with a 44 pt target around a small control; the drawing stays (D361).
+- Focus moves on the tap, a long press or a drag's start, not on the press. A pan over a form now focuses no field and raises no keyboard. This is a behaviour change for an opted-in touch app only (D361).
+- A drag that grows out of a long press dismisses the menu that long press opened (D361).
+- The slider, the scrollbar thumb and the split divider claim their axes, so a pan on the other axis scrolls the area around them; tabs and board cards claim none. A tap does what a mouse press does where that changes app state (D362).
+- A finger resting 500 ms on a tooltip's anchor shows the tooltip; it stays 1.5 s after the lift (D363).
+- A text widget: a tap places the caret, a double tap or a long press selects a word, a drag after a long press extends, and selection handles show (D364). While the app's edit menu (opened from that `context`) has the key focus, the widget keeps its selection, its handles and its `edit_actions`, and focus returns to it when the menu closes (D367).
+- A scroll area under the on-screen keyboard extends its range by the covered part and reveals the focused field; menus, popovers, tooltips, toasts, the dialog card and the palette place inside the safe area and above the keyboard (D365).
+
+To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary_clicked` (D292), offer the rows `Ui::edit_actions` allows, and run the chosen one as `Ui::edit_command`. Open the menu only when `edit_actions` allows at least one action: a composing widget takes none, and an empty menu takes no focus and leaves Escape to the input method, so only an outside press would close it. No migration map: nothing an app already calls changes.
+
+**Unverified here.** Every constant is a starting value: the 44 pt target, the 500 ms rest, the 1.5 s linger and the handle look were judged on scripted input, not under a finger (no finger can be driven here). The keyboard avoidance was judged on scripted insets, not a live keyboard or a notch.
+
+**M6: mobile components (D369 to D375).** Seven components, each a module with its `Ui` method, its options, item and response types; no existing item changes. The table is what is public; `gesture_track` and the scroll area's overscroll reader are crate-private.
+
+| item | what it is |
+| --- | --- |
+| `nav_bar::NavBar`, `NavAction`, `NavBarResponse`, `nav_bar::HEIGHT`, `Ui::nav_bar(key, rect, &bar)` | the phone header: an optional back button, the title, up to three action buttons; 44 pt at the rect's bottom (D370) |
+| `tab_bar::TabBarItem`, `TabBarResponse`, `tab_bar::HEIGHT`, `Ui::tab_bar(key, rect, items, &mut selected)` | the bottom tab bar: items with an optional badge, one tab stop; 49 pt at the rect's top (D370) |
+| `bottom_sheet::Detent`, `BottomSheet`, `SheetResponse`, `Ui::bottom_sheet(key, &mut open, &sheet, content)` | a modal sheet over `Ui::overlay`, with detents, a drag and a dismissal (D371) |
+| `nav_stack::NavStackResponse`, `Ui::nav_stack(key, rect, depth, page)`, `Ui::nav_stack_pop(key)` | push and pop of the levels the app owns, with edge-swipe back (D372) |
+| `pager::PagerOptions`, `PagerResponse`, `Ui::pager(key, rect, count, &mut page, &opts, draw)` | horizontal pages that snap by one page, and an optional row of dots (D373) |
+| `swipe_actions::SwipeAction`, `SwipeActions`, `SwipeEdge`, `SwipeResponse`, `Ui::swipe_actions(key, rect, &actions, row)` | a row whose leading and trailing actions a swipe reveals (D374) |
+| `pull_to_refresh::RefreshResponse`, `THRESHOLD` (64), `BAND` (56), `Ui::pull_to_refresh(key, rect, refreshing, &opts, content)` | a scroll area that fires `refresh` on a touch pull past 64 px and holds a spinner while the app refreshes (D375) |
+
+A mouse, keyboard and wheel app that does not call them sees no change. The non-touch path of each gesture: the sheet's grabber (a click steps to the next detent, Enter on the focused grabber does the same) and Escape or the scrim close it; the app's back button calls `Ui::nav_stack_pop`; the pager's dots (a click, Left, Right, Home, End; only when `dots` is on) and the app's own `*page`; a swipe row's `context` opens the app's menu with the same actions; the refresh is the app's own control passing `refreshing`, as a mouse, a wheel or a key never fires the pull; the bars' buttons and items are reached by click, Enter and Space, and the tab bar's by Left, Right, Home and End.
+
+**Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. Desktop touchscreens (a Windows or macOS touch screen with touch turned on). The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
