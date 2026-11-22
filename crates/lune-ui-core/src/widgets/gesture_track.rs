@@ -7,9 +7,6 @@
 //! Crate-private: the components of M6 use it, no app does. Every motion here is a closed form of
 //! the app's time, so a frame at 60 Hz and one at 120 Hz agree at every shared instant (D347).
 
-// Steps 2 to 7 of M6 are the consumers; until each lands, part of this module has none.
-#![allow(dead_code)]
-
 use std::time::Duration;
 
 use crate::motion::{
