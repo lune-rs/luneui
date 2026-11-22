@@ -93,6 +93,7 @@ demo=0
 landscape=0
 build_only=0
 demo_args=()
+nargs=$#
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --probe) probe=1 ;;
@@ -112,6 +113,10 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+# --delete-device stands alone: with a mode or --keep-booted it would delete and exit 0 without the mode.
+if [ "$delete" -eq 1 ] && [ "$nargs" -ne 1 ]; then
+  usage
+fi
 if [ "$build_only" -eq 1 ] && { [ "$probe" -eq 1 ] || [ "$delete" -eq 1 ] || [ "$demo" -eq 1 ]; }; then
   usage
 fi
@@ -371,6 +376,16 @@ wait_line() {
   return 1
 }
 
+# Waits up to $4 seconds for at least $3 lines matching the grep pattern $2 in file $1.
+wait_count() {
+  local file="$1" pat="$2" n="$3" secs="$4"
+  for _ in $(seq 1 $((secs * 2))); do
+    [ "$(grep -c -- "$pat" "$file" 2>/dev/null || true)" -ge "$n" ] && return 0
+    sleep 0.5
+  done
+  return 1
+}
+
 # The display's rotation (ROTATION_0 to ROTATION_270).
 display_rotation() {
   adb_s shell dumpsys window displays 2>/dev/null | grep -oE 'mDisplayRotation=ROTATION_[0-9]+' | head -n 1 | sed 's/.*=//'
@@ -422,7 +437,7 @@ launch() {
     tail -n 20 "$log" >&2 || true
     echo "--- logcat (errors, tail) ---" >&2
     grep -E ' (E|F) |FATAL|Abort|SIGSEGV|panicked' "$OUT/logcat.txt" | tail -n 20 >&2 || true
-    fail "no 'presented 1' within 60 s (full logcat in $OUT/logcat.txt)"
+    fail "no 'presented 1' within 120 s (full logcat in $OUT/logcat.txt)"
   fi
   grep "^presented " "$log" | head -n 3 || true
   if [ "$landscape" -eq 1 ] && [ "$(display_rotation)" != "ROTATION_90" ]; then
@@ -690,8 +705,7 @@ if [ "$smoke" -eq 1 ]; then
   wait_line "$log" '^probe lifecycle suspended$' 10 || fail "no 'probe lifecycle suspended' after HOME"
   sleep 2
   adb_s shell am start -W -n "$ACTIVITY" >/dev/null 2>&1 || fail "am start after HOME"
-  wait_line "$log" '^probe lifecycle resumed$' 10 \
-    && [ "$(grep -c '^probe lifecycle resumed$' "$log" || true)" -ge 2 ] || fail "no second 'probe lifecycle resumed'"
+  wait_count "$log" '^probe lifecycle resumed$' 2 10 || fail "no second 'probe lifecycle resumed'"
   sleep 3
   cycle="$(grep '^probe lifecycle ' "$log" | sed 's/^probe lifecycle //' | tr '\n' ' ')"
   echo "android-emu: life cycle: $cycle"
