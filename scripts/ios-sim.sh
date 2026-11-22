@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds apps/demo for the iOS simulator, runs it on one simulator device of its own and checks that
-# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape]
+# a frame was presented. Usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard | --demo] [--no-manifest] [--landscape]
 #   [--demo-arg <arg>] [--keep-booted | --delete-device]
 #   (default)       build, assemble target/ios-sim/Demo.app (ad-hoc signed), boot the device, install,
 #                   launch, wait up to 60 s for `presented 1` in target/ios-sim/stdout.log, take one
@@ -34,6 +34,14 @@
 #                   (`simctl spawn <udid> defaults write com.apple.keyboard.preferences
 #                   AutomaticMinimizationEnabled -bool false`, read at once, no reboot; docs/mobile.md).
 #                   It never changes the Simulator's own preferences (com.apple.iphonesimulator).
+#   --demo          launch the demo with `--demo --touches` (plus any --demo-arg): the showcase tour plays
+#                   hands-free through RawInput.events (D415, D417). After `presented 1` the script follows
+#                   stdout.log: a `demo mark <name> FAIL` line fails at once (exit 1, the line quoted);
+#                   shot-1.png, shot-2.png and shot-3.png are taken when `demo mark sheet-half ok`, `demo
+#                   mark page-2 ok` and `demo mark settings ok` appear (three screenshots, never more); it
+#                   requires `demo end <n>/<n>` within the tour's length (60 s at most) plus 60 s, and 16
+#                   marks `ok`; the `demo` lines go to target/ios-sim/demo.txt. Exclusive with --probe,
+#                   --smoke and --keyboard (usage, exit 2). No Settings round trip.
 #   --no-manifest   delete UIApplicationSceneManifest from the bundle copy's Info.plist (a control run:
 #                   the app without the scene life cycle).
 #   --landscape     set UISupportedInterfaceOrientations to UIInterfaceOrientationLandscapeLeft in the
@@ -72,7 +80,7 @@ OUT="$ROOT/target/ios-sim"
 APP="$OUT/Demo.app"
 
 usage() {
-  echo "usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
+  echo "usage: scripts/ios-sim.sh [--probe | --smoke | --keyboard | --demo] [--no-manifest] [--landscape] [--demo-arg <arg>] [--keep-booted | --delete-device]" >&2
   exit 2
 }
 
@@ -81,6 +89,7 @@ delete=0
 probe=0
 smoke=0
 keyboard=0
+demo=0
 no_manifest=0
 landscape=0
 demo_args=()
@@ -89,6 +98,7 @@ while [ "$#" -gt 0 ]; do
     --probe) probe=1 ;;
     --smoke) smoke=1; probe=1 ;;
     --keyboard) keyboard=1; probe=1 ;;
+    --demo) demo=1 ;;
     --no-manifest) no_manifest=1 ;;
     --landscape) landscape=1 ;;
     --demo-arg)
@@ -102,6 +112,10 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+# --demo is its own mode: exclusive with the probe modes.
+if [ "$demo" -eq 1 ] && [ "$probe" -eq 1 ]; then
+  usage
+fi
 
 UDID=""
 booted_by_us=0
@@ -205,7 +219,7 @@ if [ "$keyboard" -eq 1 ] || [ "$smoke" -eq 1 ]; then
     || fail "could not turn keyboard minimisation off on $NAME"
 fi
 rm -f "$OUT/stdout.log" "$OUT/stderr.log" "$OUT/stdout-2.log" "$OUT/stderr-2.log" \
-  "$OUT/stdout-3.log" "$OUT/stderr-3.log" "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/probe.txt"
+  "$OUT/stdout-3.log" "$OUT/stderr-3.log" "$OUT/shot-1.png" "$OUT/shot-2.png" "$OUT/shot-3.png" "$OUT/probe.txt" "$OUT/demo.txt"
 : > "$OUT/stdout.log"
 : > "$OUT/stderr.log"
 app_args=()
@@ -217,6 +231,9 @@ if [ "$keyboard" -eq 1 ]; then
 fi
 if [ "$smoke" -eq 1 ]; then
   app_args+=(--probe-clipboard)
+fi
+if [ "$demo" -eq 1 ]; then
+  app_args=(--demo --touches)
 fi
 app_args+=(${demo_args[@]+"${demo_args[@]}"})
 # Waits for `probe keyboard_inset 0,0,0,<b>` in $1 (up to 20 s) and requires <b> above 200 points.
@@ -254,6 +271,57 @@ if [ "$seen" -ne 1 ]; then
   fail "no 'presented 1' within 60 s"
 fi
 grep "^presented " "$OUT/stdout.log" | head -n 3 || true
+
+if [ "$demo" -eq 1 ]; then
+  # The showcase tour (D417): follow the `demo` lines. A FAIL mark stops the run at once; three bounded
+  # screenshots at fixed marks; `demo end <n>/<n>` must come within the tour's length (60 s at most)
+  # plus 60 s.
+  shot_marks=(sheet-half page-2 settings)
+  shot_taken=(0 0 0)
+  demo_start=$SECONDS
+  deadline=$((SECONDS + 60 + 60))
+  ended=0
+  while :; do
+    failed="$(grep '^demo mark .* FAIL' "$OUT/stdout.log" | head -n 1 || true)"
+    if [ -n "$failed" ]; then
+      grep '^demo ' "$OUT/stdout.log" > "$OUT/demo.txt" || true
+      fail "$failed"
+    fi
+    for i in 0 1 2; do
+      if [ "${shot_taken[$i]}" -eq 0 ] && grep -q "^demo mark ${shot_marks[$i]} ok" "$OUT/stdout.log"; then
+        shot_taken[$i]=1
+        xcrun simctl io "$UDID" screenshot --type=png "$OUT/shot-$((i + 1)).png" >/dev/null 2>&1 || fail "screenshot $((i + 1))"
+        [ -s "$OUT/shot-$((i + 1)).png" ] || fail "empty screenshot $((i + 1))"
+        echo "ios-sim: screenshot $OUT/shot-$((i + 1)).png at mark ${shot_marks[$i]}"
+      fi
+    done
+    if grep -q '^demo end ' "$OUT/stdout.log"; then
+      ended=1
+      break
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || break
+    sleep 0.25
+  done
+  grep '^demo ' "$OUT/stdout.log" > "$OUT/demo.txt" || true
+  cat "$OUT/demo.txt"
+  if [ "$ended" -ne 1 ]; then
+    echo "--- stderr (tail) ---" >&2
+    tail -n 20 "$OUT/stderr.log" >&2 || true
+    fail "no 'demo end' within the tour's length plus 60 s"
+  fi
+  end_line="$(grep '^demo end ' "$OUT/stdout.log" | head -n 1)"
+  awk -v l="$end_line" 'BEGIN { split(l, p, " "); split(p[3], v, "/"); exit !(v[1] == v[2] && v[2] > 0) }' \
+    || fail "not every mark passed: $end_line"
+  marks_ok="$(grep -c '^demo mark .* ok$' "$OUT/stdout.log" || true)"
+  [ "$marks_ok" -eq 16 ] || fail "$marks_ok marks ok, not 16 ($end_line)"
+  for i in 0 1 2; do
+    [ "${shot_taken[$i]}" -eq 1 ] || fail "no screenshot: mark ${shot_marks[$i]} never printed ok"
+  done
+  echo "ios-sim: $end_line after $((SECONDS - demo_start)) s, $(grep -c '^presented ' "$OUT/stdout.log" || true) presented lines, demo lines in $OUT/demo.txt"
+  xcrun simctl terminate "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
+  echo "ios-sim: passed"
+  exit 0
+fi
 
 if [ "$probe" -eq 1 ]; then
   grep -q "^probe inner_size " "$OUT/stdout.log" || fail "no 'probe inner_size' line"

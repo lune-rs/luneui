@@ -14,7 +14,7 @@
 pub use lune_ui_core::{Backdrop, BackdropKind, GlassLayer, LuminosityCurve};
 pub use lune_ui_core::{
     acrylic, backdrop, chrome, code_doc, color, dock, drag, icon, image, json, layout, motion,
-    paint, scene, shortcuts, strings, testing, text_edit, theme, ui, widgets,
+    paint, playback, scene, shortcuts, strings, testing, text_edit, theme, ui, widgets,
 };
 pub use theme::lunegit_dark;
 pub use theme::near_black;

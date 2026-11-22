@@ -76,6 +76,27 @@ environment. The app:
 `apps/gallery` is the worked example: `apps/gallery/src/window.rs` (the window, the surface, the frame
 loop), `popover.rs` (a tray host), `smoke.rs` and `main.rs`.
 
+## Mobile apps
+
+What an app adds to run on a phone, with `apps/demo` as the reference (`apps/demo/src/lib.rs`, `apps/demo/ios/Info.plist`). A desktop app adds none of it. This section is standing: it lists what a phone app needs now; the release sections below keep their history.
+
+For iOS, and so for iOS 27: iOS 27 refuses at launch an app built with its SDK that lacks the scene manifest (D354).
+
+- `Info.plist` with `UILaunchScreen` and a `UIApplicationSceneManifest` holding one `UIWindowSceneSessionRoleApplication` configuration named `Default Configuration`. Copy `apps/demo/ios/Info.plist` (D354).
+- `mobile::attach_to_scene(&window)` once, right after the window is created. It is idempotent (D354).
+- `translator.set_touch_enabled(true)`, once per window. Touch is off until an app asks (D16).
+- After every `translator.take(..)`: `Event::SafeArea(mobile::safe_area(&window))` and `Event::KeyboardInset(keyboard.inset())`, where `keyboard` is a `mobile::KeyboardInset::new(&window, wake)` the app keeps alive (D355, D357).
+- The clipboard: `Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))` in place of `Clipboard::new()` (D358).
+- No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface`; on `resumed` clear the stop and ask for a frame (D356).
+- Redraws from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle. A `Repaint::At` that comes due (`StartCause::ResumeTimeReached`) becomes a frame (D356).
+
+For Android (nothing has run on Android yet; M8 is the milestone that runs it):
+
+- The app's own `Cargo.toml` enables winit's `android-native-activity` feature for `target_os = "android"` (`apps/demo/Cargo.toml`).
+- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both.
+
+Demo mode: the core's `playback` module (D415, R-core-13) plays a scripted tour through `RawInput.events` against the app's time, and `playback::draw_touches` is an opt-in indicator for a recording. `docs/demo-mode.md` says how to run the demo's tour, record it and write one for an app.
+
 ## Unverified here
 
 The tests run against scripted input and fake adapters. What only a real OS shows is not ticked
@@ -376,7 +397,7 @@ An iOS app is a new target. `apps/demo` is the reference wiring, and the iOS-onl
 - An accessibility bridge, if the app has one, created before the attach (D359).
 - Each frame, after `translator.take(..)`: `Event::SafeArea(mobile::safe_area(&window))` and `Event::KeyboardInset(keyboard.inset())`, where `keyboard` is a `mobile::KeyboardInset::new(&window, wake)` the app keeps alive (D355, D357).
 - The keyboard's `wake` only wakes the app: it sets a flag that `about_to_wait` turns into a frame, and calls `request_redraw` (D357).
-- Touch on with `translator.set_touch_enabled(true)`, once per window, as in 0.7.1 (the demo leaves it off).
+- Touch on with `translator.set_touch_enabled(true)`, once per window, as in 0.7.1 (the demo leaves it off; 0.7.5's demo turns it on).
 - The clipboard: `Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))` in place of `Clipboard::new()` (D358).
 - No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface` (its CAMetalLayer survives the background); on `resumed` clear the stop and ask for a frame (D356).
 - Every frame is requested from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle; a `Repaint::At` that comes due is turned into a frame (D356).
@@ -452,6 +473,34 @@ To give a text widget the app's own edit menu: open `Ui::menu` on its `secondary
 A mouse, keyboard and wheel app that does not call them sees no change. The non-touch path of each gesture: the sheet's grabber (a click steps to the next detent, Enter on the focused grabber does the same) and Escape or the scrim close it; the app's back button calls `Ui::nav_stack_pop`; the pager's dots (a click, Left, Right, Home, End; only when `dots` is on) and the app's own `*page`; a swipe row's `context` opens the app's menu with the same actions; the refresh is the app's own control passing `refreshing`, as a mouse, a wheel or a key never fires the pull; the bars' buttons and items are reached by click, Enter and Space, and the tab bar's by Left, Right, Home and End.
 
 **Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. Desktop touchscreens (a Windows or macOS touch screen with touch turned on). The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
+
+## 0.7.4 to 0.7.5: demo mode
+
+D415 to D419. Additive, hence 0.7.5: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and an app needs nothing changed. The release adds one core module, `playback`, and grows `apps/demo` from one frame into a small phone app whose `--demo` flag plays a scripted tour hands-free; the release is D419.
+
+Public additions (the only ones; the rest is the demo app, `scripts/ios-sim.sh` or docs):
+
+| item | what it is |
+| --- | --- |
+| `playback::Script` (`new`, `tap`, `press`, `swipe`, `drag`, `wait`, `event`, `mark`, `end_hold`, `length`, `cursor`) | a list of timed cues built by a cursor; gestures expand at build time into `Event::Touch` samples every 8 ms, so the events do not depend on the frame rate (D415) |
+| `playback::Player` (`new`, `with_repeat`, `advance`, `pause`, `resume`, `is_finished`, `contacts`) | takes the app's time and appends the due events to `RawInput.events`; reads no clock (D415) |
+| `playback::Advance`, `playback::Contact` | what `advance` returns (marks passed, the app time of the next frame it needs for `Ui::request_repaint_at`, `restarted`, `finished`) and a scripted finger's position and alpha (D415) |
+| `playback::draw_touches(ui, &player)` | the opt-in touch indicator for a recording, drawn with public `Painter` calls only (D415) |
+| `playback::SAMPLE`, `TAP_HOLD`, `DRAG_SETTLE`, `FADE`, `TOUCH_ID_BASE` | the script's timing constants and the first scripted touch id (D415) |
+
+All of it is also at `lune_ui::playback`. An app that does not call it sees no change. `docs/demo-mode.md` says how to run the demo's tour, record it and write a script for one's own app.
+
+The demo app (`apps/demo`, not library API; D416 to D418):
+
+- It is now a three-tab phone app (Home, Cards, Settings) built only from the toolkit's public components, and it turns touch on (`translator.set_touch_enabled(true)`), where 0.7.3's demo left it off.
+- `--demo` plays the 16-mark showcase tour through `RawInput.events`; `--loop`, `--touches` and `--exit-after-demo` shape it; `--dump <dir>` renders five states headless, or one PNG per mark with `--demo`. Each mark checks the app's state and prints `demo mark <name> ok` or `FAIL <reason>`, then `demo end <ok>/<total>`; `--exit-after-demo` exits 1 on a FAIL. Every M1 and M4 probe flag still works.
+- `scripts/ios-sim.sh --demo` plays it on the simulator, requires every mark `ok` and takes three screenshots (D418).
+
+No migration map: nothing an app already calls changes.
+
+**Readings.** The tour passes every mark headless at 60 Hz, at 120 Hz, with jittered frames and 100 ms hitches, and drawing only when asked to, on the desktop layout and the phone's (`cargo test -p demo --test showcase`, D417). On the iOS 18.0 and 27.2 simulators `scripts/ios-sim.sh --demo` passed 16/16, and `--smoke` still passes with the new screens (`docs/mobile.md`, "M7 reading"). The desktop run `cargo run -p demo -- --demo --exit-after-demo` is unverified here: no frame arrived in 150 s (the session's windows were occluded).
+
+**Unverified here.** A device. A real finger: the scripted touches enter through `RawInput.events`, not through the simulator's or the OS's input. 120 Hz on a panel: the simulator reports 60 Hz, and the 120 Hz schedule is headless.
 
 ## API changes of the library pass
 

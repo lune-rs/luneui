@@ -26,6 +26,7 @@ Builds `apps/demo` for `aarch64-apple-ios-sim`, assembles `target/ios-sim/Demo.a
 - `--probe`: launches the demo with `--probe`, screenshot `shot-1.png` 2 s after `presented 1`, launches the Settings app (`com.apple.Preferences`, by `simctl launch`) to send the demo to the background, launches the demo again (no `--terminate-running-process`), screenshot `shot-2.png`, and writes the `probe`/`presented` lines of both launches to `target/ios-sim/probe.txt`. Two screenshots in all.
 - `--keyboard`: launches the demo with `--probe --focus-field`, requires `probe keyboard_inset 0,0,0,<b>` with `<b>` above 200, takes one screenshot 2 s later (`shot-1.png`; `shot-nokeyboard.png` when no keyboard showed) and stops (no Settings round trip). In a `--smoke` run the same launch is the last step and its screenshot `shot-2.png` is the run's second one (the resume screenshot is not taken). `LUNEUI_IOS_DEVICE_NAME` picks a device name of its own.
 - `--smoke`: `--probe`, and also requires the clipboard probe to read back its write and `xcrun simctl pbpaste <udid>` to print the same text, `probe scene attached` as the demo's third `probe scene` line (frame 30) and, in launch 1's output, `probe lifecycle resumed` at launch, then `suspended` and `resumed` across the Settings round trip. Two screenshots in all. It also requires every `probe safe_area_event` line (frames 1 and 30) to be `0,62,0,34`, the iOS 18.0 portrait safe area (printed and not judged with `--landscape`), and no `presented` line between `probe lifecycle suspended` and the next `probe lifecycle resumed`, with one after it (a `--probe` run prints a `presented` line for every frame; `--demo-arg --draw-while-suspended` is the control run that must make this check fail).
+- `--demo` (D418; exclusive with `--probe`, `--smoke` and `--keyboard`, else usage and exit 2): launches the demo with `--demo --touches` (plus any `--demo-arg`), waits for `presented 1`, then follows `stdout.log`: a `demo mark <name> FAIL` line fails the run at once (exit 1, the line quoted); `shot-1.png`, `shot-2.png` and `shot-3.png` are taken when `demo mark sheet-half ok`, `demo mark page-2 ok` and `demo mark settings ok` print (three in all); `demo end <n>/<n>` with 16 `ok` marks is required within 60 s plus 60 s; the `demo` lines go to `target/ios-sim/demo.txt`. No Settings round trip.
 - Control flags, which edit only the bundle copy `target/ios-sim/Demo.app/Info.plist` (with `/usr/libexec/PlistBuddy`), never `apps/demo/ios/Info.plist`: `--no-manifest` deletes `UIApplicationSceneManifest` (the app without the scene life cycle); `--landscape` sets `UISupportedInterfaceOrientations` to `UIInterfaceOrientationLandscapeLeft`. `--demo-arg <arg>` passes one more argument to the demo (repeatable), as `--no-scene-attach`, which skips `mobile::attach_to_scene`.
 - Never: touches another device, uses `booted` as a device argument, opens Simulator.app or drives the UI, records video, writes outside `target/ios-sim/`.
 
@@ -183,9 +184,23 @@ The answers of every desktop-only entry point on iOS and Android (both use the `
 
 Windows on a phone: the toolkit's own glass (`Painter::acrylic`, `frost`, `backdrop`) is drawn by the renderer and works on the phone (the demo's frost panel); only the OS material is absent.
 
+## M7 reading: demo mode
+
+`apps/demo` plays its showcase tour hands-free with `--demo` (`docs/demo-mode.md`; D415 to D417): 16 marks, each a check of the app's state, printed as `demo mark <name> ok` or `demo mark <name> FAIL <reason>`, then `demo end <ok>/<total>`. The scripted touches enter only through `RawInput.events`. `scripts/ios-sim.sh --demo` (D418) ran it on the simulators, 2026-11-22 (macOS host Darwin 27.2, Apple M1 Pro; iPhone 16 Pro, 1206x2622 at scale 3, safe area 0,62,0,34):
+
+| run | result |
+| --- | --- |
+| `scripts/ios-sim.sh --demo`, iOS 18.0 | exit 0, `demo end 16/16`, three screenshots |
+| `LUNEUI_IOS_RUNTIME=iOS-27-2 scripts/ios-sim.sh --demo`, iOS 27.2 | exit 0, `demo end 16/16`, three screenshots |
+| the same two with `--demo-arg --probe` (a `presented` line for every frame) | 18.0: 41 s from `presented 1` to `demo end`, 965 presented lines; 27.2: 42 s, 959 |
+| `scripts/ios-sim.sh --smoke`, iOS 18.0 and 27.2 | exit 0 on both: the new three-tab screen holds every M4 check (`probe scene attached`, `probe access ok`, clipboard round trip, `probe safe_area_event 0,62,0,34`, no frame while suspended, `presented 31` while idle, `probe keyboard_inset` 291 on 18.0 and 301 on 27.2) |
+| `cargo run -p demo -- --demo --exit-after-demo`, desktop | unverified here: the window was created and no frame was presented in 150 s (the session's windows are occluded; `IOConsoleLocked` read false), so it hung until `timeout` killed it; the headless `apps/demo/tests/showcase.rs` runs the same marks |
+
+The frame rate: the simulator reports 60000 mHz, and the demo draws only when something changes (it asks for a frame at the player's next cue), so the 41 s tour presented about 23 frames a second on average (965 over 41 s), the frames dense while a gesture moves and sparse in the waits between marks. Every mark passed on the first run on both runtimes. Unverified here: 120 Hz (a real device), a live finger (an agent cannot drive the simulator's touch input).
+
 ## Unverified here
 
 - A real device: 120 Hz (the simulator reports 60000 mHz), the GPU's cost (glass blur), thermal behaviour, the real safe area of other models, landscape and the Dynamic Island's insets.
-- Touch (the demo's button is drawn but taps are not translated; `Translator` drops `WindowEvent::Touch`), typed text through the soft keyboard and IME, rotation, the home indicator behaviour.
+- A live finger on the simulator: not driven by an agent (the demo's scripted touches, `--demo`, enter through `RawInput.events`, not through the simulator's input), typed text through the soft keyboard and IME, rotation, the home indicator behaviour.
 - iOS 27 on a real device: winit 0.30.13 has no `UIScene` life cycle, and the toolkit adopts it outside winit (`mobile::attach_to_scene` and the manifest, M4 reading above), which launches on the iOS 27.2 simulator; nothing ran on a device. A scene the OS discards and reconnects, and rotation at run time, were not driven.
 - Android: nothing was run (`aarch64-linux-android` is compile-checked only).

@@ -39,6 +39,8 @@ Modules:
 - `desktop` (desktop units, monitors, popup placement and window shapes) and `dock` (docking,
   snapping and the group drag, in those units);
 - `tray` (the tray icon rasterised on the CPU, where its flyout and menu go, the click rules);
+- `playback` (scripted touch gestures and marks played against the app's time, through
+  `RawInput.events`, for demos and recordings);
 - `testing` (fakes of the seams for tests: the display-list recorder, a fake text system
   and its contract suite, a scripted input source, a null material and its contract suite).
 
@@ -65,6 +67,7 @@ Source: `crates/lune-ui-core/src/lib.rs:1`
 - [`layout`](layout.md) - Pure layout helpers: a parent rect and child sizes in, child rects out.
 - [`motion`](motion.md) - Motion: the closed-form animation model (`docs/motion.md`).
 - [`paint`](paint.md) - Immediate-mode painter: every frame the UI is described from state into per-layer geometry, text placements and hit regions.
+- [`playback`](playback.md) - Scripted input in app time: a [`Script`](playback.md#struct.Script) of timed touch gestures, marks and raw events, and a [`Player`](playback.md#struct.Player) that hands the due events to the frame th...
 - [`scene`](scene.md) - The display list: plain data the [`Painter`](paint.md#struct.Painter) builds for one frame and a renderer consumes.
 - [`shortcuts`](shortcuts.md) - The shortcut registry: scoped key chords mapped to command ids.
 - [`strings`](strings.md) - The string table: the app's and the toolkit's translated strings, looked up by key with `{n}` and `{n:spec}` placeholders.

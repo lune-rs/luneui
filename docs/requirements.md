@@ -64,6 +64,11 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   release velocity (`Ui::release_velocity`, a fit over the last 100 ms, at most 8000 px/s), and two
   touches read as a pinch over the widget the first one pressed (`Ui::pinch`, a reading that
   cancels nothing). All of it is a function of the events and the app's time (D348).
+- R-core-13 [new] Scripted input in app time: a script of timed touch gestures, raw events and
+  named marks that a player turns into the events due at the app's time, appended to
+  `RawInput.events`, with the time of the next frame it needs handed back, so a demo, a recording
+  or a test plays the same events at 60 Hz, at 120 Hz and under a hitch, and pauses, resumes and
+  repeats on app time alone; an opt-in indicator draws the scripted contacts (D415).
 
 ### Text
 

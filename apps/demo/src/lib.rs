@@ -1,11 +1,18 @@
-//! The demo: the smallest app over the toolkit, one window that draws one frame (a heading, a
-//! coloured shape, a frost surface over part of it, one button and a marker along each edge of the
-//! surface). It exists to build for the phone targets and to show what the platform reports there.
+//! The demo: a small phone app over the toolkit, three tabs built from its public components (a
+//! navigation stack with a list, a bottom sheet, a pager, settings), in one window. It builds for
+//! the phone targets and shows what the platform reports there (`--probe`).
+//!
+//! The screens, their layout and their state are in [`showcase`], shared by this window shell, the
+//! headless `--dump` ([`dump`]) and the tests; the shell is the wiring a real app needs: the
+//! window, the GPU, the life cycle, the clipboard and the accessibility bridge.
 //!
 //! App code: it reads the clock (time since start is the frame's time) and runs the event loop. It
 //! uses the facade only.
 
 #![deny(unsafe_code)]
+
+pub mod dump;
+pub mod showcase;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -21,21 +28,14 @@ use winit::window::{Window, WindowId};
 use lune_ui::clipboard::Clipboard;
 use lune_ui::frame::FrameRenderer;
 use lune_ui::gpu::{self, Gpu};
-use lune_ui::input::{Event, OutputState, Translator, control_flow, keymap};
+use lune_ui::input::{Event, OutputState, Translator, control_flow};
 use lune_ui::layout::Insets;
-use lune_ui::lunegit_dark::THEME;
 use lune_ui::mobile::{self, KeyboardInset, SceneAttach};
-use lune_ui::motion::{Cadence, MotionTier};
-use lune_ui::paint::Rect;
-use lune_ui::scene::{FrameParams, LayerId};
-use lune_ui::shortcuts::Shortcuts;
-use lune_ui::strings::{DisplayFormat, StringTable};
+use lune_ui::scene::FrameParams;
 use lune_ui::surface::{Acquired, SurfaceOptions, WindowSurface};
 use lune_ui::text::TextCache;
-use lune_ui::ui::{FrameConfig, Ui, UiStore};
-use lune_ui::widgets::button::ButtonKind;
-use lune_ui::widgets::field::FieldState;
-use lune_ui::widgets::label::LabelRole;
+
+use showcase::{Demo, Extras, MarkResult, Play};
 
 /// The accessibility bridge, behind the `access` feature. Without the feature every call is a
 /// no-op, which is the null bridge: the demo runs, with nothing for a screen reader.
@@ -141,9 +141,6 @@ fn clipboard_probe_text() -> String {
     format!("luneui-probe-{}", std::process::id())
 }
 
-/// The text field's key.
-const FIELD_KEY: &str = "field";
-
 /// The backdrop blur's sigma (physical pixels) and saturation, the gallery's values.
 const BLUR_SIGMA: f32 = 8.0;
 const BLUR_SATURATION: f32 = 1.8;
@@ -173,6 +170,17 @@ pub struct Options {
     /// On frame 2 write `luneui-probe-<pid>` to the clipboard, on frame 4 read it back, and print
     /// `probe clipboard_write <text>` and `probe clipboard <text>` (or `unavailable`).
     pub probe_clipboard: bool,
+    /// Play the showcase tour hands-free through the frame's input events (`playback`), printing
+    /// `demo mark <name> ok` or `demo mark <name> FAIL <reason>` at each mark and
+    /// `demo end <ok>/<total>` at the end; live input still works while it plays.
+    pub demo: bool,
+    /// With `demo`: play the tour again when it ends, from a fresh app state (`demo loop <n>`).
+    pub repeat: bool,
+    /// With `demo`: draw a disc under each scripted contact, for a recording.
+    pub touches: bool,
+    /// With `demo`: exit the event loop after `demo end`, with an error when a mark failed.
+    /// Desktop only: on iOS and Android the loop cannot return, so it is ignored there.
+    pub exit_after_demo: bool,
 }
 
 impl Default for Options {
@@ -185,6 +193,10 @@ impl Default for Options {
             pause: true,
             focus_field: false,
             probe_clipboard: false,
+            demo: false,
+            repeat: false,
+            touches: false,
+            exit_after_demo: false,
         }
     }
 }
@@ -270,7 +282,7 @@ fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
 }
 
 /// The demo's fonts: the gallery's own files, loaded in a fixed order.
-fn text_cache() -> TextCache {
+pub fn text_cache() -> TextCache {
     TextCache::new(
         &[
             include_bytes!("../../gallery/assets/RobotoMonoNerdFontMono-Regular.ttf").as_slice(),
@@ -280,6 +292,18 @@ fn text_cache() -> TextCache {
         UI_FONT,
         MONO_FONT,
     )
+}
+
+/// The frame parameters for a target of `size` physical pixels at `scale`: the backdrop blur's
+/// values are the gallery's.
+pub(crate) fn frame_params(size: (u32, u32), scale: f32) -> FrameParams {
+    FrameParams {
+        size,
+        scale,
+        blur_sigma: BLUR_SIGMA,
+        saturation: BLUR_SATURATION,
+        ..FrameParams::default()
+    }
 }
 
 /// The window and everything that draws into it.
@@ -295,21 +319,57 @@ struct Shown {
     access: access::Access,
 }
 
+/// What the tour has reported so far.
+#[derive(Debug, Default)]
+struct Tour {
+    /// Marks that passed, and marks passed in all.
+    ok: u32,
+    total: u32,
+    /// Restarts of a repeating tour.
+    loops: u32,
+    /// `demo end` has been printed.
+    ended: bool,
+}
+
+impl Tour {
+    /// Prints the marks of a frame and the restart or end it reports; true on the frame the tour
+    /// ends.
+    fn report(&mut self, marks: &[MarkResult], restarted: bool, finished: bool) -> bool {
+        if restarted {
+            self.loops += 1;
+            println!("demo loop {}", self.loops);
+        }
+        for mark in marks {
+            self.total += 1;
+            match &mark.result {
+                Ok(()) => {
+                    self.ok += 1;
+                    println!("demo mark {} ok", mark.name);
+                }
+                Err(why) => println!("demo mark {} FAIL {why}", mark.name),
+            }
+        }
+        if finished && !self.ended {
+            self.ended = true;
+            println!("demo end {}/{}", self.ok, self.total);
+            return true;
+        }
+        false
+    }
+}
+
 struct App {
     options: Options,
+    tour: Tour,
     shown: Option<Shown>,
-    store: UiStore,
-    strings: StringTable,
-    shortcuts: Shortcuts,
+    /// The screens and what one frame needs besides the GPU.
+    demo: Demo,
     start: Instant,
     presented: u32,
-    taps: u32,
     /// Wakes the loop for the accessibility bridge.
     proxy: EventLoopProxy<()>,
     /// The clipboard: the phone's pasteboard on iOS, the OS clipboard elsewhere.
     clipboard: Clipboard,
-    /// What the text field holds.
-    field: String,
     /// The keyboard inset the last frame saw, to print it when it changes.
     last_keyboard: Insets,
     /// Set by the keyboard observer when the inset moves; `about_to_wait` turns it into a frame.
@@ -363,7 +423,9 @@ fn setup(
     };
     let surface = WindowSurface::with_options(&gpu, surface, (size.width, size.height), options)?;
     let frame = FrameRenderer::for_surface(&mut gpu, &surface);
-    let translator = Translator::new(size, window.scale_factor());
+    let mut translator = Translator::new(size, window.scale_factor());
+    // The demo is a phone app: a finger is a touch, not a mouse (D16).
+    translator.set_touch_enabled(true);
     // The observer runs inside the OS's notification, which can fall inside a frame: it only wakes
     // the app. A request made inside `RedrawRequested` is lost while iOS is idle, so the flag
     // `about_to_wait` reads is the one that counts.
@@ -453,51 +515,28 @@ impl App {
                 format!("{},{},{},{}", kb.left, kb.top, kb.right, kb.bottom),
             );
         }
-        let config = FrameConfig {
-            theme: THEME,
-            tier: MotionTier::Full,
-            busy_cadence: Cadence::BUSY,
-            strings: &self.strings,
-            arg_format: &DisplayFormat,
-            keymap: keymap(),
-            shortcuts: &self.shortcuts,
-        };
-        let mut ui = Ui::begin(&mut self.store, &input, config, text);
-        // The surface in logical points: the markers sit on its four edges.
-        let (w, h) = (size.0 as f32 / s, size.1 as f32 / s);
-        let safe = ui.safe_area();
+        let mut extras = Extras::default();
         if self.options.probe_clipboard {
             // The clipboard probe goes through the frame's own request path, the one a text
             // edit's copy and paste use.
             if self.presented == 1 {
                 let text = clipboard_probe_text();
                 probe_line("clipboard_write", &text);
-                ui.clipboard_write(text);
+                extras.clipboard_write = Some(text);
             }
-            if self.presented == CLIPBOARD_PROBE_FRAMES - 1 {
-                ui.clipboard_read();
-            }
-        }
-        let keyboard_bottom = ui.keyboard_inset().bottom;
-        if self.options.focus_field && self.presented == 0 {
-            let id = ui.id(FIELD_KEY);
-            ui.request_focus(id);
+            extras.clipboard_read = self.presented == CLIPBOARD_PROBE_FRAMES - 1;
         }
         if self.options.probe && self.presented + 1 == PROBE_LAST_FRAME {
-            ui.request_repaint_at(input.time + PROBE_TIMED_FRAME);
+            extras.repaint_at = Some(input.time + PROBE_TIMED_FRAME);
         }
-        let mut taps = self.taps;
-        draw(
-            &mut ui,
-            w,
-            h,
-            safe,
-            keyboard_bottom,
-            &mut self.field,
-            &mut taps,
-        );
-        self.taps = taps;
-        let (display, out) = ui.finish();
+        if self.options.focus_field && self.presented == 0 {
+            self.demo.showcase.want_focus = true;
+        }
+        let rendered = self.demo.frame(input, text, &extras);
+        let (display, out, safe) = (rendered.scene, rendered.out, rendered.safe);
+        let tour_ended = self
+            .tour
+            .report(&rendered.marks, rendered.restarted, rendered.finished);
         if output.apply(window, &out, s) {
             event_loop.exit();
         }
@@ -507,13 +546,7 @@ impl App {
             // A read's reply arrives in the next frame's input.
             self.want_frame = true;
         }
-        let params = FrameParams {
-            size,
-            scale: s,
-            blur_sigma: BLUR_SIGMA,
-            saturation: BLUR_SATURATION,
-            ..FrameParams::default()
-        };
+        let params = frame_params(size, s);
         frame.draw_with(gpu, text, &display, &view, params, &mut [])?;
         window.pre_present_notify();
         surface.present(gpu, target);
@@ -541,6 +574,10 @@ impl App {
         {
             self.want_frame = true;
         }
+        if LOOP_RETURNS && tour_ended && self.options.exit_after_demo {
+            event_loop.exit();
+            return Ok(());
+        }
         if LOOP_RETURNS && let Some(n) = self.options.frames {
             if self.presented >= n {
                 event_loop.exit();
@@ -557,93 +594,13 @@ impl App {
     }
 }
 
-/// One frame of the demo in a surface of `w` by `h` logical points, with `safe` the edges the
-/// system covers and `keyboard_bottom` the height the soft keyboard covers at the bottom.
-fn draw(
-    ui: &mut Ui<'_>,
-    w: f32,
-    h: f32,
-    safe: Insets,
-    keyboard_bottom: f32,
-    field: &mut String,
-    taps: &mut u32,
-) {
-    // Keyboard avoidance: the shapes and the field move up by what the field would otherwise lack
-    // to clear the keyboard (the button stays where it is, under the keyboard).
-    let field_h = 44.0;
-    let lift = (h * 0.68 + field_h + 12.0 - (h - keyboard_bottom)).max(0.0);
-    let t = *ui.theme();
-    let p = ui.painter();
-    p.fill(Rect::new(0.0, 0.0, w, h), 0.0, [20, 22, 28, 255]);
-    // Two overlapping shapes for the frost to blur.
-    p.fill(
-        Rect::new(w * 0.08, h * 0.30 - lift, w * 0.50, h * 0.22),
-        28.0,
-        [232, 96, 62, 255],
-    );
-    p.fill(
-        Rect::new(w * 0.42, h * 0.38 - lift, w * 0.50, h * 0.22),
-        28.0,
-        [62, 150, 232, 255],
-    );
-    ui.label("heading", (24.0, h * 0.12), "luneui demo", LabelRole::Title);
-    let button = Rect::new(24.0, h * 0.78, w - 48.0, 44.0);
-    let text = if *taps == 0 {
-        "Tap".to_owned()
-    } else {
-        format!("Tapped {taps}")
-    };
-    if ui.button("tap", button, &text, ButtonKind::Primary).clicked {
-        *taps += 1;
-    }
-    // The frost surface over the lower part of the shapes: a blurred copy of what is under it.
-    let panel = Rect::new(w * 0.20, h * 0.46 - lift, w * 0.60, h * 0.18);
-    let p = ui.painter();
-    p.on(LayerId::Popup);
-    p.backdrop(panel, 20.0);
-    p.fill(panel, 20.0, t.menu_glass);
-    p.ring(panel, 20.0, 1.0, t.menu_popup_border, false);
-    ui.label(
-        "frost",
-        (panel.x + 16.0, panel.y + 16.0),
-        "frost",
-        LabelRole::Strong,
-    );
-    // The text field, above the soft keyboard when one is up.
-    let rest = h * 0.68 - lift;
-    ui.painter().on(LayerId::Toast);
-    ui.text_field(
-        FIELD_KEY,
-        Rect::new(24.0, rest, w - 48.0, field_h),
-        field,
-        "Type here",
-        FieldState::default(),
-    );
-    // A marker along each edge of the surface, in four colours: top red, right green, bottom
-    // blue, left yellow.
-    let p = ui.painter();
-    p.on(LayerId::Toast);
-    let m = 2.0;
-    p.fill(Rect::new(0.0, 0.0, w, m), 0.0, [255, 0, 0, 255]);
-    p.fill(Rect::new(w - m, 0.0, m, h), 0.0, [0, 255, 0, 255]);
-    p.fill(Rect::new(0.0, h - m, w, m), 0.0, [0, 128, 255, 255]);
-    p.fill(Rect::new(0.0, 0.0, m, h), 0.0, [255, 255, 0, 255]);
-    // An outline of the safe area: the part of the surface the content may use.
-    let inside = Rect::new(
-        safe.left,
-        safe.top,
-        w - safe.left - safe.right,
-        h - safe.top - safe.bottom,
-    );
-    p.ring(inside, 0.0, 1.0, [255, 255, 255, 160], false);
-}
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.options.probe {
             probe_line("lifecycle", "resumed");
         }
         self.paused = false;
+        self.demo.resume(self.start.elapsed());
         if let Some(shown) = &self.shown {
             if self.options.probe {
                 probe_window("resumed", &shown.window, &shown.surface);
@@ -669,6 +626,8 @@ impl ApplicationHandler for App {
     }
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        // The tour's clock stops with the app: a background of any length replays no burst.
+        self.demo.pause(self.start.elapsed());
         // Stop drawing. The surface stays: on iOS its layer survives the background, so the frame
         // that follows `resumed` draws into it as before (docs/mobile.md, life cycle).
         if self.options.pause {
@@ -768,22 +727,26 @@ impl ApplicationHandler for App {
 
 /// Runs the demo on `event_loop` until its window closes. On iOS `run_app` never returns.
 pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
+    let mut demo = Demo::new();
+    if options.demo {
+        demo.play(Play {
+            repeat: options.repeat,
+            touches: options.touches,
+        });
+    }
     let mut app = App {
         proxy: event_loop.create_proxy(),
         options,
+        tour: Tour::default(),
         shown: None,
-        store: UiStore::default(),
-        strings: StringTable::default(),
-        shortcuts: Shortcuts::default(),
+        demo,
         start: Instant::now(),
         presented: 0,
-        taps: 0,
         clipboard: if cfg!(target_os = "ios") {
             Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))
         } else {
             Clipboard::new()
         },
-        field: String::new(),
         last_keyboard: Insets::ZERO,
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
@@ -793,7 +756,23 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     event_loop
         .run_app(&mut app)
         .map_err(|e| format!("event loop: {e}"))?;
-    app.error.map_or(Ok(()), Err)
+    if let Some(e) = app.error {
+        return Err(e);
+    }
+    if options.demo && options.exit_after_demo && LOOP_RETURNS {
+        let t = &app.tour;
+        if !t.ended {
+            return Err("demo: the window closed before the tour ended".to_owned());
+        }
+        if t.ok != t.total {
+            return Err(format!(
+                "demo: {} of {} marks failed",
+                t.total - t.ok,
+                t.total
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The Android entry point: the one symbol android-activity's native glue looks up. It builds the
