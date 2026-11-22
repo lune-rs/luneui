@@ -622,6 +622,11 @@ Since 0.7.3 (mobile support M6, mobile components, D369 to D375; released as 0.7
 - `widgets::pull_to_refresh`: `RefreshResponse`, `THRESHOLD` (64), `BAND` (56), `Ui::pull_to_refresh` (a touch pull past 64 px fires `refresh`; a band holds a spinner while the app refreshes; D375), with a crate-private overscroll reader in `scroll_area`;
 - the gallery: the `Mobile` sidebar group after Labs, its seven pages and 28 `phone-*` scenes (D370 to D375).
 
+Since 0.7.4 (mobile support M7, demo mode, D415 to D419; the workspace version is 0.7.5, D419; `docs/consuming.md`, "0.7.4 to 0.7.5"; for an app that never calls it, nothing changes):
+
+- `lune_ui_core::playback` (re-exported as `lune_ui::playback`): `Script`, `Player`, `Advance`, `Contact`, `draw_touches` and the constants `SAMPLE`, `TAP_HOLD`, `DRAG_SETTLE`, `FADE`, `TOUCH_ID_BASE` (D415, R-core-13): scripted input in app time, played through `RawInput.events`;
+- the demo (`apps/demo`): a three-tab phone app, its `--demo` tour with 16 checked marks, `--loop`, `--touches`, `--exit-after-demo`, `--dump` (D416, D417); `scripts/ios-sim.sh --demo` (D418); `docs/demo-mode.md`.
+
 Since 0.6.2 (window depth, D328 to D336; the workspace version is 0.7.0; `docs/consuming.md`, "0.6.2 to 0.7.0", is the migration map; breaking):
 
 - `lune-ui-wgpu`: `SurfaceDepth` (`#[non_exhaustive]`) and the `SurfaceOptions` fields `depth`, `display_bits`, `opaque`; `WindowSurface::depth()`; the format resolution is a pure function over the surface's formats and colour spaces, the alpha mode and the display's depth, configured in the sRGB colour space (D328). `Auto` is 8-bit on a glass window on every OS (D329, D330). `FrameRenderer::for_surface`, `with_display`, `follow`, `follow_target`; `dither_lsb(format, display_bits)` is `max(format step, display step)` and `Gpu.formats` is keyed by (format, dither amplitude) (D333); `dump::read_rgba` reads the deep formats and `read_rgba_f32` keeps their precision (D334); `Gpu::new` asks for `TEXTURE_FORMAT_16BIT_NORM` and `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` where the adapter has them;

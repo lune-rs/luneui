@@ -474,6 +474,34 @@ A mouse, keyboard and wheel app that does not call them sees no change. The non-
 
 **Unverified here.** The feel of each gesture under a real finger: the sheet's drag and detents, the edge swipe back, the pager's snap, the swipe row's springs and the pull's trigger. Desktop touchscreens (a Windows or macOS touch screen with touch turned on). The 60 and 120 Hz motion rows are headless, in app time, not a panel. Every constant (the 44 pt target, the 64 px pull, the 56 px band, the 74 pt action width, the detents) is a starting value.
 
+## 0.7.4 to 0.7.5: demo mode
+
+D415 to D419. Additive, hence 0.7.5: no struct gains a field, no trait a required method, no exhaustive enum a variant, so **nothing breaks** and an app needs nothing changed. The release adds one core module, `playback`, and grows `apps/demo` from one frame into a small phone app whose `--demo` flag plays a scripted tour hands-free; the release is D419.
+
+Public additions (the only ones; the rest is the demo app, `scripts/ios-sim.sh` or docs):
+
+| item | what it is |
+| --- | --- |
+| `playback::Script` (`new`, `tap`, `press`, `swipe`, `drag`, `wait`, `event`, `mark`, `end_hold`, `length`, `cursor`) | a list of timed cues built by a cursor; gestures expand at build time into `Event::Touch` samples every 8 ms, so the events do not depend on the frame rate (D415) |
+| `playback::Player` (`new`, `with_repeat`, `advance`, `pause`, `resume`, `is_finished`, `contacts`) | takes the app's time and appends the due events to `RawInput.events`; reads no clock (D415) |
+| `playback::Advance`, `playback::Contact` | what `advance` returns (marks passed, the app time of the next frame it needs for `Ui::request_repaint_at`, `restarted`, `finished`) and a scripted finger's position and alpha (D415) |
+| `playback::draw_touches(ui, &player)` | the opt-in touch indicator for a recording, drawn with public `Painter` calls only (D415) |
+| `playback::SAMPLE`, `TAP_HOLD`, `DRAG_SETTLE`, `FADE`, `TOUCH_ID_BASE` | the script's timing constants and the first scripted touch id (D415) |
+
+All of it is also at `lune_ui::playback`. An app that does not call it sees no change. `docs/demo-mode.md` says how to run the demo's tour, record it and write a script for one's own app.
+
+The demo app (`apps/demo`, not library API; D416 to D418):
+
+- It is now a three-tab phone app (Home, Cards, Settings) built only from the toolkit's public components, and it turns touch on (`translator.set_touch_enabled(true)`), where 0.7.3's demo left it off.
+- `--demo` plays the 16-mark showcase tour through `RawInput.events`; `--loop`, `--touches` and `--exit-after-demo` shape it; `--dump <dir>` renders five states headless, or one PNG per mark with `--demo`. Each mark checks the app's state and prints `demo mark <name> ok` or `FAIL <reason>`, then `demo end <ok>/<total>`; `--exit-after-demo` exits 1 on a FAIL. Every M1 and M4 probe flag still works.
+- `scripts/ios-sim.sh --demo` plays it on the simulator, requires every mark `ok` and takes three screenshots (D418).
+
+No migration map: nothing an app already calls changes.
+
+**Readings.** The tour passes every mark headless at 60 Hz, at 120 Hz, with jittered frames and 100 ms hitches, and drawing only when asked to, on the desktop layout and the phone's (`cargo test -p demo --test showcase`, D417). On the iOS 18.0 and 27.2 simulators `scripts/ios-sim.sh --demo` passed 16/16, and `--smoke` still passes with the new screens (`docs/mobile.md`, "M7 reading"). The desktop run `cargo run -p demo -- --demo --exit-after-demo` is unverified here: no frame arrived in 150 s (the session's windows were occluded).
+
+**Unverified here.** A device. A real finger: the scripted touches enter through `RawInput.events`, not through the simulator's or the OS's input. 120 Hz on a panel: the simulator reports 60 Hz, and the 120 Hz schedule is headless.
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
