@@ -20,6 +20,7 @@ asynchronous, all reached through one helper. Files, images and rich text are no
 ## Needs
 
 - OS clipboard (R-platform-5, narrowed in M3: clipboard is in scope; types M4, fake M5, adapter M10).
+- On Android the same requests run through `ClipboardManager` (`mobile::Pasteboard`, R-platform-7, D420 to D423).
 - Cut, copy and paste for the editing engine (R-text-5): `text.text-edit`.
 - Copy buttons and copy-selected-rows (code block, diff rows, detail fields) (R-text-3).
 - Third-party crates only for platform layers (hard rule 4); a new dependency needs a DECISIONS row and a size note (hard rule 5).
