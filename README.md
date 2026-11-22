@@ -78,7 +78,10 @@ The same toolkit runs on iOS and Android. `apps/demo` is a three-tab phone app b
 public components, and it plays a scripted tour of them by itself.
 
 <p align="center">
-  <img alt="The demo app on iOS (left) and Android (right), playing the same scripted tour" src="docs/images/mobile-demo.png" width="100%">
+  <a href="docs/images/mobile-demo.mp4">
+    <img alt="The demo app on iOS (left) and Android (right), playing the same scripted tour. Click for the 46 s video." src="docs/images/mobile-demo.png" width="100%">
+  </a>
+  <br><sub>The same scripted tour on iOS (left) and Android (right). Click for the 46 s video.</sub>
 </p>
 
 - **Mobile components:** navigation bar, bottom tab bar, bottom sheet, navigation stack with edge-swipe
