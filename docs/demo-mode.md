@@ -35,6 +35,8 @@ Headless proof: `cargo test -p demo --test showcase` runs the same tour and chec
 
 iOS simulator: `scripts/ios-sim.sh --demo` builds the demo, runs it on the simulator device `luneui-demo-iphone` (iOS 18.0; `LUNEUI_IOS_RUNTIME=iOS-27-2` for 27.2, on `luneui-demo-iphone-iOS-27-2`) with `--demo --touches`, follows the log, takes three screenshots (`shot-1.png` to `shot-3.png`) at marks `sheet-half`, `page-2` and `settings`, and requires `demo end 16/16` in time. It exits 1 on a `demo mark ... FAIL` line, quoting it. Its `demo` lines go to `target/ios-sim/demo.txt`. `--demo-arg <arg>` passes one more argument to the demo. The script touches only its own device; it never opens Simulator.app and never records video.
 
+Android emulator: `scripts/android-emu.sh --demo` builds the APK (`--build-only`), runs it on its own emulator `luneui-demo-pixel7` (AVD, port 5580) with `--demo --touches`, follows logcat's `RustStdoutStderr` tag, takes three screenshots (`shot-1.png` to `shot-3.png`) at the same marks and requires `demo end 16/16`. A `demo mark ... FAIL` line exits 1, quoting it. The `demo` lines go to `target/android-emu/demo.txt`. The tour's touches are `RawInput.events` as on the desktop; `--demo-arg <arg>` passes one more argument. On the M8 emulator run it passed 16/16 in 43 s (`docs/mobile.md`, "M8 reading: demo mark"). The script never records video and never runs `adb kill-server`.
+
 ## Recording
 
 Agents never record. A recording is the user's.
@@ -42,6 +44,8 @@ Agents never record. A recording is the user's.
 On macOS: run `cargo run -p demo -- --demo --loop --touches` with the window (402x874 points) in view. Record that window with OBS (a window capture) or the system's screen recorder. Keep the pointer outside the window, so the only pointer on the recording is the touch discs. Stop the recording by hand; a loop never ends on its own.
 
 On the simulator: run `scripts/ios-sim.sh --demo --keep-booted`, which leaves `luneui-demo-iphone` booted once the tour has run. Find the device's id with `xcrun simctl list devices | grep luneui-demo-iphone`. Then start the recording on that id, `xcrun simctl io <udid> recordVideo <file>`, and in a second shell relaunch the app with the loop: `xcrun simctl launch --terminate-running-process <udid> rs.lune.luneui.demo --demo --touches --loop`. Stop the recording with Ctrl-C. The run with `--keep-booted` leaves the device up; `scripts/ios-sim.sh --delete-device` deletes it when you have finished.
+
+On the Android emulator: a recording is the user's, made with `adb shell screenrecord` on the emulator's serial (`adb -s emulator-5580 shell screenrecord /sdcard/demo.mp4`, stopped by Ctrl-C, then `adb pull`). `scripts/android-emu.sh --demo --keep-booted` leaves the emulator up after the tour, so the recording can start on it; agents never run `screenrecord`. The script runs one tour only; `--demo-arg --loop` would pass the loop flag to the app, unverified on Android.
 
 ## A script for your own app
 

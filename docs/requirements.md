@@ -122,6 +122,7 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   (`overlay.menu`) in tray-anchored popover windows. App-side, documented: the close-to-tray policy,
   single instance, autostart at sign-in and OS notifications (Wane lists them,
   `docs/ui/components.md:702-717`).
+- R-platform-7 [new] An app runs on Android through winit's NativeActivity (D420 to D423): the life cycle (the surface dropped on `suspended` and rebuilt on `resumed`), the safe area and the soft keyboard's inset (`mobile::safe_area`, `KeyboardInset`), and the clipboard through `ClipboardManager` (`mobile::Pasteboard`). The packaging and the emulator run are `scripts/android-emu.sh`. Not wired: accessibility and Back. Unverified: a physical device and IME composition on the keyboard's own keys (`docs/mobile.md`, "Android" and "M8 reading").
 
 ### Widgets
 

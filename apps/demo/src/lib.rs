@@ -35,7 +35,7 @@ use lune_ui::scene::FrameParams;
 use lune_ui::surface::{Acquired, SurfaceOptions, WindowSurface};
 use lune_ui::text::TextCache;
 
-use showcase::{Demo, Extras, MarkResult, Play};
+use showcase::{Demo, Extras, Layout, MarkResult, Play};
 
 /// The accessibility bridge, behind the `access` feature. Without the feature every call is a
 /// no-op, which is the null bridge: the demo runs, with nothing for a screen reader.
@@ -201,6 +201,40 @@ impl Default for Options {
     }
 }
 
+/// The window flags' usage line, printed when an Android launch-arguments file does not parse.
+pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--demo [--loop | --exit-after-demo] [--touches]]";
+
+/// The options the window flags ask for, or `None` for an argument that is not understood or a
+/// combination that makes no sense. The command line's `--dump` is not a window flag: the binary
+/// reads it before calling this.
+pub fn parse_window_args(args: impl Iterator<Item = String>) -> Option<Options> {
+    let mut options = Options::default();
+    let mut args = args;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--probe" => options.probe = true,
+            "--frames" => options.frames = Some(args.next()?.parse().ok()?),
+            "--no-scene-attach" => options.scene_attach = false,
+            "--draw-while-suspended" => options.pause = false,
+            "--focus-field" => options.focus_field = true,
+            "--probe-clipboard" => options.probe_clipboard = true,
+            "--demo" => options.demo = true,
+            "--loop" => options.repeat = true,
+            "--touches" => options.touches = true,
+            "--exit-after-demo" => options.exit_after_demo = true,
+            _ => return None,
+        }
+    }
+    // The tour's own flags need the tour; a loop never ends, so it cannot exit after it.
+    if (options.repeat || options.exit_after_demo) && !options.demo {
+        return None;
+    }
+    if options.repeat && options.exit_after_demo {
+        return None;
+    }
+    Some(options)
+}
+
 /// Whether this platform's event loop can return, so `Options::frames` applies.
 const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android")));
 
@@ -251,7 +285,7 @@ fn position_text<E: std::fmt::Display>(p: Result<winit::dpi::PhysicalPosition<i3
 }
 
 /// What the window reports now, one `probe` line per fact, under a `probe event <why>` marker.
-fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
+fn probe_window(why: &str, window: &Window, surface: Option<&WindowSurface>) {
     probe_line("event", why);
     let inner = window.inner_size();
     let outer = window.outer_size();
@@ -276,9 +310,38 @@ fn probe_window(why: &str, window: &Window, surface: &WindowSurface) {
         "refresh_mhz",
         rate.map_or_else(|| "none".to_owned(), |r| r.to_string()),
     );
-    let (sw, sh) = surface.size();
-    probe_line("surface_size", format!("{sw}x{sh}"));
-    probe_line("surface_format", format!("{:?}", surface.format()));
+    match surface {
+        Some(surface) => {
+            let (sw, sh) = surface.size();
+            probe_line("surface_size", format!("{sw}x{sh}"));
+            probe_line("surface_format", format!("{:?}", surface.format()));
+        }
+        None => probe_line("surface_size", "none"),
+    }
+}
+
+/// Prints `probe content_rect <l>,<t>,<r>,<b> window <w>x<h> scale <s>` (the activity's content
+/// rect in physical pixels, the native window's size and scale) when it differs from `seen`.
+#[cfg(target_os = "android")]
+fn probe_content_rect(window: &Window, seen: &mut String) {
+    use winit::platform::android::WindowExtAndroid;
+
+    let r = window.content_rect();
+    let inner = window.inner_size();
+    let line = format!(
+        "{},{},{},{} window {}x{} scale {}",
+        r.left,
+        r.top,
+        r.right,
+        r.bottom,
+        inner.width,
+        inner.height,
+        window.scale_factor()
+    );
+    if line != *seen {
+        probe_line("content_rect", &line);
+        *seen = line;
+    }
 }
 
 /// The demo's fonts: the gallery's own files, loaded in a fixed order.
@@ -306,10 +369,100 @@ pub(crate) fn frame_params(size: (u32, u32), scale: f32) -> FrameParams {
     }
 }
 
+/// Whether the app drops its surface in `suspended` and makes a new one in `resumed` (D6). On
+/// Android the native window is released after `suspended` returns and a new one comes with
+/// `resumed`, so a surface kept across them presents to a window that is gone (a black screen, no
+/// error: docs/mobile.md). On iOS the layer survives the background and the surface is kept.
+const DROP_SURFACE_ON_SUSPEND: bool = cfg!(target_os = "android");
+
+/// The surface options the demo asks for: an opaque window.
+fn surface_options() -> SurfaceOptions {
+    SurfaceOptions {
+        opaque: true,
+        ..SurfaceOptions::default()
+    }
+}
+
+/// A new surface over `window` for `gpu`, configured at the window's current size, for the format
+/// the frame renderer was made for. An error leaves the app without a surface.
+fn rebuild_surface(
+    gpu: &Gpu,
+    window: &Arc<Window>,
+    format: wgpu::TextureFormat,
+) -> Result<WindowSurface, String> {
+    let raw = gpu
+        .instance
+        .create_surface(window.clone())
+        .map_err(|e| format!("surface: {e}"))?;
+    let size = window.inner_size();
+    let surface =
+        WindowSurface::with_options(gpu, raw, (size.width, size.height), surface_options())?;
+    if surface.format() != format {
+        return Err(format!(
+            "surface: the new surface is {:?}, the frame renderer draws {format:?}",
+            surface.format()
+        ));
+    }
+    Ok(surface)
+}
+
+/// What the live-touch `probe` lines last said (D12): a line prints again only when its value
+/// changes, so the first frame prints all of them and later frames only what moved.
+#[derive(Debug, Default)]
+struct ProbeSeen {
+    targets: String,
+    tab: String,
+    page: String,
+    field: String,
+}
+
+/// Prints `probe <key> <value>` when `value` is not what `seen` holds, and keeps it.
+fn probe_changed(seen: &mut String, key: &str, value: String) {
+    if *seen != value {
+        probe_line(key, &value);
+        *seen = value;
+    }
+}
+
+/// The live-touch probe lines (`--probe`): where a finger goes and what the screens hold. The
+/// positions are physical pixels, the unit `adb shell input` takes: `probe tab_item <index>
+/// <x>,<y>` for each tab bar item's centre, `probe pager <x0>,<y>,<x1>` a swipe line across the
+/// Cards pager's card, from the right of it to the left (the next card); then `probe tab <index>`,
+/// `probe page <n>` and `probe field <text>` (the search field's text, `{:?}` quoted).
+fn probe_touch_targets(
+    seen: &mut ProbeSeen,
+    layout: &Layout,
+    scale: f64,
+    state: &showcase::Showcase,
+) {
+    let px = |v: f32| (f64::from(v) * scale).round() as i64;
+    let mut targets = String::new();
+    for i in 0..showcase::Tab::ALL.len() {
+        let (x, y) = layout.tab_item_center(i);
+        targets.push_str(&format!("tab_item {i} {},{}\n", px(x), px(y)));
+    }
+    let (x0, y) = layout.card_point(0.85, 0.5);
+    let (x1, _) = layout.card_point(0.15, 0.5);
+    targets.push_str(&format!("pager {},{},{}", px(x0), px(y), px(x1)));
+    if seen.targets != targets {
+        for line in targets.lines() {
+            println!("probe {line}");
+        }
+        seen.targets = targets;
+    }
+    probe_changed(&mut seen.tab, "tab", state.tab.index().to_string());
+    probe_changed(&mut seen.page, "page", state.page.to_string());
+    probe_changed(&mut seen.field, "field", format!("{:?}", state.search));
+}
+
 /// The window and everything that draws into it.
 struct Shown {
     window: Arc<Window>,
-    surface: WindowSurface,
+    /// The surface the frames present to: dropped between `suspended` and `resumed` where the
+    /// native window is released with the app's focus ([`DROP_SURFACE_ON_SUSPEND`]), `None` then.
+    surface: Option<WindowSurface>,
+    /// The format the frame renderer was made for; a rebuilt surface must configure the same one.
+    format: wgpu::TextureFormat,
     gpu: Gpu,
     frame: FrameRenderer,
     text: TextCache,
@@ -368,7 +521,7 @@ struct App {
     presented: u32,
     /// Wakes the loop for the accessibility bridge.
     proxy: EventLoopProxy<()>,
-    /// The clipboard: the phone's pasteboard on iOS, the OS clipboard elsewhere.
+    /// The clipboard: the phone's pasteboard on iOS and Android, the OS clipboard elsewhere.
     clipboard: Clipboard,
     /// The keyboard inset the last frame saw, to print it when it changes.
     last_keyboard: Insets,
@@ -379,6 +532,11 @@ struct App {
     /// The last frame, or an event since, asks for another: `about_to_wait` requests it. A request
     /// made inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
     want_frame: bool,
+    /// What the live-touch probe lines last printed.
+    probe_seen: ProbeSeen,
+    /// The last `probe content_rect` line's values, to print again only when they change.
+    #[cfg(target_os = "android")]
+    content_rect_seen: String,
     error: Option<String>,
 }
 
@@ -417,11 +575,9 @@ fn setup(
         .map_err(|e| format!("surface: {e}"))?;
     let mut gpu = pollster::block_on(Gpu::new(instance, Some(&surface)))?;
     let size = window.inner_size();
-    let options = SurfaceOptions {
-        opaque: true,
-        ..SurfaceOptions::default()
-    };
-    let surface = WindowSurface::with_options(&gpu, surface, (size.width, size.height), options)?;
+    let surface =
+        WindowSurface::with_options(&gpu, surface, (size.width, size.height), surface_options())?;
+    let format = surface.format();
     let frame = FrameRenderer::for_surface(&mut gpu, &surface);
     let mut translator = Translator::new(size, window.scale_factor());
     // The demo is a phone app: a finger is a touch, not a mouse (D16).
@@ -438,7 +594,7 @@ fn setup(
     };
     if probe {
         let info = gpu.adapter.get_info();
-        probe_window("created", &window, &surface);
+        probe_window("created", &window, Some(&surface));
         probe_line("adapter_name", &info.name);
         probe_line("adapter_backend", format!("{:?}", info.backend));
         probe_line("adapter_type", format!("{:?}", info.device_type));
@@ -447,7 +603,8 @@ fn setup(
     }
     Ok(Shown {
         window,
-        surface,
+        surface: Some(surface),
+        format,
         gpu,
         frame,
         text: text_cache(),
@@ -470,6 +627,7 @@ impl App {
         let Shown {
             window,
             surface,
+            format: _,
             gpu,
             frame,
             text,
@@ -478,6 +636,11 @@ impl App {
             keyboard,
             access,
         } = shown;
+        // No surface (between `suspended` and `resumed`, or after a rebuild that failed): nothing
+        // is acquired, drawn or presented.
+        let Some(surface) = surface.as_mut() else {
+            return Ok(());
+        };
         let target = match surface.acquire(gpu)? {
             Acquired::Frame(t) => t,
             Acquired::Skip => return Ok(()),
@@ -506,6 +669,10 @@ impl App {
         input
             .events
             .push(Event::SafeArea(mobile::safe_area(window)));
+        #[cfg(target_os = "android")]
+        if self.options.probe {
+            probe_content_rect(window, &mut self.content_rect_seen);
+        }
         let kb = keyboard.inset();
         input.events.push(Event::KeyboardInset(kb));
         if kb != self.last_keyboard {
@@ -533,7 +700,8 @@ impl App {
             self.demo.showcase.want_focus = true;
         }
         let rendered = self.demo.frame(input, text, &extras);
-        let (display, out, safe) = (rendered.scene, rendered.out, rendered.safe);
+        let (display, out, safe, layout) =
+            (rendered.scene, rendered.out, rendered.safe, rendered.layout);
         let tour_ended = self
             .tour
             .report(&rendered.marks, rendered.restarted, rendered.finished);
@@ -555,6 +723,9 @@ impl App {
         let probe = self.options.probe;
         if probe || self.presented <= self.options.log_frames {
             println!("presented {} {}x{}", self.presented, size.0, size.1);
+        }
+        if probe {
+            probe_touch_targets(&mut self.probe_seen, &layout, scale, &self.demo.showcase);
         }
         if self.presented == 1 || (probe && self.presented == PROBE_LAST_FRAME) {
             probe_scene(window, self.options.scene_attach);
@@ -601,9 +772,17 @@ impl ApplicationHandler for App {
         }
         self.paused = false;
         self.demo.resume(self.start.elapsed());
-        if let Some(shown) = &self.shown {
+        if let Some(shown) = &mut self.shown {
+            if shown.surface.is_none() {
+                // The native window is a new one: a surface over it, for the same device (D6). A
+                // failure is printed and the app waits, without a surface, for the next `resumed`.
+                match rebuild_surface(&shown.gpu, &shown.window, shown.format) {
+                    Ok(surface) => shown.surface = Some(surface),
+                    Err(e) => println!("{e}"),
+                }
+            }
             if self.options.probe {
-                probe_window("resumed", &shown.window, &shown.surface);
+                probe_window("resumed", &shown.window, shown.surface.as_ref());
             }
             shown.window.request_redraw();
             return;
@@ -628,17 +807,22 @@ impl ApplicationHandler for App {
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         // The tour's clock stops with the app: a background of any length replays no burst.
         self.demo.pause(self.start.elapsed());
-        // Stop drawing. The surface stays: on iOS its layer survives the background, so the frame
+        // Stop drawing. On iOS the surface stays: its layer survives the background, so the frame
         // that follows `resumed` draws into it as before (docs/mobile.md, life cycle).
         if self.options.pause {
             self.paused = true;
         } else {
             self.want_frame = true;
         }
+        // Where the native window goes with the callback, the surface over it goes first: it is
+        // released after this returns (D6).
+        if DROP_SURFACE_ON_SUSPEND && let Some(shown) = &mut self.shown {
+            shown.surface = None;
+        }
         if self.options.probe {
             probe_line("lifecycle", "suspended");
             if let Some(shown) = &self.shown {
-                probe_window("suspended", &shown.window, &shown.surface);
+                probe_window("suspended", &shown.window, shown.surface.as_ref());
             }
         }
     }
@@ -696,13 +880,15 @@ impl ApplicationHandler for App {
                     && size.width > 0
                     && size.height > 0
                 {
-                    shown.surface.resize(&shown.gpu, size.width, size.height);
+                    if let Some(surface) = &mut shown.surface {
+                        surface.resize(&shown.gpu, size.width, size.height);
+                    }
                     shown.window.request_redraw();
                 }
                 if self.options.probe {
                     probe_line("resized_payload", format!("{}x{}", size.width, size.height));
                     if let Some(shown) = &self.shown {
-                        probe_window("resized", &shown.window, &shown.surface);
+                        probe_window("resized", &shown.window, shown.surface.as_ref());
                     }
                 }
             }
@@ -710,7 +896,11 @@ impl ApplicationHandler for App {
                 if self.options.probe {
                     probe_line("scale_factor_changed", scale_factor);
                     if let Some(shown) = &self.shown {
-                        probe_window("scale_factor_changed", &shown.window, &shown.surface);
+                        probe_window(
+                            "scale_factor_changed",
+                            &shown.window,
+                            shown.surface.as_ref(),
+                        );
                     }
                 }
             }
@@ -742,7 +932,7 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         demo,
         start: Instant::now(),
         presented: 0,
-        clipboard: if cfg!(target_os = "ios") {
+        clipboard: if cfg!(any(target_os = "ios", target_os = "android")) {
             Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))
         } else {
             Clipboard::new()
@@ -751,6 +941,9 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
         want_frame: false,
+        probe_seen: ProbeSeen::default(),
+        #[cfg(target_os = "android")]
+        content_rect_seen: String::new(),
         error: None,
     };
     event_loop
@@ -775,6 +968,27 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     Ok(())
 }
 
+/// The options the launch-arguments file asks for (D420): `files/launch-args` in the app's internal
+/// data directory, one flag per line (blank lines skipped, a line's words are separate arguments),
+/// written by `scripts/android-emu.sh` before `am start`. The file is deleted once read, so a launch
+/// from the home screen runs with no flags. An absent or unreadable file means no flags; a file
+/// that does not parse is an `Err`.
+#[cfg(target_os = "android")]
+fn launch_options(app: &winit::platform::android::activity::AndroidApp) -> Result<Options, ()> {
+    let Some(path) = app.internal_data_path().map(|d| d.join("launch-args")) else {
+        return Ok(Options::default());
+    };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Ok(Options::default());
+    };
+    let _ = std::fs::remove_file(&path);
+    let args = text
+        .lines()
+        .flat_map(|line| line.split_whitespace())
+        .map(str::to_owned);
+    parse_window_args(args).ok_or(())
+}
+
 /// The Android entry point: the one symbol android-activity's native glue looks up. It builds the
 /// event loop over the activity and runs the same [`run`] as the other targets.
 #[cfg(target_os = "android")]
@@ -785,6 +999,14 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
 fn android_main(app: winit::platform::android::activity::AndroidApp) {
     use winit::platform::android::EventLoopBuilderExtAndroid;
 
+    let options = match launch_options(&app) {
+        Ok(o) => o,
+        Err(()) => {
+            println!("demo: bad launch arguments");
+            println!("{WINDOW_USAGE}");
+            return;
+        }
+    };
     let event_loop = match EventLoop::builder().with_android_app(app).build() {
         Ok(l) => l,
         Err(e) => {
@@ -792,7 +1014,7 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
             return;
         }
     };
-    if let Err(e) = run(event_loop, Options::default()) {
+    if let Err(e) = run(event_loop, options) {
         eprintln!("{e}");
     }
 }

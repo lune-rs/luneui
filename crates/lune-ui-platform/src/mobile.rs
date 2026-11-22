@@ -4,7 +4,9 @@
 //! `Info.plist` (`docs/mobile.md` has the keys) and calls [`attach_to_scene`] once its window
 //! exists.
 //!
-//! Every item exists on every target; off iOS each one does nothing and says so.
+//! Every item exists on every target; off iOS and Android each one does nothing and says so. On
+//! Android the safe area, the keyboard inset and the pasteboard work (below); there is no scene to
+//! attach to.
 
 use lune_ui_core::input::ClipboardBackend;
 use lune_ui_core::layout::Insets;
@@ -22,7 +24,7 @@ pub enum SceneAttach {
     /// observer waits for it); this is also the answer off the main thread, or when the window
     /// has no `UIWindow` behind it, and then nothing was done.
     Waiting,
-    /// This platform has no scenes (every target but iOS); nothing was done.
+    /// This platform has no scenes (every target but iOS, Android included); nothing was done.
     NotNeeded,
 }
 
@@ -40,7 +42,7 @@ pub enum SceneAttach {
 /// only when it is not hidden: an app that keeps it hidden (to create its accessibility bridge
 /// first) shows it itself.
 ///
-/// Off iOS it does nothing and answers [`SceneAttach::NotNeeded`].
+/// Off iOS (Android included) it does nothing and answers [`SceneAttach::NotNeeded`].
 pub fn attach_to_scene(window: &Window) -> SceneAttach {
     os::attach_to_scene(window)
 }
@@ -54,6 +56,15 @@ pub fn attach_to_scene(window: &Window) -> SceneAttach {
 /// inside the outer (screen) one, the right and bottom the rest, each clamped to at least 0. A value
 /// that cannot be read, a non-finite one or a failed position query gives [`Insets::ZERO`].
 ///
+/// On Android it is derived from the activity's content rect (`WindowExtAndroid::content_rect`, in
+/// physical pixels of the native window) and `window`'s size and scale: left and top are the rect's
+/// own, right and bottom what is left of the window past it, each clamped to at least 0; a scale
+/// that is not a positive finite number, an empty window or a reversed rect gives
+/// [`Insets::ZERO`]. The bottom is the system bars' alone: while the soft keyboard is up it stays
+/// the bottom at rest (the smallest bottom inset seen at this window size), and the keyboard's own
+/// part is [`KeyboardInset`]'s. `safe_area` records what it read for [`KeyboardInset::inset`], so an
+/// app calls it before `inset` every frame.
+///
 /// Everywhere else it is [`Insets::ZERO`]: a desktop window's frame (a title bar) is not an area the
 /// content must keep clear of.
 pub fn safe_area(window: &Window) -> Insets {
@@ -61,7 +72,7 @@ pub fn safe_area(window: &Window) -> Insets {
 }
 
 /// The part of the window the soft keyboard covers, kept current for an app to push as
-/// `Event::KeyboardInset` (iOS).
+/// `Event::KeyboardInset` (iOS and Android).
 ///
 /// On iOS it observes `UIKeyboardWillChangeFrameNotification` and `UIKeyboardWillHideNotification`
 /// and keeps the overlap of the keyboard's end frame with the window's view as a bottom inset, in
@@ -70,6 +81,14 @@ pub fn safe_area(window: &Window) -> Insets {
 /// it stays the same, on the main thread and from inside the notification: it must only wake the
 /// app (for example `Window::request_redraw`), never draw. Dropping the value removes both
 /// observers. It is `!Send`: create and read it on the main thread.
+///
+/// On Android there is no event (winit reports none): `on_change` never runs, the app sees the
+/// change on its next frame, and [`inset`](Self::inset) is what the last [`safe_area`] call read: the
+/// content rect's bottom inset, in logical pixels, when it exceeds the bottom at rest by more than
+/// 1 pixel, else zero (the keyboard's overlap from the window's bottom edge, as on iOS). It needs
+/// the activity to resize its content for the keyboard (`windowSoftInputMode` `adjustResize`) and
+/// `safe_area` to be called each frame; a keyboard already up when the window changes size is
+/// taken for the bars until it hides.
 ///
 /// Elsewhere it is inert: [`inset`](Self::inset) is always [`Insets::ZERO`] and `on_change` never
 /// runs.
@@ -91,16 +110,23 @@ impl KeyboardInset {
     }
 }
 
-/// The phone's general pasteboard as a clipboard backend (iOS: `UIPasteboard`), for an app to give
+/// The phone's general pasteboard as a clipboard backend (iOS: `UIPasteboard`, Android:
+/// `ClipboardManager`), for an app to give
 /// to `lune_ui_winit::clipboard::Clipboard::with_backend(Box::new(Pasteboard::new()))`. The
-/// toolkit's own `Clipboard::new()` has no clipboard on iOS (the calls go to UIKit directly, which the
-/// winit adapter does not do), and the adapter's cap on what it reads or writes still applies.
+/// toolkit's own `Clipboard::new()` has no clipboard on iOS or Android (the calls go to UIKit or the
+/// JVM directly, which the winit adapter does not do), and the adapter's cap on what it reads or writes still applies.
 ///
 /// `read` answers the pasteboard's text, `Err(())` when it holds none or the call is not on the
 /// main thread; `write` sets the text, `Err(())` off the main thread. On iOS 16 and later reading
 /// text another app put there can raise the system's "Allow Paste" prompt. `!Send`.
 ///
-/// Off iOS both calls answer `Err(())`: a desktop app uses `Clipboard::new()`.
+/// On Android it is the system clipboard (`ClipboardManager`) through JNI, with the Application
+/// context the platform glue hands over: `read` answers the primary clip's first item as text
+/// (`coerceToText`), `Err(())` when there is no clip, no item or no text; `write` sets a plain-text
+/// clip. Any Java exception, a missing context or a call that cannot reach the VM answers
+/// `Err(())`. Since Android 10 a read answers `Err(())` unless the app has input focus.
+///
+/// Elsewhere both calls answer `Err(())`: a desktop app uses `Clipboard::new()`.
 #[derive(Debug, Default)]
 pub struct Pasteboard(os::Pasteboard);
 

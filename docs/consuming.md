@@ -90,10 +90,22 @@ For iOS, and so for iOS 27: iOS 27 refuses at launch an app built with its SDK t
 - No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface`; on `resumed` clear the stop and ask for a frame (D356).
 - Redraws from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle. A `Repaint::At` that comes due (`StartCause::ResumeTimeReached`) becomes a frame (D356).
 
-For Android (nothing has run on Android yet; M8 is the milestone that runs it):
+For Android (the demo's reference: `apps/demo/src/lib.rs` and `apps/demo/android/AndroidManifest.xml`; D420 to D423; run on an API 34 emulator, `docs/mobile.md` "Android"):
 
 - The app's own `Cargo.toml` enables winit's `android-native-activity` feature for `target_os = "android"` (`apps/demo/Cargo.toml`).
-- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both.
+- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both. The app is a library (`cdylib`) with no Java: winit's NativeActivity loads it.
+- `android/AndroidManifest.xml`, copied from the demo's: package, `minSdkVersion` 26 and `targetSdkVersion` 34, `hasCode="false"`, the platform's `android.app.NativeActivity` with `android.app.lib_name` set to the library's name (D3). Its keys, each for a reason:
+  - `launchMode="singleTask"`: a second activity instance would call `android_main` again in the same process, and winit's event loop cannot be built twice.
+  - `configChanges` (orientation, screen size, density, keyboard, navigation, locale and the rest): rotation and the keyboard do not recreate the activity.
+  - `windowSoftInputMode="adjustResize|stateHidden"`: the content rect shrinks while the soft keyboard is up, which the keyboard inset reads (D8); `stateHidden` keeps the keyboard down when the activity starts.
+  - `theme="@android:style/Theme.DeviceDefault.NoActionBar"`: with no theme the default one has an action bar, which NativeActivity never draws but which the content rect leaves room for, so `mobile::safe_area`'s top would hold about 56 dp of blank band under the status bar.
+- On `suspended` drop the `WindowSurface` and the wgpu surface under it, before returning; on `resumed` make a new surface from the same `Arc<Window>` and the same `Gpu` and configure it at the window's current size. Android releases the native window when `suspended` returns, so the old surface is over nothing. A frame with no surface does nothing (D6).
+- After every `translator.take(..)`, `mobile::safe_area(&window)` first, then `KeyboardInset::inset()`, in that order: `safe_area` records the baseline that `inset` reads (D8). `on_change` never runs on Android (winit sends no event for the content rect), so the app sees a change on its next frame.
+- The clipboard: `mobile::Pasteboard` on Android as on iOS (`ClipboardManager` through JNI, D9).
+- Packaging: `scripts/android-emu.sh --build-only` is the recipe to copy. It links the `cdylib` with the NDK's clang, runs `aapt2 link` on the manifest, `zip`s the stripped library into the APK, aligns it and signs it with a debug key (D1). It needs the SDK, the NDK and JDK 17.
+- stdout goes to logcat under the tag `RustStdoutStderr` (android-activity forwards it; D5).
+- Not wired: accessibility (the null bridge stands, D10) and the Back key (winit reports it; mapping it to a navigation stack is the app's choice).
+- Unverified: typing on the soft keyboard's own keys (IME composition; winit surfaces no IME events on Android), physical devices, the GPU of a real phone, other API levels, and 16 KB page-size devices (the library is not linked for them).
 
 Demo mode: the core's `playback` module (D415, R-core-13) plays a scripted tour through `RawInput.events` against the app's time, and `playback::draw_touches` is an opt-in indicator for a recording. `docs/demo-mode.md` says how to run the demo's tour, record it and write one for an app.
 
@@ -501,6 +513,25 @@ No migration map: nothing an app already calls changes.
 **Readings.** The tour passes every mark headless at 60 Hz, at 120 Hz, with jittered frames and 100 ms hitches, and drawing only when asked to, on the desktop layout and the phone's (`cargo test -p demo --test showcase`, D417). On the iOS 18.0 and 27.2 simulators `scripts/ios-sim.sh --demo` passed 16/16, and `--smoke` still passes with the new screens (`docs/mobile.md`, "M7 reading"). The desktop run `cargo run -p demo -- --demo --exit-after-demo` is unverified here: no frame arrived in 150 s (the session's windows were occluded).
 
 **Unverified here.** A device. A real finger: the scripted touches enter through `RawInput.events`, not through the simulator's or the OS's input. 120 Hz on a panel: the simulator reports 60 Hz, and the 120 Hz schedule is headless.
+
+## 0.7.5 to 0.7.6: Android run time
+
+D420 to D424. Additive, hence 0.7.6: no public item changes, so **nothing breaks** and an app needs nothing changed. The release gives `lune-ui-platform`'s existing mobile API an Android body, runs `apps/demo` on an Android emulator and adds `scripts/android-emu.sh`; the release is D424.
+
+What is new (no item of the five library crates is added, removed or re-signed; the doc comments say what Android does):
+
+- `mobile::safe_area(&window)` on Android reads winit's `content_rect()` against the native window's size and scale, in logical pixels, each side clamped at 0 (D7, D422).
+- `mobile::KeyboardInset` on Android is a split of the same content rect against the smallest bottom inset seen at the window's size (D8 branch a). winit sends no event for it, so `on_change` never runs and the app sees a change on its next frame; call `safe_area` before `inset` each frame, as the demo does.
+- `mobile::Pasteboard` on Android is `ClipboardManager` through JNI, with no Java class (D9, D422). Any Java exception, a null or a missing context is `Err(())`.
+- Two direct dependencies of `lune-ui-platform`, `jni` 0.22 and `ndk-context` 0.1, under its Android target table. Both were already in `Cargo.lock` through `android-activity`: the lock gains two dependency edges and no package. Desktop and iOS builds do not see them.
+- The demo (`apps/demo`, not library API): `android/AndroidManifest.xml`, a launch-arguments file the app reads and deletes (`files/launch-args`), the surface dropped on `suspended` and rebuilt on `resumed` (D421), probe lines for touch, text and the content rect, and a tour that holds at the emulator's frame rate (D423).
+- `scripts/android-emu.sh`: packages the demo as an APK with the installed SDK (no Gradle, no Java), creates and boots its own AVD `luneui-demo-pixel7`, and checks a frame (`--probe`), a smoke (`--smoke`), the keyboard (`--keyboard`), the tour (`--demo`) and landscape (`--landscape`); `--build-only` is the local link check, `--delete-device` removes the AVD (D420, D423). `docs/mobile.md` says how to read it.
+
+No migration map: nothing an app already calls changes. An app that wants Android copies the standing "Mobile apps" section above.
+
+**Readings.** On the API 34 emulator with `-gpu swiftshader_indirect` (`docs/mobile.md`, "M8 reading"): the demo presents a frame (wgpu on Vulkan, SwiftShader, 1080x2400 at scale 2.625); the safe area is `0, 51.8, 0, 24` at rest; the keyboard inset reads 336.4 with the keyboard up and the safe area's bottom stays the one at rest; the clipboard round trip reads back what it wrote; `adb shell input` taps and swipes reach the widgets through the OS path; the life cycle gives `resumed suspended resumed` with no frame between the last two and a drawn screen after; `scripts/android-emu.sh --smoke`, `--keyboard`, `--smoke --landscape` and `--demo` pass (the tour 16/16 in 43 s). The stripped `libdemo.so` grew by 30,256 bytes and the APK by 12,288; desktop binaries do not change. The tour gained a closing nudge because the emulator draws about every 61 ms, where the pointer reads a swipe's release as still (D423).
+
+**Unverified here.** A real device and its GPU; 120 Hz. Typing on the soft keyboard's own keys (IME composition; `input text` proves the key path only). TalkBack: accessibility is not wired on Android (D10). Other API levels and 16 KB page-size devices. `-gpu host`: it presented 5 frames and stalled.
 
 ## API changes of the library pass
 

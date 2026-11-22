@@ -1,4 +1,4 @@
-//! Every platform but iOS: there are no scenes, so nothing is attached, and no safe area is reported
+//! Every platform but iOS and Android: there are no scenes, so nothing is attached, and no safe area is reported
 //! (a desktop window's title bar is not one).
 
 use std::marker::PhantomData;

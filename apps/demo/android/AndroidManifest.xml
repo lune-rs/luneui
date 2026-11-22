@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The demo's Android manifest, read by scripts/android-emu.sh (aapt2 link; no Java: hasCode is false
+     and the activity is the platform's NativeActivity over libdemo.so). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="rs.lune.luneui.demo">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <application
+        android:label="luneui demo"
+        android:hasCode="false"
+        android:extractNativeLibs="true">
+
+        <!-- singleTask: a second activity instance would call android_main again in the same process,
+             and winit's event loop cannot be built twice. configChanges: rotation and the keyboard
+             never recreate the activity. adjustResize: the content rect shrinks with the soft keyboard.
+             theme: NoActionBar, or the default action bar sits above the content view and the content rect's
+             top holds its 56 dp of blank band. -->
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale"
+            android:windowSoftInputMode="adjustResize|stateHidden">
+            <meta-data android:name="android.app.lib_name" android:value="demo" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

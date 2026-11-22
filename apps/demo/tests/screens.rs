@@ -25,11 +25,21 @@ fn phone() -> Headless {
     Headless::new(WINDOW, 3.0, SAFE)
 }
 
+/// The Android emulator's pixel_7 as `scripts/android-emu.sh --probe` reads it (M8 step 0, reading
+/// 4): a 1080x2400 window at scale 2.625, the content rect `0,136,1080,2337`.
+const EMULATOR_SCALE: f32 = 2.625;
+const EMULATOR_WINDOW: (f32, f32) = (1080.0 / EMULATOR_SCALE, 2400.0 / EMULATOR_SCALE);
+const EMULATOR_SAFE: Insets = Insets::new(0.0, 136.0 / EMULATOR_SCALE, 0.0, 63.0 / EMULATOR_SCALE);
+
 #[test]
 fn the_five_states_lay_out_with_and_without_insets() {
-    for insets in [Insets::ZERO, SAFE] {
+    for (window, scale, insets) in [
+        (WINDOW, 3.0, Insets::ZERO),
+        (WINDOW, 3.0, SAFE),
+        (EMULATOR_WINDOW, EMULATOR_SCALE, EMULATOR_SAFE),
+    ] {
         for (name, tab, depth, sheet) in STATES {
-            let mut run = Headless::new(WINDOW, 3.0, insets);
+            let mut run = Headless::new(window, scale, insets);
             run.demo.showcase = Showcase::with_state(tab, depth, sheet);
             let last = run.run(40, FRAME).expect("a frame");
             assert!(last.scene != Scene::default(), "{name}: nothing drawn");
@@ -70,4 +80,15 @@ fn an_idle_app_asks_for_no_frame() {
         let last = run.run(180, FRAME).expect("a frame");
         assert_eq!(last.out.repaint, Repaint::Idle, "{name}");
     }
+}
+
+#[test]
+fn a_tap_on_the_cards_item_selects_cards_on_the_emulator_layout() {
+    let mut run = Headless::new(EMULATOR_WINDOW, EMULATOR_SCALE, EMULATOR_SAFE);
+    run.run(10, FRAME);
+    let at = run.layout().tab_item_center(1);
+    let mut script = Script::new();
+    script.wait(Duration::from_millis(100)).tap(at);
+    play(&mut run, script, 30);
+    assert_eq!(run.demo.showcase.tab, Tab::Cards);
 }
