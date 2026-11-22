@@ -182,3 +182,65 @@ fn a_repeating_tour_passes_every_mark_twice_and_restarts_once() {
         assert_eq!(restarts, 1);
     }
 }
+
+/// Frames a steady `ms` apart: a software renderer or an emulator draws no faster than this. Past
+/// 40 ms the pointer's release speed reads zero (the swipes fling no more), which the tour has to
+/// reach its marks without.
+fn slow(ms: u64) -> Next {
+    fixed(Duration::from_millis(ms))
+}
+
+#[test]
+fn the_tour_passes_every_mark_with_frames_45_60_and_100_ms_apart() {
+    for (name, screen) in layouts() {
+        for ms in [45, 60, 100] {
+            let (passed, restarts) = run(screen, once(), 1, slow(ms));
+            assert_tour(&passed, 1);
+            assert_eq!(restarts, 0, "{name} at {ms} ms");
+        }
+    }
+}
+
+#[test]
+fn the_tour_passes_every_mark_with_frames_8_and_33_ms_apart() {
+    for (_, screen) in layouts() {
+        for ms in [8, 33] {
+            let (passed, _) = run(screen, once(), 1, slow(ms));
+            assert_tour(&passed, 1);
+        }
+    }
+}
+
+/// The gaps, in milliseconds, between the first 165 frames of the tour on the Android emulator
+/// (`scripts/android-emu.sh --demo --demo-arg --probe`, SwiftShader, logcat timestamps of the
+/// `presented` lines, M8 step 3): a median of 61 ms, a quarter of them past 70, and gaps up to 2.4 s.
+/// Replayed in a loop, each gap at most 250 ms.
+const EMULATOR_GAPS_MS: [u64; 164] = [
+    106, 44, 97, 49, 60, 75, 55, 62, 71, 54, 97, 31, 76, 47, 62, 75, 47, 55, 62, 53, 57, 57, 58,
+    66, 48, 55, 57, 61, 126, 40, 56, 59, 61, 57, 59, 62, 55, 58, 2355, 57, 638, 58, 65, 66, 55, 63,
+    61, 66, 79, 2253, 58, 637, 50, 60, 57, 134, 50, 63, 110, 73, 36, 59, 59, 88, 46, 58, 56, 55,
+    68, 47, 64, 49, 66, 47, 55, 53, 56, 54, 56, 61, 49, 54, 84, 32, 54, 57, 55, 60, 55, 57, 57, 55,
+    55, 60, 61, 54, 854, 71, 623, 59, 62, 79, 52, 57, 63, 66, 74, 48, 60, 71, 50, 72, 573, 57, 642,
+    55, 63, 55, 90, 23, 57, 749, 40, 649, 59, 59, 80, 154, 113, 142, 694, 18, 658, 40, 71, 180, 66,
+    70, 82, 773, 84, 612, 81, 104, 93, 73, 95, 107, 120, 147, 80, 107, 578, 107, 591, 104, 84, 63,
+    67, 64, 74, 61, 68, 39,
+];
+
+fn emulator_frames() -> Next {
+    let mut i = 0usize;
+    Box::new(move |t, _| {
+        // Gaps past 250 ms were the app idle until its next scheduled frame (the first frame's
+        // shader work among them), not drawing slowly: a frame the app asked for comes when asked.
+        let gap = EMULATOR_GAPS_MS[i % EMULATOR_GAPS_MS.len()].min(250);
+        i += 1;
+        Some(t + Duration::from_millis(gap))
+    })
+}
+
+#[test]
+fn the_tour_passes_every_mark_with_the_frame_gaps_the_android_emulator_showed() {
+    for (_, screen) in layouts() {
+        let (passed, _) = run(screen, once(), 1, emulator_frames());
+        assert_tour(&passed, 1);
+    }
+}

@@ -939,6 +939,10 @@ fn ms(n: u64) -> Duration {
     Duration::from_millis(n)
 }
 
+/// How far the tour's last drag down the list reaches, in points: more than the 36 the swipe back
+/// can leave, less than the pull-to-refresh threshold (64).
+const NUDGE: f32 = 48.0;
+
 /// A pause before each next gesture, so a recording reads.
 const BEAT: Duration = Duration::from_millis(700);
 
@@ -961,7 +965,16 @@ pub fn script(l: &Layout) -> Script {
         .mark("scrolled");
     s.wait(BEAT);
     s.swipe(l.list_point(0.5, 0.30), l.list_point(0.5, 0.90), ms(160))
-        .wait(ms(2600))
+        .wait(ms(2600));
+    // The pointer reads a release's speed from the frames' positions and takes a finger that was
+    // still for 40 ms as still, so with frames more than 40 ms apart (a software renderer, an
+    // emulator) the swipe leaves no fling and the list stops about 30 points short of the top. A
+    // short drag down finishes the way; where the swipe already reached the top it is a pull of
+    // `NUDGE`, under the refresh threshold, that springs back, so both end at the top.
+    s.wait(BEAT);
+    let nudge = l.list_point(0.5, 0.30);
+    s.drag(nudge, (nudge.0, nudge.1 + NUDGE), ms(300))
+        .wait(ms(1500))
         .mark("top");
 
     // Pull the list down past the refresh point and let go: 1.5 s of work, then a new row.
