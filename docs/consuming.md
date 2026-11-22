@@ -90,10 +90,21 @@ For iOS, and so for iOS 27: iOS 27 refuses at launch an app built with its SDK t
 - No frame between `suspended` and `resumed`: on `suspended` stop drawing and keep the `Gpu` and the `WindowSurface`; on `resumed` clear the stop and ask for a frame (D356).
 - Redraws from `about_to_wait`, never from inside `RedrawRequested`, where a request is lost while iOS is idle. A `Repaint::At` that comes due (`StartCause::ResumeTimeReached`) becomes a frame (D356).
 
-For Android (nothing has run on Android yet; M8 is the milestone that runs it):
+For Android (the demo's reference: `apps/demo/src/lib.rs` and `apps/demo/android/AndroidManifest.xml`; D420 to D423; run on an API 34 emulator, `docs/mobile.md` "Android"):
 
 - The app's own `Cargo.toml` enables winit's `android-native-activity` feature for `target_os = "android"` (`apps/demo/Cargo.toml`).
-- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both.
+- The app exports `android_main`, the one symbol android-activity looks up, and calls the same `run` as the other targets (C4(e)); `apps/demo/src/lib.rs` has both. The app is a library (`cdylib`) with no Java: winit's NativeActivity loads it.
+- `android/AndroidManifest.xml`, copied from the demo's: package, `minSdkVersion` 26 and `targetSdkVersion` 34, `hasCode="false"`, the platform's `android.app.NativeActivity` with `android.app.lib_name` set to the library's name (D3). Its keys, each for a reason:
+  - `launchMode="singleTask"`: a second activity instance would call `android_main` again in the same process, and winit's event loop cannot be built twice.
+  - `configChanges` (orientation, screen size, density, keyboard, navigation, locale and the rest): rotation and the keyboard do not recreate the activity.
+  - `windowSoftInputMode="adjustResize|stateHidden"`: the content rect shrinks while the soft keyboard is up, which the keyboard inset reads (D8); `stateHidden` keeps the keyboard down when the activity starts.
+- On `suspended` drop the `WindowSurface` and the wgpu surface under it, before returning; on `resumed` make a new surface from the same `Arc<Window>` and the same `Gpu` and configure it at the window's current size. Android releases the native window when `suspended` returns, so the old surface is over nothing. A frame with no surface does nothing (D6).
+- After every `translator.take(..)`, `mobile::safe_area(&window)` first, then `KeyboardInset::inset()`, in that order: `safe_area` records the baseline that `inset` reads (D8). `on_change` never runs on Android (winit sends no event for the content rect), so the app sees a change on its next frame.
+- The clipboard: `mobile::Pasteboard` on Android as on iOS (`ClipboardManager` through JNI, D9).
+- Packaging: `scripts/android-emu.sh --build-only` is the recipe to copy. It links the `cdylib` with the NDK's clang, runs `aapt2 link` on the manifest, `zip`s the stripped library into the APK, aligns it and signs it with a debug key (D1). It needs the SDK, the NDK and JDK 17.
+- stdout goes to logcat under the tag `RustStdoutStderr` (android-activity forwards it; D5).
+- Not wired: accessibility (the null bridge stands, D10) and the Back key (winit reports it; mapping it to a navigation stack is the app's choice).
+- Unverified: typing on the soft keyboard's own keys (IME composition; winit surfaces no IME events on Android), physical devices, the GPU of a real phone, other API levels, and 16 KB page-size devices (the library is not linked for them).
 
 Demo mode: the core's `playback` module (D415, R-core-13) plays a scripted tour through `RawInput.events` against the app's time, and `playback::draw_touches` is an opt-in indicator for a recording. `docs/demo-mode.md` says how to run the demo's tour, record it and write one for an app.
 
