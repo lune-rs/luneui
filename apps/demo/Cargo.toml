@@ -1,6 +1,6 @@
 [package]
 name = "demo"
-description = "Smallest consumer of the toolkit: one window, one frame, for the phone targets and the desktop"
+description = "A small phone app on the toolkit (three tabs from its public components): for the phone targets and the desktop"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
