@@ -75,5 +75,11 @@ objc2-ui-kit = { version = "0.3", default-features = false, features = [
     "objc2-core-foundation",
 ] }
 
+[target.'cfg(target_os = "android")'.dependencies]
+# The system clipboard through JNI (D9): the VM and the Application come from `ndk-context`, which
+# `android-activity` (through winit) fills before `android_main`. Both are already in the lock.
+jni = "0.22"
+ndk-context = "0.1"
+
 [lints]
 workspace = true

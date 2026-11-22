@@ -1411,7 +1411,9 @@ name = "lune-ui-platform"
 version = "0.7.5"
 dependencies = [
  "block2 0.6.2",
+ "jni",
  "lune-ui-core",
+ "ndk-context",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-core-foundation",
