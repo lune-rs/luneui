@@ -33,6 +33,8 @@
 //! - `desktop` (desktop units, monitors, popup placement and window shapes) and `dock` (docking,
 //!   snapping and the group drag, in those units);
 //! - `tray` (the tray icon rasterised on the CPU, where its flyout and menu go, the click rules);
+//! - `playback` (scripted touch gestures and marks played against the app's time, through
+//!   `RawInput.events`, for demos and recordings);
 //! - `testing` (fakes of the seams for tests: the display-list recorder, a fake text system
 //!   and its contract suite, a scripted input source, a null material and its contract suite).
 //!
@@ -57,6 +59,7 @@ pub mod json;
 pub mod layout;
 pub mod motion;
 pub mod paint;
+pub mod playback;
 pub mod scene;
 pub mod shortcuts;
 pub mod strings;

@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 110 |
+| done | 111 |
 | external | 4 |
-| **total** | **116** |
+| **total** | **117** |
 
 ## core
 
@@ -30,6 +30,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [core.input](core/input.md) | Input model | done | any | Plain-data RawInput in, FrameOutput out; the windowing adapter translates both |
 | [core.linear-gradient](core/linear-gradient.md) | Linear gradient | done | any | Painter::linear, a per-pixel two-colour ramp over a rounded rect at any angle, interpolated premultiplied and dithered to the target's format (D323) |
 | [core.painter](core/painter.md) | Immediate-mode painter | done | luneterm | Painter: ordered layers, fills, rings, strokes, acrylic, text, clip, transform and hit regions, building a plain-data Scene; holds the aggregate table of new primitives |
+| [core.playback](core/playback.md) | Input player | done | any | A script of timed touch gestures and marks played against the app's time through RawInput.events, with the next frame it needs handed back, and an opt-in touch indicator |
 | [core.radial-gradient](core/radial-gradient.md) | Radial gradient | done | any | Painter::radial, a per-pixel ellipse gradient from an inner to an outer colour with linear, smooth or Gaussian falloff, dithered to the target's format (D324) |
 | [core.scene](core/scene.md) | Display list | done | any | Plain-data Scene the painter builds and a renderer consumes; the draw-order contract |
 | [core.soft-shadow](core/soft-shadow.md) | Soft shadow | done | any | Painter::shadow, an analytic Gaussian blur of a rounded rect (erf in x, 16 slices in y), coloured freely, dithered to the target's format; its cost is stated in its doc (D325) |

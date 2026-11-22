@@ -58,6 +58,7 @@ Source: `crates/lune-ui/src/lib.rs:1`
 | `motion` | Module | [`lune_ui_core::motion`](../lune-ui-core/motion.md) |
 | `near_black` | Module | [`lune_ui_core::theme::near_black`](../lune-ui-core/theme/near_black.md) |
 | `paint` | Module | [`lune_ui_core::paint`](../lune-ui-core/paint.md) |
+| `playback` | Module | [`lune_ui_core::playback`](../lune-ui-core/playback.md) |
 | `popover` | Module | [`lune_ui_platform::popover`](../lune-ui-platform/popover.md) |
 | `scene` | Module | [`lune_ui_core::scene`](../lune-ui-core/scene.md) |
 | `shortcuts` | Module | [`lune_ui_core::shortcuts`](../lune-ui-core/shortcuts.md) |
