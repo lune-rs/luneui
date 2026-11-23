@@ -26,7 +26,7 @@ use lune_ui::ui::{FrameConfig, Response, RoveAxis, Sense, Ui, UiStore, WidgetId}
 use lune_ui::widgets::nav_item::{self, NavLook};
 use lune_ui::widgets::{nav_bar, page, tab_bar};
 
-use crate::scenes::{SceneId, Scenes};
+use crate::scenes::{Env, SceneId, Scenes};
 
 /// Below this window width, in logical px, the frame is the phone's: a title bar, the stage card and
 /// a tab bar.
@@ -680,7 +680,14 @@ pub fn scrim(f: f32) -> f32 {
 const SCRIM_PEAK: f32 = 1.0;
 
 /// Draws `scene`'s page (its header and body) into the card, clipped to it.
-fn draw_page(ui: &mut Ui<'_>, scenes: &mut Scenes, l: &Layout, scene: SceneId, show: Show) {
+fn draw_page(
+    ui: &mut Ui<'_>,
+    scenes: &mut Scenes,
+    l: &Layout,
+    scene: SceneId,
+    show: Show,
+    env: &Env,
+) {
     let t = *ui.theme();
     let moved = show.dx != 0.0 || show.dy != 0.0;
     let faded = show.alpha < 1.0;
@@ -728,7 +735,7 @@ fn draw_page(ui: &mut Ui<'_>, scenes: &mut Scenes, l: &Layout, scene: SceneId, s
         }
     }
     let body = l.body(&t);
-    ui.scope(scene.slug(), |ui| scenes.draw(scene, ui, body, l.wide));
+    ui.scope(scene.slug(), |ui| scenes.draw(scene, ui, body, env));
     let p = ui.painter();
     if faded {
         p.pop_xform();
@@ -773,7 +780,8 @@ pub struct Stage {
     strings: StringTable,
     shortcuts: Shortcuts,
     keymap: Option<Keymap>,
-    scenes: Scenes,
+    /// What each scene keeps between frames.
+    pub scenes: Scenes,
 }
 
 impl Default for Stage {
@@ -849,6 +857,11 @@ impl Stage {
             .clamp(0.0, (SceneId::ALL.len() - 1) as f32);
 
         let clock = if animating { input.time } else { STILL_AT };
+        let env = Env {
+            wide: layout.wide,
+            now: clock,
+            animating,
+        };
         draw_background(&mut ui, win, clock.as_secs_f64());
         if animating {
             ui.request_busy_frame(win);
@@ -869,7 +882,7 @@ impl Stage {
         let near = pos.round();
         if (pos - near).abs() < 1e-3 {
             let at = SceneId::from_index(near as usize);
-            draw_page(&mut ui, &mut self.scenes, &layout, at, Show::REST);
+            draw_page(&mut ui, &mut self.scenes, &layout, at, Show::REST, &env);
         } else {
             let lo = pos.floor();
             let f = pos - lo;
@@ -914,8 +927,8 @@ impl Stage {
                     },
                 )
             };
-            draw_page(&mut ui, &mut self.scenes, &layout, under, under_show);
-            draw_page(&mut ui, &mut self.scenes, &layout, over, over_show);
+            draw_page(&mut ui, &mut self.scenes, &layout, under, under_show, &env);
+            draw_page(&mut ui, &mut self.scenes, &layout, over, over_show, &env);
         }
         let _ = t;
         let (scene, out) = ui.finish();
