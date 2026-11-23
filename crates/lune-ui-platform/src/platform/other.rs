@@ -116,4 +116,14 @@ mod tests {
         };
         assert!(matches!(Tray::new(image, "tip"), Err(TrayError::BadImage)));
     }
+
+    /// The auto traits of `Tray` where the item is the empty one: the same as before the title was
+    /// added (an app may bound a type holding a tray by them). This fails to compile when a field
+    /// takes one away.
+    #[test]
+    fn a_tray_keeps_its_unwind_traits() {
+        fn holds<T: std::panic::UnwindSafe + std::panic::RefUnwindSafe>() {}
+        holds::<Tray>();
+        holds::<Option<Tray>>();
+    }
 }

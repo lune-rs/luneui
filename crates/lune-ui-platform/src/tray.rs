@@ -11,9 +11,8 @@
 //! the title becomes the first line of the tooltip ([`Tray::shows_title`] says which); an app that
 //! wants text at a glance there draws it into the image.
 
-use std::cell::RefCell;
 use std::marker::PhantomData;
-use std::rc::Rc;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::platform;
 
@@ -76,9 +75,13 @@ impl std::error::Error for TrayError {}
 #[derive(Debug)]
 pub struct Tray {
     item: platform::TrayItem,
-    /// The last title and tooltip, which Windows folds into one tooltip (see [`fold`]). Behind an
-    /// `Rc` so the type's auto traits stay what they were: a bare `RefCell` would change them.
-    texts: Rc<RefCell<Texts>>,
+    /// The last title and tooltip, which Windows folds into one tooltip (see [`fold`]). The type's
+    /// auto traits stay what they were on every target, so the cell is a boxed `Mutex`: a
+    /// `RefCell` would lose `RefUnwindSafe` and `Freeze`, an `Rc` would lose `UnwindSafe` and
+    /// `RefUnwindSafe` where the item is the empty one of `platform/other.rs`, and an inline
+    /// `Mutex` would lose `Freeze` (rustdoc's API check sees that one). The lock never contends:
+    /// the type is `!Send` and `!Sync`.
+    texts: Box<Mutex<Texts>>,
     /// Keeps the type `!Send` and `!Sync` on every platform, whatever `item` is.
     main_thread: PhantomData<*const ()>,
 }
@@ -138,9 +141,15 @@ impl Tray {
         };
         Ok(Tray {
             item: platform::TrayItem::new(image, &texts.os_tooltip())?,
-            texts: Rc::new(RefCell::new(texts)),
+            texts: Box::new(Mutex::new(texts)),
             main_thread: PhantomData,
         })
+    }
+
+    /// The kept texts. A lock poisoned by a panic elsewhere is still taken: the guarded code only
+    /// clones strings, so a poisoned value is whole.
+    fn texts(&self) -> MutexGuard<'_, Texts> {
+        self.texts.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Replaces the picture.
@@ -155,11 +164,11 @@ impl Tray {
     /// is that one alone.
     pub fn set_tooltip(&self, tooltip: &str) -> Result<(), TrayError> {
         let next = Texts {
-            title: self.texts.borrow().title.clone(),
+            title: self.texts().title.clone(),
             tooltip: tooltip.to_owned(),
         };
         self.item.set_tooltip(&next.os_tooltip())?;
-        *self.texts.borrow_mut() = next;
+        *self.texts() = next;
         Ok(())
     }
 
@@ -171,15 +180,15 @@ impl Tray {
     pub fn set_title(&self, title: &str) -> Result<(), TrayError> {
         if platform::SHOWS_TITLE {
             self.item.set_title(title)?;
-            self.texts.borrow_mut().title = title.to_owned();
+            self.texts().title = title.to_owned();
             return Ok(());
         }
         let next = Texts {
             title: title.to_owned(),
-            tooltip: self.texts.borrow().tooltip.clone(),
+            tooltip: self.texts().tooltip.clone(),
         };
         self.item.set_tooltip(&next.os_tooltip())?;
-        *self.texts.borrow_mut() = next;
+        *self.texts() = next;
         Ok(())
     }
 

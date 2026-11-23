@@ -32,7 +32,7 @@ pub struct Tray {
 
 The tray item. It lives on the main thread, and the OS item goes when this drops.
 
-Source: `crates/lune-ui-platform/src/tray.rs:77`
+Source: `crates/lune-ui-platform/src/tray.rs:76`
 
 **Methods and associated items**
 
@@ -95,7 +95,7 @@ pub struct TrayImage {
 
 A straight-alpha RGBA picture, `width * height * 4` bytes, row-major from the top left.
 
-Source: `crates/lune-ui-platform/src/tray.rs:22`
+Source: `crates/lune-ui-platform/src/tray.rs:21`
 
 **Fields**
 
@@ -127,7 +127,7 @@ pub struct TrayRect {
 
 The tray item's rect: physical pixels, top-left origin.
 
-Source: `crates/lune-ui-platform/src/tray.rs:30`
+Source: `crates/lune-ui-platform/src/tray.rs:29`
 
 **Fields**
 
@@ -162,7 +162,7 @@ pub enum TrayButton {
 
 The mouse button of a click.
 
-Source: `crates/lune-ui-platform/src/tray.rs:39`
+Source: `crates/lune-ui-platform/src/tray.rs:38`
 
 **Variants**
 
@@ -195,7 +195,7 @@ pub enum TrayError {
 
 Why a tray call failed.
 
-Source: `crates/lune-ui-platform/src/tray.rs:54`
+Source: `crates/lune-ui-platform/src/tray.rs:53`
 
 **Variants**
 
@@ -232,7 +232,7 @@ pub enum TrayEvent {
 
 What the tray item reports.
 
-Source: `crates/lune-ui-platform/src/tray.rs:47`
+Source: `crates/lune-ui-platform/src/tray.rs:46`
 
 **Variants**
 
@@ -261,5 +261,5 @@ Sets the handler of the tray's events. Only the first call takes effect, and it 
 the first [`Tray::new`](tray.md#method.Tray.new): the OS layer fixes its route at the first event. The handler runs on the
 thread the OS reports on, so it should only pass the event to the app's event loop.
 
-Source: `crates/lune-ui-platform/src/tray.rs:210`
+Source: `crates/lune-ui-platform/src/tray.rs:219`
 
