@@ -3970,6 +3970,7 @@ mod m10 {
     use lune_ui_core::widgets::filter_bar::FilterOptions;
     use lune_ui_core::widgets::progress::ProgressOptions;
     use lune_ui_core::widgets::radio_group::RadioOption;
+    use lune_ui_core::widgets::ring_gauge::{RingGaugeOptions, RingSegment};
     use lune_ui_core::widgets::slider::SliderOptions;
     use lune_ui_core::widgets::spinner::SpinnerOptions;
     use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripOptions};
@@ -4536,6 +4537,16 @@ mod m10 {
                         meter: Some(0.4),
                         no_data: false,
                     },
+                );
+                // A ring gauge: the track and the centred text from the theme, the segments the app's.
+                let segments = [
+                    RingSegment::new(1, 0.4, [90, 160, 250, 255]),
+                    RingSegment::new(2, 0.2, [240, 170, 80, 255]),
+                ];
+                ui.ring_gauge(
+                    "ring",
+                    Rect::new(260.0, 430.0, 80.0, 80.0),
+                    &RingGaugeOptions::new(&segments, "Used").with_text("60%"),
                 );
                 // A tree with a nested level: the guides (`tree_guide`) and a mark.
                 let rows = [

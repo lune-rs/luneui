@@ -40,6 +40,7 @@ pub mod popover;
 pub mod progress;
 pub mod pull_to_refresh;
 pub mod radio_group;
+pub mod ring_gauge;
 pub mod row;
 pub mod scroll_area;
 pub mod scrollbar;

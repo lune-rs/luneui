@@ -60,6 +60,7 @@ mod pull_to_refresh;
 mod radio_group;
 mod recipes;
 pub(crate) mod reference;
+mod ring_gauge;
 mod row;
 mod scroll_area;
 mod scrollbar;
@@ -202,6 +203,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &pager::PAGE,
     &swipe_actions::PAGE,
     &pull_to_refresh::PAGE,
+    &ring_gauge::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

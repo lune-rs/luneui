@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 111 |
+| done | 112 |
 | external | 4 |
-| **total** | **117** |
+| **total** | **118** |
 
 ## core
 
@@ -144,6 +144,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | [data.lane-graph](data/lane-graph.md) | Lane graph (row) | done | lunegit | One row of a lane graph: connection curves between lanes, vertical lane lines, and a node dot in its lane; generalised from commits to app data |
 | [data.pie-chart](data/pie-chart.md) | Pie chart | done | lunegit | 160 px pie of slices sized by value, drawn from the top clockwise, with a glass highlight over the top half |
 | [data.progress](data/progress.md) | Progress bar | done | wane | 4 px track with an accent fill; warn and err only for meaning |
+| [data.ring-gauge](data/ring-gauge.md) | Ring gauge | done | any | A circular track with coloured arc segments laid end to end from the top and a centred reading; the gauge of a menu-bar monitor panel |
 | [data.stat](data/stat.md) | Stat cell | done | wane | A labelled figure in a strip: label, mono value, sub-line, optional meter |
 | [data.table](data/table.md) | Data table | done | wane | 28 px rows with hairlines, numeric columns in mono, sortable header look, selectable rows |
 

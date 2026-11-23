@@ -1139,6 +1139,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.ring_gauge"></a>`pub fn ring_gauge(&mut self, key: impl Hash, rect: Rect, opts: &RingGaugeOptions<'_>)`
+
+  A ring gauge under `key`: the largest circle in `rect`, centred. The node is a `Progress`
+  named `opts.label` (or the toolkit's `luneui.ring-gauge.name`), its value the covered
+  fraction, its description `opts.text` when that is not empty.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.item_row"></a>
 
   ```rust

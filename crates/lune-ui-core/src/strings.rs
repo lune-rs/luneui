@@ -62,6 +62,7 @@ pub const DEFAULTS: &[(&str, &str)] = &[
     ("luneui.settings-page.restart-action", "Restart now"),
     ("luneui.bar-chart.name", "Bar chart"),
     ("luneui.pie-chart.name", "Pie chart"),
+    ("luneui.ring-gauge.name", "Ring gauge"),
     ("luneui.kanban-board.add-column", "Add column"),
     ("luneui.kanban-board.add-card", "Add card"),
     ("luneui.kanban-board.column-actions", "Column actions"),

@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-102 modules, 1153 items. Left out and counted: 3643 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5247 items of the omitted impls, 1397 items of the trait impls shown as one line, 2442 synthetic impls.
+103 modules, 1158 items. Left out and counted: 3661 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5273 items of the omitted impls, 1402 items of the trait impls shown as one line, 2454 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -85,6 +85,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::progress`](lune-ui-core/widgets/progress.md) | 19 |
 | [`lune_ui_core::widgets::pull_to_refresh`](lune-ui-core/widgets/pull_to_refresh.md) | 3 |
 | [`lune_ui_core::widgets::radio_group`](lune-ui-core/widgets/radio_group.md) | 14 |
+| [`lune_ui_core::widgets::ring_gauge`](lune-ui-core/widgets/ring_gauge.md) | 5 |
 | [`lune_ui_core::widgets::row`](lune-ui-core/widgets/row.md) | 15 |
 | [`lune_ui_core::widgets::scroll_area`](lune-ui-core/widgets/scroll_area.md) | 19 |
 | [`lune_ui_core::widgets::scrollbar`](lune-ui-core/widgets/scrollbar.md) | 9 |
@@ -211,6 +212,7 @@ Every top-level item of the four owning crates, by name.
 - [`APPEAR_RISE`](lune-ui-core/widgets/toast.md#constant.APPEAR_RISE) - constant, `lune_ui_core::widgets::toast`
 - [`apply`](lune-ui-platform/material.md#fn.apply) - function, `lune_ui_platform::material`
 - [`apply_rounded`](lune-ui-platform/material.md#fn.apply_rounded) - function, `lune_ui_platform::material`
+- [`arcs`](lune-ui-core/widgets/ring_gauge.md#fn.arcs) - function, `lune_ui_core::widgets::ring_gauge`
 - [`AreaOptions`](lune-ui-core/widgets/text_area.md#struct.AreaOptions) - struct, `lune_ui_core::widgets::text_area`
 - [`ArgFormat`](lune-ui-core/strings.md#trait.ArgFormat) - trait, `lune_ui_core::strings`
 - [`ARROW`](lune-ui-core/widgets/table.md#constant.ARROW) - constant, `lune_ui_core::widgets::table`
@@ -1075,7 +1077,9 @@ Every top-level item of the four owning crates, by name.
 - [`Rgba`](lune-ui-core/color.md#type.Rgba) - type alias, `lune_ui_core::color`
 - [`RING`](lune-ui-core/widgets/form_field.md#constant.RING) - constant, `lune_ui_core::widgets::form_field`
 - [`RING`](lune-ui-core/widgets/side_panel.md#constant.RING) - constant, `lune_ui_core::widgets::side_panel`
+- [`RingGaugeOptions`](lune-ui-core/widgets/ring_gauge.md#struct.RingGaugeOptions) - struct, `lune_ui_core::widgets::ring_gauge`
 - [`RingKind`](lune-ui-core/widgets/focus_ring.md#enum.RingKind) - enum, `lune_ui_core::widgets::focus_ring`
+- [`RingSegment`](lune-ui-core/widgets/ring_gauge.md#struct.RingSegment) - struct, `lune_ui_core::widgets::ring_gauge`
 - [`Role`](lune-ui-core/access.md#enum.Role) - enum, `lune_ui_core::access`
 - [`RootInfo`](lune-ui-winit/access.md#struct.RootInfo) - struct, `lune_ui_winit::access`
 - [`RoundClip`](lune-ui-core/scene.md#struct.RoundClip) - struct, `lune_ui_core::scene`
@@ -1299,6 +1303,7 @@ Every top-level item of the four owning crates, by name.
 - [`ThemeError`](lune-ui-core/theme.md#enum.ThemeError) - enum, `lune_ui_core::theme`
 - [`ThemeFile`](lune-ui-core/theme.md#struct.ThemeFile) - struct, `lune_ui_core::theme`
 - [`ThemeGlass`](lune-ui-core/theme.md#struct.ThemeGlass) - struct, `lune_ui_core::theme`
+- [`THICKNESS`](lune-ui-core/widgets/ring_gauge.md#constant.THICKNESS) - constant, `lune_ui_core::widgets::ring_gauge`
 - [`THRESHOLD`](lune-ui-core/widgets/pull_to_refresh.md#constant.THRESHOLD) - constant, `lune_ui_core::widgets::pull_to_refresh`
 - [`THUMB`](lune-ui-core/widgets/scrollbar.md#constant.THUMB) - constant, `lune_ui_core::widgets::scrollbar`
 - [`thumb_geometry`](lune-ui-core/widgets/scrollbar.md#fn.thumb_geometry) - function, `lune_ui_core::widgets::scrollbar`
@@ -1368,6 +1373,7 @@ Every top-level item of the four owning crates, by name.
 - [`units_per_logical`](lune-ui-platform/desktop.md#fn.units_per_logical) - function, `lune_ui_platform::desktop`
 - [`VALUE`](lune-ui-core/widgets/bar_chart.md#constant.VALUE) - constant, `lune_ui_core::widgets::bar_chart`
 - [`VALUE`](lune-ui-core/widgets/pie_chart.md#constant.VALUE) - constant, `lune_ui_core::widgets::pie_chart`
+- [`VALUE`](lune-ui-core/widgets/ring_gauge.md#constant.VALUE) - constant, `lune_ui_core::widgets::ring_gauge`
 - [`VALUE`](lune-ui-core/widgets/slider.md#constant.VALUE) - constant, `lune_ui_core::widgets::slider`
 - [`VALUE`](lune-ui-core/widgets/stat.md#constant.VALUE) - constant, `lune_ui_core::widgets::stat`
 - [`Value`](lune-ui-core/access.md#enum.Value) - enum, `lune_ui_core::access`
