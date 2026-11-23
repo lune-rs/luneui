@@ -293,6 +293,12 @@ fn the_background_is_slow_and_its_periods_are_long() {
                 prev = c;
                 t += dt;
             }
+            if size == (1440.0, 900.0) {
+                println!(
+                    "blob {i}: sampled peak {peak:.2} px/s, bound {bound:.2} px/s, periods {:?} s",
+                    b.period
+                );
+            }
             assert!(
                 peak <= bound * 1.001,
                 "blob {i} at {size:?}: sampled {peak}, bound {bound}"
@@ -307,6 +313,7 @@ fn the_background_is_slow_and_its_periods_are_long() {
             assert!(b.breath.0 <= 0.15, "breathing is at most 15 %");
         }
     }
+    println!("shortest period of any motion: {} s", shortest_period());
     assert!(shortest_period() >= 20.0);
 }
 
