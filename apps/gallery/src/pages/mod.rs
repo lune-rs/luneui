@@ -70,6 +70,7 @@ mod shortcuts;
 mod side_panel;
 mod sidebar;
 mod slider;
+mod sparkline;
 mod spinner;
 mod split_panes;
 mod stack;
@@ -204,6 +205,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &swipe_actions::PAGE,
     &pull_to_refresh::PAGE,
     &ring_gauge::PAGE,
+    &sparkline::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

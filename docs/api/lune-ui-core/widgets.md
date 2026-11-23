@@ -62,6 +62,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`side_panel`](widgets/side_panel.md) - The side panel host (`layout.side-panel`, D149): one column on the app's glass layer that shows one of several panels by key.
 - [`sidebar`](widgets/sidebar.md) - The sidebar (`layout.sidebar`, D149): a column on the window glass holding navigation rows or wizard steps, and a status footer pinned to its bottom.
 - [`slider`](widgets/slider.md) - A horizontal value slider (`widget.slider`): a 4 px track, an accent fill up to the value and a 12 px knob (14 hovered) whose centre sits at the value's position.
+- [`sparkline`](widgets/sparkline.md) - The sparkline (`data.sparkline`, D436): a history graph with no axes, in an inset rounded frame.
 - [`spinner`](widgets/spinner.md) - A turning busy indicator (`widget.spinner`): the sync glyph rotating about its centre, one revolution per 1200 ms while busy (D117).
 - [`split_panes`](widgets/split_panes.md) - Resizable split panes (`layout.split-panes`, D150): two panes in a rect with a draggable, keyboard-operable strip between them.
 - [`star_rating`](widgets/star_rating.md) - A row of stars that sets a whole-number value (`widget.star-rating`, D120): `max` star buttons (default [`MAX`](widgets/star_rating.md#constant.MAX)), the first `value` of them filled in the warning t...

@@ -3972,6 +3972,7 @@ mod m10 {
     use lune_ui_core::widgets::radio_group::RadioOption;
     use lune_ui_core::widgets::ring_gauge::{RingGaugeOptions, RingSegment};
     use lune_ui_core::widgets::slider::SliderOptions;
+    use lune_ui_core::widgets::sparkline::{SparkStyle, SparklineOptions};
     use lune_ui_core::widgets::spinner::SpinnerOptions;
     use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripOptions};
     use lune_ui_core::widgets::toast::{ToastKind, ToastSpec, Toasts};
@@ -4548,6 +4549,17 @@ mod m10 {
                     Rect::new(260.0, 430.0, 80.0, 80.0),
                     &RingGaugeOptions::new(&segments, "Used").with_text("60%"),
                 );
+                // A sparkline: the frame, baseline and cells from the theme, the series the app's.
+                let (up, down) = ([1.0, 3.0, 2.0, 4.0], [2.0, 1.0, 3.0, 1.0]);
+                for (at, style) in [(350.0, SparkStyle::Line), (450.0, SparkStyle::Bars)] {
+                    ui.sparkline(
+                        ("spark", at as u32),
+                        Rect::new(at, 430.0, 90.0, 40.0),
+                        &SparklineOptions::new(&up, [90, 160, 250, 255], "History")
+                            .with_mirror(&down, [240, 170, 80, 255])
+                            .with_style(style),
+                    );
+                }
                 // A tree with a nested level: the guides (`tree_guide`) and a mark.
                 let rows = [
                     TreeRow {

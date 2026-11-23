@@ -1304,6 +1304,13 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.sparkline"></a>`pub fn sparkline(&mut self, key: impl Hash, rect: Rect, opts: &SparklineOptions<'_>)`
+
+  A sparkline under `key` filling `rect`. The node is an `Image` named `opts.label` (or the
+  toolkit's `luneui.sparkline.name`) with the description.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.spinner"></a>`pub fn spinner(&mut self, key: impl Hash, center: (f32, f32), opts: &SpinnerOptions<'_>)`
 
   A spinner under `key`, the glyph centred on `center`. Turns while `opts.busy` under Full

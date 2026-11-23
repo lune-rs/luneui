@@ -109,6 +109,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "lane-graph",
             "recipes",
             "ring-gauge",
+            "sparkline",
         ],
     },
     Group {

@@ -52,6 +52,7 @@ pub mod shine;
 pub mod side_panel;
 pub mod sidebar;
 pub mod slider;
+pub mod sparkline;
 pub mod spinner;
 pub mod split_panes;
 pub mod star_rating;

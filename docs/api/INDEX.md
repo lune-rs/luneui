@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-103 modules, 1158 items. Left out and counted: 3661 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5273 items of the omitted impls, 1402 items of the trait impls shown as one line, 2454 synthetic impls.
+104 modules, 1162 items. Left out and counted: 3679 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5299 items of the omitted impls, 1408 items of the trait impls shown as one line, 2466 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -97,6 +97,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::side_panel`](lune-ui-core/widgets/side_panel.md) | 8 |
 | [`lune_ui_core::widgets::sidebar`](lune-ui-core/widgets/sidebar.md) | 11 |
 | [`lune_ui_core::widgets::slider`](lune-ui-core/widgets/slider.md) | 13 |
+| [`lune_ui_core::widgets::sparkline`](lune-ui-core/widgets/sparkline.md) | 4 |
 | [`lune_ui_core::widgets::spinner`](lune-ui-core/widgets/spinner.md) | 3 |
 | [`lune_ui_core::widgets::split_panes`](lune-ui-core/widgets/split_panes.md) | 12 |
 | [`lune_ui_core::widgets::star_rating`](lune-ui-core/widgets/star_rating.md) | 12 |
@@ -820,6 +821,7 @@ Every top-level item of the four owning crates, by name.
 - [`MaterialAppearance`](lune-ui-core/backdrop.md#enum.MaterialAppearance) - enum, `lune_ui_core::backdrop`
 - [`MaterialState`](lune-ui-core/backdrop.md#enum.MaterialState) - enum, `lune_ui_core::backdrop`
 - [`MAX`](lune-ui-core/widgets/star_rating.md#constant.MAX) - constant, `lune_ui_core::widgets::star_rating`
+- [`MAX_CAPACITY`](lune-ui-core/widgets/sparkline.md#constant.MAX_CAPACITY) - constant, `lune_ui_core::widgets::sparkline`
 - [`MAX_DEPTH`](lune-ui-core/json.md#constant.MAX_DEPTH) - constant, `lune_ui_core::json`
 - [`MAX_H`](lune-ui-core/widgets/command_palette.md#constant.MAX_H) - constant, `lune_ui_core::widgets::command_palette`
 - [`MAX_HEIGHT`](lune-ui-core/widgets/search_picker.md#constant.MAX_HEIGHT) - constant, `lune_ui_core::widgets::search_picker`
@@ -1115,6 +1117,7 @@ Every top-level item of the four owning crates, by name.
 - [`safe_area`](lune-ui-platform/mobile.md#fn.safe_area) - function, `lune_ui_platform::mobile`
 - [`SAMPLE`](lune-ui-core/playback.md#constant.SAMPLE) - constant, `lune_ui_core::playback`
 - [`Sampling`](lune-ui-core/image.md#enum.Sampling) - enum, `lune_ui_core::image`
+- [`scale`](lune-ui-core/widgets/sparkline.md#fn.scale) - function, `lune_ui_core::widgets::sparkline`
 - [`Scene`](lune-ui-core/scene.md#struct.Scene) - struct, `lune_ui_core::scene`
 - [`SCENE_LAYERS`](lune-ui-core/scene.md#constant.SCENE_LAYERS) - constant, `lune_ui_core::scene`
 - [`SceneAttach`](lune-ui-platform/mobile.md#enum.SceneAttach) - enum, `lune_ui_platform::mobile`
@@ -1197,6 +1200,8 @@ Every top-level item of the four owning crates, by name.
 - [`SNAP_DISTANCE`](lune-ui-core/widgets/scroll_area.md#constant.SNAP_DISTANCE) - constant, `lune_ui_core::widgets::scroll_area`
 - [`Sort`](lune-ui-core/access.md#enum.Sort) - enum, `lune_ui_core::access`
 - [`SortKey`](lune-ui-core/widgets/table.md#struct.SortKey) - struct, `lune_ui_core::widgets::table`
+- [`SparklineOptions`](lune-ui-core/widgets/sparkline.md#struct.SparklineOptions) - struct, `lune_ui_core::widgets::sparkline`
+- [`SparkStyle`](lune-ui-core/widgets/sparkline.md#enum.SparkStyle) - enum, `lune_ui_core::widgets::sparkline`
 - [`Spec`](lune-ui-core/text.md#struct.Spec) - struct, `lune_ui_core::text`
 - [`spec_line_contract`](lune-ui-core/testing.md#fn.spec_line_contract) - function, `lune_ui_core::testing`
 - [`SpecLayout`](lune-ui-core/text_edit.md#struct.SpecLayout) - struct, `lune_ui_core::text_edit`

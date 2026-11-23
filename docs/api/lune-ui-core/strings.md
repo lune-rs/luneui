@@ -40,7 +40,7 @@ pub struct Catalog {
 A language file: `{ "code", "displayName", "version", "strings": { key: text } }`. The strings
 are a [`StringTable`](strings.md#struct.StringTable) like any other; load it, then overlay it on the app's base table.
 
-Source: `crates/lune-ui-core/src/strings.rs:406`
+Source: `crates/lune-ui-core/src/strings.rs:407`
 
 **Fields**
 
@@ -87,7 +87,7 @@ pub struct DisplayFormat;
 
 The default hook: the argument's `Display`, the spec ignored.
 
-Source: `crates/lune-ui-core/src/strings.rs:149`
+Source: `crates/lune-ui-core/src/strings.rs:150`
 
 **Trait implementations**
 
@@ -109,7 +109,7 @@ pub struct StringTable {
 Translated strings by key. `Default` holds no entries, so every lookup falls back to the
 toolkit default or the key itself.
 
-Source: `crates/lune-ui-core/src/strings.rs:335`
+Source: `crates/lune-ui-core/src/strings.rs:336`
 
 **Methods and associated items**
 
@@ -168,7 +168,7 @@ pub struct TemplateAudit {
 
 What [`audit_template`](strings.md#fn.audit_template) counted in one template.
 
-Source: `crates/lune-ui-core/src/strings.rs:308`
+Source: `crates/lune-ui-core/src/strings.rs:309`
 
 **Fields**
 
@@ -213,7 +213,7 @@ pub enum CatalogError {
 
 Why a language file did not load. A file that fails loads nothing: the app keeps its table.
 
-Source: `crates/lune-ui-core/src/strings.rs:388`
+Source: `crates/lune-ui-core/src/strings.rs:389`
 
 **Variants**
 
@@ -261,7 +261,7 @@ pub enum StringError {
 
 Why an insert was refused.
 
-Source: `crates/lune-ui-core/src/strings.rs:122`
+Source: `crates/lune-ui-core/src/strings.rs:123`
 
 **Variants**
 
@@ -294,7 +294,7 @@ pub trait ArgFormat { .. }
 
 Formats one argument for a `{n}` or `{n:spec}` placeholder (the app's number and date rules).
 
-Source: `crates/lune-ui-core/src/strings.rs:141`
+Source: `crates/lune-ui-core/src/strings.rs:142`
 
 **Required items**
 
@@ -314,7 +314,7 @@ pub fn audit_template(template: &str) -> TemplateAudit
 
 Counts the placeholders of `template` as [`format_template`](strings.md#fn.format_template) reads them: the same scanner.
 
-Source: `crates/lune-ui-core/src/strings.rs:319`
+Source: `crates/lune-ui-core/src/strings.rs:320`
 
 <a id="fn.default_text"></a>
 ### Function `default_text`
@@ -325,7 +325,7 @@ pub fn default_text(key: &str) -> Option<&'static str>
 
 The default text of a toolkit key, if it is one.
 
-Source: `crates/lune-ui-core/src/strings.rs:111`
+Source: `crates/lune-ui-core/src/strings.rs:112`
 
 <a id="fn.format_template"></a>
 ### Function `format_template`
@@ -342,7 +342,7 @@ ignored. Any other `{` and a lone `}` stay literal. Never panics, whatever the t
 takes time linear in it; the output is the template's text plus what `f` writes for each
 placeholder that has an argument.
 
-Source: `crates/lune-ui-core/src/strings.rs:288`
+Source: `crates/lune-ui-core/src/strings.rs:289`
 
 ## Constants
 
