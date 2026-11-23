@@ -23,7 +23,8 @@ use lune_ui::scene::Scene;
 use lune_ui::text::TextCache;
 
 use crate::frame_params;
-use crate::scenes::{SceneId, controls, glass, motion};
+use crate::scenes::theme::{Accent, Look, Preset};
+use crate::scenes::{SceneId, controls, data, glass, motion, text, theme};
 use crate::shell::tier_from_word;
 use crate::stage::{Headless, NARROW_BELOW, Rendered, STILL_AT};
 
@@ -58,6 +59,8 @@ pub struct Request {
     pub acts: Vec<Act>,
     /// Print the rects of the scene's cards (`--rects`).
     pub rects: bool,
+    /// The look the theme rests on from the first frame (`--preset`, `--accent`).
+    pub look: Look,
     /// The file name without `.png`.
     pub name: String,
 }
@@ -153,6 +156,7 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
         still: false,
         acts: Vec::new(),
         rects: false,
+        look: Look::DEFAULT,
         name: String::new(),
     };
     let (mut any, mut only, mut to, mut progress, mut scale_given) =
@@ -192,6 +196,12 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
             "--motion" => req.tier = tier_from_word(&value)?,
             "--name" => req.name = value,
             "--do" => req.acts.push(parse_act(&value)?),
+            "--preset" => {
+                req.look.preset = Preset::from_word(&value)?;
+            }
+            "--accent" => {
+                req.look.accent = Accent::from_word(&value)?;
+            }
             _ => return None,
         }
     }
@@ -220,6 +230,10 @@ fn render(
     run.stage.tier = req.tier;
     run.stage.still = req.still;
     run.stage.want = req.scene;
+    // A scene is shown at rest after its first frame, as a person sees it a few seconds in; what a
+    // request plays after that (`--do`) sees the entry motions as they run.
+    run.stage.arrived = req.acts.is_empty();
+    run.stage.set_look(req.look);
     run.stage.backend = "headless".to_owned();
     let rendered = match req.to {
         None => run.step_to(req.at, Vec::new()),
@@ -379,7 +393,21 @@ fn rects(run: &Headless, req: &Request) -> Vec<(String, Rect)> {
             .into_iter()
             .map(|(d, r)| (format!("{d:?}"), r))
             .collect(),
-        _ => Vec::new(),
+        SceneId::Data => data::plan(body, l.wide)
+            .cards
+            .into_iter()
+            .map(|(c, r)| (format!("{c:?}"), r))
+            .collect(),
+        SceneId::Text => text::plan(body, l.wide)
+            .cards
+            .into_iter()
+            .map(|(c, r)| (format!("{c:?}"), r))
+            .collect(),
+        SceneId::Theme => theme::plan(body, l.wide)
+            .cards
+            .into_iter()
+            .map(|(c, r)| (format!("{c:?}"), r))
+            .collect(),
     }
 }
 
@@ -408,6 +436,7 @@ pub fn write_all(dir: &Path) -> Result<(), String> {
                 still: false,
                 acts: Vec::new(),
                 rects: false,
+                look: Look::DEFAULT,
                 name: format!("{prefix}-{}", scene.slug()),
             };
             let mut run = Headless::new(size, scale, safe_for(size));

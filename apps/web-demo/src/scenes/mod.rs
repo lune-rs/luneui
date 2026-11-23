@@ -6,18 +6,25 @@ use std::time::Duration;
 
 use lune_ui::color::{Rgba, clear, premul, with_alpha};
 use lune_ui::input::Event;
+use lune_ui::motion::Easing;
 use lune_ui::paint::Rect;
 use lune_ui::text::{Spec, Style};
 use lune_ui::ui::Ui;
 use lune_ui::widgets::scroll_area::{Extent, ScrollOptions};
 
 pub mod controls;
+pub mod data;
 pub mod glass;
 pub mod motion;
+pub mod text;
+pub mod theme;
 
 pub use controls::Controls;
+pub use data::Data;
 pub use glass::Glass;
 pub use motion::Motions;
+pub use text::TextScene;
+pub use theme::ThemeScene;
 
 /// Codicons (as mapped into the Nerd Font) the scenes and the frame use.
 pub mod glyph {
@@ -157,6 +164,11 @@ pub struct Env {
     /// Motion is on: the Full tier and not `--still`. Off it, a scene shows its state at rest and
     /// asks for no frame.
     pub animating: bool,
+    /// The page is being pushed in: it is on its way to the card and has not landed.
+    pub entering: bool,
+    /// The entry motions are over: a scene draws its state at rest at once (a dump of a scene at
+    /// rest, rather than a second after it was opened).
+    pub arrived: bool,
 }
 
 impl Env {
@@ -224,6 +236,56 @@ impl Pilot {
             Some(n)
         } else {
             None
+        }
+    }
+}
+
+/// How long a scene must have gone undrawn for its next frame to count as a new entry.
+const AWAY: Duration = Duration::from_millis(250);
+
+/// When a scene was entered, for the motions that play on each entry (a chart that grows in). The
+/// entry counts from the frame the page has landed (the push is over), not from the first frame the
+/// push draws it in, and a scene that was not drawn for a while is entered again.
+#[derive(Debug, Default)]
+pub struct Entry {
+    last: Option<Duration>,
+    start: Option<Duration>,
+    /// How many times the scene was entered.
+    pub entries: u32,
+}
+
+impl Entry {
+    /// Notes this frame and returns the time since the page landed; `None` while it is pushed in
+    /// and when nothing animates (the scene shows its state at rest).
+    pub fn elapsed(&mut self, env: &Env) -> Option<Duration> {
+        let away = self
+            .last
+            .is_none_or(|t| env.now.saturating_sub(t) > AWAY || env.now < t);
+        self.last = Some(env.now);
+        if away {
+            self.start = None;
+            self.entries += 1;
+        }
+        if !env.animating || env.arrived {
+            return None;
+        }
+        if env.entering {
+            self.start = None;
+            return Some(Duration::ZERO);
+        }
+        let start = *self.start.get_or_insert(env.now);
+        Some(env.now.saturating_sub(start))
+    }
+}
+
+/// `elapsed` through a ramp that starts at `delay` and lasts `length`, eased out: 0 before it,
+/// 1 after it. `None` (nothing animates) is 1.
+pub fn grown(elapsed: Option<Duration>, delay: Duration, length: Duration) -> f32 {
+    match elapsed {
+        None => 1.0,
+        Some(e) => {
+            let t = e.saturating_sub(delay).as_secs_f32() / length.as_secs_f32();
+            Easing::CUBIC_OUT.eval(t)
         }
     }
 }
@@ -372,6 +434,12 @@ pub struct Scenes {
     pub controls: Controls,
     /// The Motion scene.
     pub motion: Motions,
+    /// The Data scene.
+    pub data: Data,
+    /// The Text scene.
+    pub text: TextScene,
+    /// The Theme scene.
+    pub theme: ThemeScene,
 }
 
 impl Scenes {
@@ -386,7 +454,9 @@ impl Scenes {
             SceneId::Glass => self.glass.draw(ui, body, env),
             SceneId::Controls => self.controls.draw(ui, body, env),
             SceneId::Motion => self.motion.draw(ui, body, env),
-            _ => placeholder(scene, ui, body, env.wide),
+            SceneId::Data => self.data.draw(ui, body, env),
+            SceneId::Text => self.text.draw(ui, body, env),
+            SceneId::Theme => self.theme.draw(ui, body, env),
         }
     }
 
@@ -396,7 +466,9 @@ impl Scenes {
             SceneId::Glass => Some(&self.glass.targets),
             SceneId::Controls => Some(&self.controls.targets),
             SceneId::Motion => Some(&self.motion.targets),
-            _ => None,
+            SceneId::Data => Some(&self.data.targets),
+            SceneId::Text => Some(&self.text.targets),
+            SceneId::Theme => Some(&self.theme.targets),
         }
     }
 
@@ -406,47 +478,9 @@ impl Scenes {
             SceneId::Glass => Some(&self.glass.pilot),
             SceneId::Controls => Some(&self.controls.pilot),
             SceneId::Motion => Some(&self.motion.pilot),
-            _ => None,
+            SceneId::Data => Some(&self.data.pilot),
+            SceneId::Text => Some(&self.text.pilot),
+            SceneId::Theme => Some(&self.theme.pilot),
         }
     }
-}
-
-/// A scene that is not built yet: its icon on a frosted tile with a hint, centred in `body`.
-fn placeholder(scene: SceneId, ui: &mut Ui<'_>, body: Rect, wide: bool) {
-    let t = *ui.theme();
-    let tile_w = if wide { 320.0 } else { body.w.min(320.0) };
-    let tile = Rect::new(
-        body.x + (body.w - tile_w) / 2.0,
-        body.y + (body.h - 168.0).max(0.0) / 2.0,
-        tile_w,
-        168.0_f32.min(body.h),
-    );
-    let p = ui.painter();
-    p.frost(tile, 12.0, premul(with_alpha(t.menu_glass, 0.5)), true);
-    p.linear(
-        tile,
-        12.0,
-        t.surface_hover,
-        clear(t.surface_hover),
-        std::f32::consts::FRAC_PI_2,
-    );
-    p.ring(tile, 12.0, 1.0, t.menu_popup_border, false);
-    let icon = lune_ui::icon::glyph(scene.glyph(), 44.0, t.data_hi);
-    let iw = p.measure(&icon).0;
-    p.text_centered(
-        &icon,
-        Rect::new(tile.x + (tile.w - iw) / 2.0, tile.y + 24.0, iw, 56.0),
-    );
-    let name = Spec::plain(scene.name(), Style::ui(t.font_title, t.fg_bright).medium());
-    let nw = p.measure(&name).0;
-    p.text(&name, tile.x + (tile.w - nw) / 2.0, tile.y + 92.0);
-    let hint = p.elide(
-        &Spec::plain(
-            "This scene is being built",
-            Style::ui(t.font_base, t.fg_secondary),
-        ),
-        tile.w - 32.0,
-    );
-    let hw = p.measure(&hint).0;
-    p.text(&hint, tile.x + (tile.w - hw) / 2.0, tile.y + 124.0);
 }

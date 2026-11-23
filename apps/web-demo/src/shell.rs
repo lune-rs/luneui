@@ -33,6 +33,7 @@ use lune_ui::web::TextInput;
 
 use crate::frame_params;
 use crate::scenes::SceneId;
+use crate::scenes::theme::{Accent, Look, Preset};
 use crate::stage::{Layout, Stage};
 
 /// Prints one line of the demo's report (`presented`, `probe`): to stdout, or to the browser's
@@ -79,6 +80,8 @@ pub struct Options {
     pub force_gl: bool,
     /// The scene the app starts on.
     pub scene: SceneId,
+    /// The look the theme starts on (`--preset`, `--accent`).
+    pub look: Look,
 }
 
 impl Default for Options {
@@ -91,12 +94,13 @@ impl Default for Options {
             motion: None,
             force_gl: false,
             scene: SceneId::Glass,
+            look: Look::DEFAULT,
         }
     }
 }
 
 /// The window flags' usage line.
-pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--backend gl|auto]";
+pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky] [--backend gl|auto]";
 
 /// The motion tier a word names.
 pub fn tier_from_word(word: &str) -> Option<MotionTier> {
@@ -120,6 +124,8 @@ pub fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
             "--still" => options.still = true,
             "--motion" => options.motion = Some(tier_from_word(&args.next()?)?),
             "--scene" => options.scene = SceneId::from_slug(&args.next()?)?,
+            "--preset" => options.look.preset = Preset::from_word(&args.next()?)?,
+            "--accent" => options.look.accent = Accent::from_word(&args.next()?)?,
             "--backend" => match args.next()?.as_str() {
                 "gl" => options.force_gl = true,
                 "auto" => options.force_gl = false,
@@ -528,6 +534,7 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     stage.still = options.still;
     stage.tier = options.motion.unwrap_or_else(host_motion);
     stage.want = options.scene;
+    stage.set_look(options.look);
     // A browser reports the machine it runs on (a Mac's chords are Cmd-based); elsewhere this is
     // the adapter's own keymap.
     stage.set_keymap(lune_ui::web::keymap());

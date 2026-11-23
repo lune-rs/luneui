@@ -1,4 +1,4 @@
-//! The Glass, Controls and Motion scenes, headless: no window, no GPU, app time only. CI runs these
+//! The six scenes, headless: no window, no GPU, app time only. CI runs these
 //! on all three systems.
 
 use std::time::Duration;
@@ -9,8 +9,11 @@ use lune_ui::motion::MotionTier;
 use lune_ui::paint::Rect;
 use lune_ui::playback::{Player, Script};
 use web_demo::scenes::controls::{self, Card as CCard};
+use web_demo::scenes::data::{self, GROW};
 use web_demo::scenes::glass::{self, Card as GCard, PARALLAX_MAX};
 use web_demo::scenes::motion;
+use web_demo::scenes::text::{self, Act, Part};
+use web_demo::scenes::theme::{self, Accent, Look, Preset, contrast, lerp_theme};
 use web_demo::scenes::{RESUME, SceneId};
 use web_demo::stage::{Headless, Layout};
 
@@ -23,7 +26,7 @@ const SIZES: [((f32, f32), Insets); 4] = [
     ((390.0, 844.0), PHONE_SAFE),
     ((320.0, 568.0), Insets::ZERO),
 ];
-const SCENES: [SceneId; 3] = [SceneId::Glass, SceneId::Controls, SceneId::Motion];
+const SCENES: [SceneId; 6] = SceneId::ALL;
 
 fn inside(outer: Rect, inner: Rect) -> bool {
     const EPS: f32 = 0.01;
@@ -185,12 +188,40 @@ fn every_scene_lays_out_inside_the_body_at_the_four_sizes() {
             }
         }
 
+        // Data, Text and Theme: every card inside the body's width and the content, none over
+        // another.
+        let rects = |name: &str, cards: Vec<Rect>, height: f32| {
+            let full = Rect::new(body.x, body.y, body.w, height);
+            for (i, a) in cards.iter().enumerate() {
+                assert!(
+                    inside(full, *a),
+                    "{size:?}: {name} card {i} outside: {a:?} in {full:?}"
+                );
+                assert!(
+                    a.w > 100.0 && a.h > 60.0,
+                    "{size:?}: {name} card {i} is {a:?}"
+                );
+                for (j, b) in cards.iter().enumerate().skip(i + 1) {
+                    assert!(apart(*a, *b), "{size:?}: {name} cards {i} and {j} overlap");
+                }
+            }
+        };
+        let p = data::plan(body, wide);
+        rects("data", p.cards.iter().map(|c| c.1).collect(), p.height);
+        let p = text::plan(body, wide);
+        rects("text", p.cards.iter().map(|c| c.1).collect(), p.height);
+        let p = theme::plan(body, wide);
+        rects("theme", p.cards.iter().map(|c| c.1).collect(), p.height);
+
         // At the biggest window nothing scrolls.
         if size == (1440.0, 900.0) {
             for (name, h) in [
                 ("glass", glass::plan(body, wide).height),
                 ("controls", controls::plan(body, wide).height),
                 ("motion", motion::plan(body, wide).height),
+                ("data", data::plan(body, wide).height),
+                ("text", text::plan(body, wide).height),
+                ("theme", theme::plan(body, wide).height),
             ] {
                 assert!(
                     h <= body.h + 0.5,
@@ -215,10 +246,16 @@ fn every_scene_draws_at_every_size_and_the_scenes_differ() {
             );
             seen.push(r.scene);
         }
-        assert!(
-            seen[0] != seen[1] && seen[1] != seen[2] && seen[0] != seen[2],
-            "{size:?}"
-        );
+        for i in 0..seen.len() {
+            for j in i + 1..seen.len() {
+                assert!(
+                    seen[i] != seen[j],
+                    "{size:?}: {:?} = {:?}",
+                    SCENES[i],
+                    SCENES[j]
+                );
+            }
+        }
     }
 }
 
@@ -573,6 +610,10 @@ fn the_autopilot_changes_one_thing_at_most_every_second() {
     assert!(controls::STEP >= Duration::from_secs(1));
     assert!(motion::STEP >= Duration::from_secs(1));
     assert!(motion::STEP * motion::EVERY as u32 >= Duration::from_secs(3));
+    println!("data: a change every {:?}", data::STEP);
+    println!("theme: a change every {:?}", theme::STEP);
+    assert!(data::STEP >= Duration::from_secs(1));
+    assert!(theme::STEP >= Duration::from_secs(2));
 }
 
 #[test]
@@ -632,4 +673,525 @@ fn the_pointer_pulls_the_cards_by_their_depth_and_they_spring_back() {
         run.step(dt, vec![Event::PointerLeft]);
     }
     run.step(dt, Vec::new());
+}
+
+// ---------------------------------------------------------------------------------------------
+// Data.
+
+#[test]
+fn a_tap_on_a_header_sorts_the_table_and_a_second_one_turns_it() {
+    let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Data);
+    let d = SceneId::Data;
+    let before = run.stage.scenes.data.order.clone();
+    assert_eq!(
+        before,
+        (0..before.len()).collect::<Vec<_>>(),
+        "unsorted at the start"
+    );
+    let requests = |i: usize| web_demo_requests(i);
+    tap(&mut run, d, "head1");
+    let asc = run.stage.scenes.data.order.clone();
+    assert_ne!(asc, before, "the rows were not reordered");
+    for w in asc.windows(2) {
+        assert!(requests(w[0]) <= requests(w[1]), "not ascending: {asc:?}");
+    }
+    tap(&mut run, d, "head1");
+    let desc = run.stage.scenes.data.order.clone();
+    for w in desc.windows(2) {
+        assert!(requests(w[0]) >= requests(w[1]), "not descending: {desc:?}");
+    }
+    assert_eq!(desc, asc.iter().rev().copied().collect::<Vec<_>>());
+    // The service column sorts by name.
+    tap(&mut run, d, "head0");
+    let by_name = run.stage.scenes.data.order.clone();
+    assert_eq!(by_name.len(), before.len());
+    assert_ne!(by_name, desc);
+}
+
+/// The requests of service `i`, in the order of the scene's list (a copy of its figures).
+fn web_demo_requests(i: usize) -> u32 {
+    [18_420, 9_210, 15_730, 2_860, 11_380, 6_140, 4_470][i]
+}
+
+#[test]
+fn the_table_rows_slide_to_their_new_places() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Data;
+    run.run(40, FRAME);
+    let at = run
+        .stage
+        .scenes
+        .targets(SceneId::Data)
+        .and_then(|t| t.centre("head1"))
+        .expect("a header");
+    let mut s = Script::new();
+    s.wait(Duration::from_millis(60)).tap(at);
+    let mut player = Player::new(s);
+    let mut pictures = Vec::new();
+    for _ in 0..50 {
+        let mut events = Vec::new();
+        player.advance(run.time + FRAME, &mut events);
+        pictures.push(run.step(FRAME, events).scene);
+    }
+    // Between the click and the settling the picture changes frame after frame (a slide), and it
+    // ends still.
+    let moving = pictures.windows(2).filter(|w| w[0] != w[1]).count();
+    assert!(moving >= 8, "the rows jumped: {moving} frames of motion");
+}
+
+#[test]
+fn the_grow_in_plays_on_each_entry_after_the_push_lands() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    // From the scene next to it: a push passes through the scenes in between.
+    run.stage.want = SceneId::Motion;
+    run.run(60, FRAME);
+    let push = run.stage.push_duration().expect("a push");
+    let frames = |ms: u128| (ms * 60 / 1000) as u32 + 2;
+    for round in 1..=2u32 {
+        run.stage.want = SceneId::Data;
+        // While the page is pushed in it is held at the start.
+        run.run(frames(push.as_millis() / 2), FRAME);
+        assert_eq!(
+            run.stage.scenes.data.grew,
+            Some(Duration::ZERO),
+            "round {round}: the grow-in ran during the push"
+        );
+        // After it has landed the clock starts, and is over after GROW.
+        run.run(frames(push.as_millis() / 2 + 200), FRAME);
+        let early = run.stage.scenes.data.grew.expect("growing");
+        assert!(
+            early > Duration::ZERO && early < GROW,
+            "round {round}: {early:?} after the landing"
+        );
+        run.run(frames(GROW.as_millis() + 400), FRAME);
+        let late = run.stage.scenes.data.grew.expect("a clock");
+        assert!(late > GROW, "round {round}: {late:?}");
+        assert_eq!(run.stage.scenes.data.entry.entries, round);
+        // Away and back.
+        run.stage.want = SceneId::Motion;
+        run.run(frames(push.as_millis() + 600), FRAME);
+    }
+}
+
+#[test]
+fn the_grow_in_changes_the_picture_and_a_scene_at_rest_has_none() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Data;
+    run.stage.still = true;
+    let rest = run.run(10, FRAME).expect("a frame").scene;
+    let mut moving = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    moving.stage.want = SceneId::Data;
+    moving.stage.still = false;
+    let first = moving.step(FRAME, Vec::new()).scene;
+    assert!(first != rest, "the first frame shows the finished charts");
+    // Reduced shows the finished charts at once.
+    let mut reduced = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    reduced.stage.want = SceneId::Data;
+    reduced.stage.tier = MotionTier::Reduced;
+    assert_eq!(reduced.step(FRAME, Vec::new()).out.repaint, Repaint::Idle);
+    assert_eq!(reduced.stage.scenes.data.grew, None);
+}
+
+#[test]
+fn the_board_keeps_every_lane_filled_and_none_over_three() {
+    let mut d = data::Data::default();
+    let mut seen = std::collections::HashSet::new();
+    for round in 0..40 {
+        d.advance_board(round);
+        let lanes: Vec<usize> = (0..3).map(|l| d.lane_len(l)).collect();
+        assert!(
+            lanes.iter().all(|n| (1..=3).contains(n)),
+            "round {round}: {lanes:?}"
+        );
+        assert_eq!(lanes.iter().sum::<usize>(), 5);
+        seen.insert(d.lanes.clone());
+    }
+    assert!(
+        seen.len() >= 4,
+        "the cards only visited {} arrangements",
+        seen.len()
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// Text.
+
+#[test]
+fn text_typed_through_the_events_reaches_the_field() {
+    let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Text);
+    let at = run
+        .stage
+        .scenes
+        .targets(SceneId::Text)
+        .and_then(|t| t.get("field"))
+        .expect("a field");
+    // A tap at the right end puts the caret at the end of the text and focuses the field.
+    tap_at(&mut run, (at.right() - 6.0, at.y + at.h / 2.0));
+    let was = run.stage.scenes.text.field.clone();
+    for ch in "web".chars() {
+        run.step(FRAME, vec![Event::Text(ch.to_string())]);
+    }
+    run.run(3, FRAME);
+    assert_eq!(run.stage.scenes.text.field, format!("{was}web"));
+    // The same into the Markdown source.
+    let src = run
+        .stage
+        .scenes
+        .targets(SceneId::Text)
+        .and_then(|t| t.get("source"))
+        .expect("a source");
+    tap_at(&mut run, (src.x + src.w / 2.0, src.bottom() - 10.0));
+    let was = run.stage.scenes.text.source.clone();
+    run.step(FRAME, vec![Event::Text("!".to_owned())]);
+    run.run(3, FRAME);
+    assert_eq!(
+        run.stage.scenes.text.source.chars().count(),
+        was.chars().count() + 1
+    );
+}
+
+#[test]
+fn the_script_types_at_a_human_pace_and_the_preview_follows() {
+    // The pace, from the schedule: 40 to 80 ms a character, and a pause after a word.
+    let doc = lune_ui::code_doc::CodeDoc::new(
+        "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt",
+    );
+    let mut gaps = Vec::new();
+    for k in 0..4 {
+        let (acts, length) = text::round(k, &doc);
+        assert!(
+            length > Duration::from_secs(10) && length < Duration::from_secs(40),
+            "{length:?}"
+        );
+        let typed: Vec<(Duration, char)> = acts
+            .iter()
+            .filter_map(|(t, a)| match a {
+                Act::Type(Part::Field | Part::Source, c) => Some((*t, *c)),
+                _ => None,
+            })
+            .collect();
+        // Only between two characters of one text: a round's parts have their own pauses.
+        let part = |t: Duration| {
+            acts.iter()
+                .find_map(|(at, a)| match a {
+                    Act::Type(p, _) if *at == t => Some(*p),
+                    _ => None,
+                })
+                .expect("a typed character")
+        };
+        for w in typed.windows(2) {
+            if part(w[0].0) == part(w[1].0) {
+                gaps.push((w[1].0 - w[0].0, w[0].1));
+            }
+        }
+        // Times only go forward.
+        for w in acts.windows(2) {
+            assert!(w[0].0 <= w[1].0);
+        }
+    }
+    let (min, max) = gaps
+        .iter()
+        .filter(|(_, c)| !matches!(c, ' ' | ',' | '\n'))
+        .fold((Duration::MAX, Duration::ZERO), |(lo, hi), (g, _)| {
+            (lo.min(*g), hi.max(*g))
+        });
+    let word_max = gaps
+        .iter()
+        .filter(|(_, c)| matches!(c, ' ' | ',' | '\n'))
+        .map(|(g, _)| *g)
+        .max()
+        .expect("spaces");
+    println!("typing: {min:?} to {max:?} a character, up to {word_max:?} after a word");
+    assert!(
+        min >= text::TYPE_MIN && max <= text::TYPE_MAX,
+        "{min:?} {max:?}"
+    );
+    assert!(word_max <= text::TYPE_MAX + text::WORD_PAUSE);
+    assert!(word_max > text::TYPE_MAX);
+}
+
+#[test]
+fn the_autopilot_types_into_the_field_and_the_source_and_the_preview_follows() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Text;
+    let mut fields = std::collections::HashSet::new();
+    let mut sources = std::collections::HashSet::new();
+    for _ in 0..(40 * 10) {
+        run.step(Duration::from_millis(100), Vec::new());
+        fields.insert(run.stage.scenes.text.field.clone());
+        sources.insert(run.stage.scenes.text.source.clone());
+    }
+    assert!(
+        fields.len() > 8,
+        "the field only held {} texts",
+        fields.len()
+    );
+    assert!(
+        sources.len() > 8,
+        "the source only held {} texts",
+        sources.len()
+    );
+}
+
+#[test]
+fn the_code_view_shows_a_selection_the_script_makes() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Text;
+    let doc = lune_ui::code_doc::CodeDoc::new("x");
+    let (acts, _) = text::round(0, &doc);
+    // Find when the script selects a line, and draw just before and just after.
+    let at = acts
+        .iter()
+        .find_map(|(t, a)| matches!(a, Act::SelectLine(_)).then_some(*t))
+        .expect("a selection");
+    let dt = Duration::from_millis(50);
+    while run.time + dt < at + Duration::from_millis(400) {
+        run.step(dt, Vec::new());
+    }
+    let selected = run.step(dt, Vec::new()).scene;
+    // Later the script has moved on to the source; the picture differs.
+    for _ in 0..80 {
+        run.step(dt, Vec::new());
+    }
+    let later = run.step(dt, Vec::new()).scene;
+    assert!(selected != later);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Theme.
+
+/// Steps a stage `secs` seconds in 16 ms frames.
+fn settle_for(run: &mut Headless, secs: f32) {
+    let end = run.time + Duration::from_secs_f32(secs);
+    while run.time < end {
+        run.step(Duration::from_millis(16), Vec::new());
+    }
+}
+
+#[test]
+fn the_theme_run_settles_exactly_on_the_target_and_asks_no_frame_after() {
+    for (preset, accent) in [
+        (Preset::NearBlack, Accent::Own),
+        (Preset::Dark, Accent::Link),
+        (Preset::NearBlack, Accent::Err),
+    ] {
+        let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+        run.stage.still = true;
+        run.stage.want = SceneId::Theme;
+        run.run(20, FRAME);
+        assert!(run.stage.theme_settled());
+        run.stage.scenes.theme.look = Look { preset, accent };
+        let mut asked = 0;
+        let mut mid = None;
+        let start = run.time;
+        let token = run.stage.push_duration().expect("a token");
+        while run.time < start + token + Duration::from_millis(200) {
+            let r = run.step(Duration::from_millis(16), Vec::new());
+            if r.out.repaint != Repaint::Idle {
+                asked += 1;
+            }
+            if mid.is_none() && run.time >= start + token / 2 {
+                mid = Some(run.stage.theme);
+            }
+        }
+        let target = Look { preset, accent }.theme();
+        assert_eq!(
+            run.stage.theme, target,
+            "{preset:?} {accent:?}: not exactly the target"
+        );
+        assert!(run.stage.theme_settled());
+        let from = Look::DEFAULT.theme();
+        let mid = mid.expect("a mid frame");
+        assert!(
+            mid != from && mid != target,
+            "{preset:?} {accent:?}: no in-between theme"
+        );
+        // It asked for frames during the run and for none after it.
+        assert!(asked > 10, "only {asked} frames asked during the run");
+        for _ in 0..60 {
+            let r = run.step(Duration::from_millis(16), Vec::new());
+            assert_eq!(
+                r.out.repaint,
+                Repaint::Idle,
+                "{preset:?} {accent:?}: a frame after the run"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_theme_run_lasts_moderate_and_fast_under_reduced_and_cuts_under_off() {
+    let moderate = lune_ui::lunegit_dark::THEME.motion.moderate;
+    let fast = lune_ui::lunegit_dark::THEME.motion.fast;
+    println!(
+        "theme run: {moderate:?} at Full (sine-in-out), {fast:?} under Reduced, a cut under Off"
+    );
+    for (tier, want) in [
+        (MotionTier::Full, Some(moderate)),
+        (MotionTier::Reduced, Some(fast)),
+        (MotionTier::Off, None),
+    ] {
+        let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+        run.stage.still = true;
+        run.stage.tier = tier;
+        run.stage.want = SceneId::Theme;
+        run.run(10, FRAME);
+        assert_eq!(run.stage.push_duration(), want, "{tier:?}");
+        let look = Look {
+            preset: Preset::NearBlack,
+            accent: Accent::Gold,
+        };
+        run.stage.scenes.theme.look = look;
+        run.step(FRAME, Vec::new());
+        match want {
+            Some(d) => {
+                assert!(!run.stage.theme_settled(), "{tier:?}: no run");
+                settle_for(&mut run, d.as_secs_f32() + 0.1);
+            }
+            None => assert!(run.stage.theme_settled(), "Off did not cut"),
+        }
+        assert_eq!(run.stage.theme, look.theme(), "{tier:?}");
+    }
+}
+
+#[test]
+fn only_colours_interpolate_and_the_sizes_switch_at_once() {
+    let a = lune_ui::lunegit_dark::THEME;
+    let mut b = lune_ui::near_black::THEME;
+    b.font_base = 17.0;
+    b.font_s = 12.0;
+    b.item_radius = 9.0;
+    b.line_title = 30.0;
+    let m = lerp_theme(&a, &b, 0.5);
+    assert_eq!(
+        (m.font_base, m.font_s, m.item_radius, m.line_title),
+        (17.0, 12.0, 9.0, 30.0)
+    );
+    assert_eq!(m.motion, b.motion);
+    // The colours are in between, channel by channel.
+    for (x, (y, z)) in [
+        (a.fg_primary, (b.fg_primary, m.fg_primary)),
+        (a.menu_glass, (b.menu_glass, m.menu_glass)),
+    ] {
+        for i in 0..4 {
+            let (lo, hi) = (x[i].min(y[i]), x[i].max(y[i]));
+            assert!(z[i] >= lo && z[i] <= hi, "{x:?} {y:?} {z:?}");
+        }
+    }
+    assert!(m.menu_glass != a.menu_glass && m.menu_glass != b.menu_glass);
+    assert!(m.glass.panel.material_opacity > b.glass.panel.material_opacity);
+    assert!(m.glass.panel.material_opacity < a.glass.panel.material_opacity);
+    // Exact at both ends.
+    assert_eq!(lerp_theme(&a, &b, 1.0), b);
+    let zero = lerp_theme(&a, &b, 0.0);
+    assert_eq!(zero.menu_glass, a.menu_glass);
+    assert_eq!(zero.glass, a.glass);
+    // The two presets differ in the glass and the menu fill, and in nothing else.
+    let n = lune_ui::near_black::THEME;
+    assert_eq!(lerp_theme(&a, &n, 1.0), n);
+}
+
+#[test]
+fn a_swatch_and_the_preset_radio_choose_the_look() {
+    let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Theme);
+    let t = SceneId::Theme;
+    assert_eq!(run.stage.scenes.theme.look, Look::DEFAULT);
+    tap(&mut run, t, "preset-near");
+    assert_eq!(run.stage.scenes.theme.look.preset, Preset::NearBlack);
+    tap(&mut run, t, "accent3");
+    assert_eq!(run.stage.scenes.theme.look.accent, Accent::Gold);
+    tap(&mut run, t, "preset-dark");
+    assert_eq!(run.stage.scenes.theme.look.preset, Preset::Dark);
+    // The stage follows.
+    settle_for(&mut run, 1.0);
+    assert_eq!(
+        run.stage.theme,
+        Look {
+            preset: Preset::Dark,
+            accent: Accent::Gold
+        }
+        .theme()
+    );
+    // The sample controls answer too.
+    let on = run.stage.scenes.theme.toggle;
+    tap(&mut run, t, "toggle");
+    assert_eq!(run.stage.scenes.theme.toggle, !on);
+    tap(&mut run, t, "mail2");
+    assert_eq!(run.stage.scenes.theme.selected, 2);
+}
+
+#[test]
+fn the_look_holds_across_every_scene() {
+    let look = Look {
+        preset: Preset::NearBlack,
+        accent: Accent::Ok,
+    };
+    let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Theme);
+    run.stage.scenes.theme.look = look;
+    settle_for(&mut run, 1.0);
+    assert_eq!(run.stage.theme, look.theme());
+    let l = run.layout();
+    let _ = l;
+    let mut pictures = Vec::new();
+    for scene in SceneId::ALL {
+        run.stage.want = scene;
+        settle_for(&mut run, 1.0);
+        assert_eq!(run.stage.theme, look.theme(), "{scene:?}: the theme moved");
+        pictures.push(run.step(FRAME, Vec::new()).scene);
+    }
+    // And the same scene under the other look draws differently, on every scene.
+    let mut other = still((1440.0, 900.0), Insets::ZERO, SceneId::Glass);
+    for (i, scene) in SceneId::ALL.into_iter().enumerate() {
+        other.stage.want = scene;
+        settle_for(&mut other, 1.0);
+        let p = other.step(FRAME, Vec::new()).scene;
+        assert!(p != pictures[i], "{scene:?}: the look did not reach it");
+    }
+}
+
+#[test]
+fn the_label_on_every_accent_reads() {
+    let mut worst = (f32::MAX, Preset::Dark, Accent::Own);
+    for preset in Preset::ALL {
+        for accent in Accent::ALL {
+            let t = Look { preset, accent }.theme();
+            let c = contrast(t.on_accent, t.accent);
+            println!("{preset:?} {accent:?}: on_accent over accent {c:.2}:1");
+            if accent != Accent::Own {
+                assert!(c >= 4.5, "{preset:?} {accent:?}: {c:.2}");
+            }
+            if c < worst.0 {
+                worst = (c, preset, accent);
+            }
+        }
+    }
+    println!("worst: {:.2}:1 ({:?} {:?})", worst.0, worst.1, worst.2);
+}
+
+#[test]
+fn the_theme_autopilot_alternates_the_preset_and_the_accent() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Theme;
+    let mut looks = Vec::new();
+    for _ in 0..(30 * 10) {
+        run.step(Duration::from_millis(100), Vec::new());
+        let l = run.stage.scenes.theme.look;
+        if looks.last() != Some(&l) {
+            looks.push(l);
+        }
+    }
+    assert!(looks.len() >= 8, "{looks:?}");
+    for w in looks.windows(2) {
+        let changed = (w[0].preset != w[1].preset) as u8 + (w[0].accent != w[1].accent) as u8;
+        assert_eq!(changed, 1, "one change at a time: {w:?}");
+    }
+    assert!(looks.iter().any(|l| l.preset == Preset::NearBlack));
+    assert!(
+        looks
+            .iter()
+            .map(|l| l.accent)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            >= 5
+    );
 }

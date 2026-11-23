@@ -490,15 +490,15 @@ impl Glass {
         ui.progress("track", Rect::new(r.x, bar_y, r.w, 0.0), &opts);
         let elapsed = (self.track * SONG_LEN) as u32;
         let left = SONG_LEN as u32 - elapsed;
-        let mono =
-            |s: String| Spec::plain(s, Style::mono(t.font_s, t.font_s * 1.3, t.fg_secondary));
+        // The app's own numbers are drawn in the UI face.
+        let small = |s: String| Spec::plain(s, Style::ui(t.font_s, t.fg_secondary));
         let p = ui.painter();
         p.text(
-            &mono(format!("{}:{:02}", elapsed / 60, elapsed % 60)),
+            &small(format!("{}:{:02}", elapsed / 60, elapsed % 60)),
             r.x,
             bar_y + 8.0,
         );
-        let rt = mono(format!("-{}:{:02}", left / 60, left % 60));
+        let rt = small(format!("-{}:{:02}", left / 60, left % 60));
         let rw = p.measure(&rt).0;
         p.text(&rt, r.right() - rw, bar_y + 8.0);
 
@@ -609,10 +609,10 @@ impl Glass {
     fn revenue_card(&mut self, ui: &mut Ui<'_>, r: Rect) {
         let t = *ui.theme();
         let (value, sub, tone) = REVENUE[self.revenue];
-        let fmt = |v: f64| format!("${:.1}k", v / 1000.0);
+        let fmt = |v: f64| format!("{:.1}k", v / 1000.0);
         let text = fmt(value);
         let opts = StatOptions {
-            label: "Revenue",
+            label: "Revenue, USD",
             value: &text,
             number: Some((value, &fmt)),
             sub: Some(sub),
@@ -715,7 +715,7 @@ impl Glass {
         for (i, (name, tone, _)) in DRIVES.iter().enumerate() {
             let id = ui.id(("drive", i));
             let v = ui.animate_f32(id, self.storage[i], &Motion::of(Kind::Expand));
-            let used = format!("{:.0} GB", v * 256.0);
+            let used = format!("{:.0}GB", v * 256.0);
             let opts = ProgressOptions {
                 value: Some(v),
                 tone: *tone,

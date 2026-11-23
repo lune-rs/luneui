@@ -15,7 +15,7 @@ use web_demo::shell::WINDOW_USAGE;
 use winit::event_loop::EventLoop;
 
 #[cfg(not(target_family = "wasm"))]
-const USAGE_DUMP: &str = "       web-demo --dump <dir>                      every scene at 1440x900 @2 and 390x844 @3\n       web-demo --dump <dir> --only <scene> [--window <W>x<H>] [--scale <S>] [--at <secs>] [--to <scene> --progress <0-100>] [--motion full|reduced|off] [--still] [--name <file>] [--do <action>]... [--rects]";
+const USAGE_DUMP: &str = "       web-demo --dump <dir>                      every scene at 1440x900 @2 and 390x844 @3\n       web-demo --dump <dir> --only <scene> [--window <W>x<H>] [--scale <S>] [--at <secs>] [--to <scene> --progress <0-100>] [--motion full|reduced|off] [--still] [--name <file>] [--do <action>]... [--rects] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky]";
 
 /// What the command line asks for.
 #[cfg(not(target_family = "wasm"))]
@@ -49,7 +49,7 @@ fn parse(args: impl Iterator<Item = String>) -> Option<Mode> {
                 rest.push(arg);
             }
             "--rects" => dump_args.push(arg),
-            "--motion" => {
+            "--motion" | "--preset" | "--accent" => {
                 let word = args.next()?;
                 dump_args.push(arg.clone());
                 dump_args.push(word.clone());

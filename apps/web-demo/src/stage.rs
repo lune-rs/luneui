@@ -26,6 +26,7 @@ use lune_ui::ui::{FrameConfig, Response, RoveAxis, Sense, Ui, UiStore, WidgetId}
 use lune_ui::widgets::nav_item::{self, NavLook};
 use lune_ui::widgets::{nav_bar, page, tab_bar};
 
+use crate::scenes::theme::{Fx, Look, Preset, accent_share};
 use crate::scenes::{Env, SceneId, Scenes};
 
 /// Below this window width, in logical px, the frame is the phone's: a title bar, the stage card and
@@ -214,6 +215,9 @@ fn opaque(c: Rgba) -> Rgba {
 /// the painter on the `Page` layer.
 fn draw_background(ui: &mut Ui<'_>, win: Rect, t: f64) {
     let th = *ui.theme();
+    // The accent leans two of the lights its way (none for a grey one), and deeper glass dims them.
+    let lean = accent_share(th.accent);
+    let dim = 1.0 - 0.3 * Preset::depth(&th);
     let size = (win.w, win.h);
     // The radii are shares of the reference window (1440x900), scaled by the window's diagonal: a
     // phone's tall window gets round lights, not bands.
@@ -232,15 +236,20 @@ fn draw_background(ui: &mut Ui<'_>, win: Rect, t: f64) {
     for (i, b) in BLOBS.iter().enumerate() {
         let (cx, cy) = blob_centre(i, t, size);
         let breathe = 1.0 + b.breath.0 * (t / b.breath.1 * TAU).sin() as f32;
-        let lean = b.lean.0 * (0.5 + 0.5 * (t / b.lean.1 * TAU + b.phase.0).sin() as f32);
-        let colour = mix(b.hue.of(&th), b.to.of(&th), lean);
+        let lean_to = b.lean.0 * (0.5 + 0.5 * (t / b.lean.1 * TAU + b.phase.0).sin() as f32);
+        let colour = mix(b.hue.of(&th), b.to.of(&th), lean_to);
+        let colour = if i == 0 || i == 3 {
+            mix(colour, th.accent, 0.8 * lean)
+        } else {
+            colour
+        };
         p.radial(
             [win.x + cx, win.y + cy],
             [
                 REFERENCE.0 * b.radius.0 * breathe * reach,
                 REFERENCE.1 * b.radius.1 * breathe * reach,
             ],
-            with_alpha(colour, b.alpha),
+            with_alpha(colour, b.alpha * dim),
             clear(colour),
             Falloff::Gaussian,
         );
@@ -401,6 +410,8 @@ impl Layout {
 /// The alpha of the panels' tint (the theme's panel glass tint): low, so the background glows
 /// through.
 const GLASS_ALPHA: f32 = 0.36;
+/// What the panels' tint gains on the deepest glass (near-black).
+const DEEP_ALPHA: f32 = 0.22;
 
 /// A glass panel over `r`: the theme's glass tint frosted over the background with the noise, a faint
 /// sheen from the top and the theme's popup hairline. `radius` 0 is a bar at the window's edge. It
@@ -413,7 +424,10 @@ fn glass(ui: &mut Ui<'_>, r: Rect, radius: f32) {
     p.frost(
         r,
         radius,
-        premul(with_alpha(t.glass.panel.tint, GLASS_ALPHA)),
+        premul(with_alpha(
+            t.glass.panel.tint,
+            GLASS_ALPHA + DEEP_ALPHA * Preset::depth(&t),
+        )),
         true,
     );
     p.linear(
@@ -524,7 +538,15 @@ fn draw_rail(ui: &mut Ui<'_>, l: &Layout, pos: f32, backend: &str) -> Option<usi
     let b = l.brand();
     let mark = Rect::new(b.x, b.y, 32.0, 32.0);
     let p = ui.painter();
-    p.linear(mark, 8.0, t.data, t.err, 0.9);
+    // The mark follows the accent when it is a colour.
+    let lean = accent_share(t.accent);
+    p.linear(
+        mark,
+        8.0,
+        mix(t.data, t.accent, lean),
+        mix(t.err, mix(t.accent, t.err, 0.35), lean),
+        0.9,
+    );
     let g = lune_ui::icon::glyph(SceneId::Glass.glyph(), 18.0, t.on_accent);
     p.text_centered(&g, mark);
     p.text(
@@ -776,10 +798,14 @@ pub struct Stage {
     pub want: SceneId,
     /// The line the rail's footer shows: the GPU backend.
     pub backend: String,
+    /// The scenes' entry motions (a chart growing in) are over at once: a dump at rest.
+    pub arrived: bool,
     store: UiStore,
     strings: StringTable,
     shortcuts: Shortcuts,
     keymap: Option<Keymap>,
+    /// The run of the theme to the look the Theme scene chose.
+    fx: Fx,
     /// What each scene keeps between frames.
     pub scenes: Scenes,
 }
@@ -799,12 +825,31 @@ impl Stage {
             still: false,
             want: SceneId::Glass,
             backend: String::new(),
+            arrived: false,
             store: UiStore::default(),
             strings: StringTable::default(),
             shortcuts: Shortcuts::default(),
             keymap: None,
+            fx: Fx::new(Look::DEFAULT),
             scenes: Scenes::new(),
         }
+    }
+
+    /// Rests on `look` at once, with no run (a dump, a test).
+    pub fn set_look(&mut self, look: Look) {
+        self.scenes.theme.look = look;
+        self.fx.snap(look);
+        self.theme = look.theme();
+    }
+
+    /// The look the stage is going to or has reached.
+    pub fn look(&self) -> Look {
+        self.fx.look()
+    }
+
+    /// Whether the theme has arrived at its look.
+    pub fn theme_settled(&self) -> bool {
+        self.fx.settled() && self.scenes.theme.look == self.fx.look()
     }
 
     /// Uses `keymap` for the shortcuts from now on (a page asks the browser which machine it is).
@@ -834,6 +879,18 @@ impl Stage {
     /// Runs one frame over `input` and returns what it drew and asked for.
     pub fn frame(&mut self, input: RawInput, text: &mut dyn TextSystem) -> Rendered {
         let animating = self.animating();
+        // The theme follows the look the Theme scene chose, colours only: the push's token and
+        // easing (`moderate`, sine-in-out; `fast` under Reduced; a cut under Off).
+        let want = self.scenes.theme.look;
+        if want != self.fx.look() {
+            let run = self
+                .theme
+                .motion
+                .resolve(&PUSH, self.tier)
+                .map(|r| (r.duration, r.easing));
+            self.fx.retarget(want, input.time, run);
+        }
+        self.theme = self.fx.at(input.time);
         let config = FrameConfig {
             theme: self.theme,
             tier: self.tier,
@@ -861,9 +918,11 @@ impl Stage {
             wide: layout.wide,
             now: clock,
             animating,
+            entering: false,
+            arrived: self.arrived,
         };
         draw_background(&mut ui, win, clock.as_secs_f64());
-        if animating {
+        if animating || !(self.fx.settled() && self.scenes.theme.look == self.fx.look()) {
             ui.request_busy_frame(win);
         }
 
@@ -928,7 +987,18 @@ impl Stage {
                 )
             };
             draw_page(&mut ui, &mut self.scenes, &layout, under, under_show, &env);
-            draw_page(&mut ui, &mut self.scenes, &layout, over, over_show, &env);
+            let entering = Env {
+                entering: true,
+                ..env
+            };
+            draw_page(
+                &mut ui,
+                &mut self.scenes,
+                &layout,
+                over,
+                over_show,
+                &entering,
+            );
         }
         let _ = t;
         let (scene, out) = ui.finish();
