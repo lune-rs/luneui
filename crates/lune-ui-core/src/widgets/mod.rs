@@ -4,6 +4,7 @@
 pub mod badge;
 pub mod banner;
 pub mod bar_chart;
+pub mod battery;
 pub mod bottom_sheet;
 pub mod button;
 pub mod callout;

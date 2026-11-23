@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 113 |
+| done | 114 |
 | external | 4 |
-| **total** | **119** |
+| **total** | **120** |
 
 ## core
 
@@ -139,6 +139,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
 | [data.bar-chart](data/bar-chart.md) | Stacked bar chart | done | wane | Hourly stacked columns, two series, three grid lines |
+| [data.battery](data/battery.md) | Battery | done | any | A battery glyph: a rounded outline with a nub on its right end, a fill to the level coloured by the level, and a bolt while charging |
 | [data.kanban-board](data/kanban-board.md) | Kanban board | done | lunegit | Horizontal board of columns with card lists, card drag between columns by manual pointer capture, and an error state for a corrupt board |
 | [data.kv-list](data/kv-list.md) | Key-value list | done | wane | Aligned key and value pairs: facts, paths, ids, figures |
 | [data.lane-graph](data/lane-graph.md) | Lane graph (row) | done | lunegit | One row of a lane graph: connection curves between lanes, vertical lane lines, and a node dot in its lane; generalised from commits to app data |

@@ -635,6 +635,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.battery"></a>`pub fn battery(&mut self, key: impl Hash, rect: Rect, opts: &BatteryOptions<'_>)`
+
+  A battery under `key` in `rect`. The node is a `Progress` named `opts.label` (or the
+  toolkit's `luneui.battery.name`) with the level as a percentage, described as charging
+  while it charges.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.button"></a>`pub fn button(&mut self, key: impl Hash, rect: Rect, text: &str, kind: ButtonKind) -> Response`
 
   A button under `key` in `rect`. `clicked` on a pointer click, Enter or Space while focused,

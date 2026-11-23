@@ -13,6 +13,7 @@ mod a11y;
 mod badge;
 mod banner;
 mod bar_chart;
+mod battery;
 mod bottom_sheet;
 mod button;
 mod callout;
@@ -206,6 +207,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &pull_to_refresh::PAGE,
     &ring_gauge::PAGE,
     &sparkline::PAGE,
+    &battery::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

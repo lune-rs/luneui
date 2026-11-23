@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-104 modules, 1162 items. Left out and counted: 3679 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5299 items of the omitted impls, 1408 items of the trait impls shown as one line, 2466 synthetic impls.
+105 modules, 1164 items. Left out and counted: 3688 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5312 items of the omitted impls, 1410 items of the trait impls shown as one line, 2472 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -49,6 +49,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::badge`](lune-ui-core/widgets/badge.md) | 8 |
 | [`lune_ui_core::widgets::banner`](lune-ui-core/widgets/banner.md) | 15 |
 | [`lune_ui_core::widgets::bar_chart`](lune-ui-core/widgets/bar_chart.md) | 18 |
+| [`lune_ui_core::widgets::battery`](lune-ui-core/widgets/battery.md) | 2 |
 | [`lune_ui_core::widgets::bottom_sheet`](lune-ui-core/widgets/bottom_sheet.md) | 3 |
 | [`lune_ui_core::widgets::button`](lune-ui-core/widgets/button.md) | 20 |
 | [`lune_ui_core::widgets::callout`](lune-ui-core/widgets/callout.md) | 13 |
@@ -263,6 +264,7 @@ Every top-level item of the four owning crates, by name.
 - [`BarColumn`](lune-ui-core/widgets/bar_chart.md#struct.BarColumn) - struct, `lune_ui_core::widgets::bar_chart`
 - [`Bars`](lune-ui-core/widgets/scroll_area.md#enum.Bars) - enum, `lune_ui_core::widgets::scroll_area`
 - [`BarSeries`](lune-ui-core/widgets/bar_chart.md#struct.BarSeries) - struct, `lune_ui_core::widgets::bar_chart`
+- [`BatteryOptions`](lune-ui-core/widgets/battery.md#struct.BatteryOptions) - struct, `lune_ui_core::widgets::battery`
 - [`bell`](lune-ui-core/widgets/shine.md#fn.bell) - function, `lune_ui_core::widgets::shine`
 - [`Binding`](lune-ui-core/shortcuts.md#struct.Binding) - struct, `lune_ui_core::shortcuts`
 - [`Blur`](lune-ui-wgpu/blur.md#struct.Blur) - struct, `lune_ui_wgpu::blur`
@@ -778,6 +780,7 @@ Every top-level item of the four owning crates, by name.
 - [`LEFT`](lune-ui-core/widgets/lane_graph.md#constant.LEFT) - constant, `lune_ui_core::widgets::lane_graph`
 - [`LEGEND_GAP`](lune-ui-core/widgets/bar_chart.md#constant.LEGEND_GAP) - constant, `lune_ui_core::widgets::bar_chart`
 - [`Lerp`](lune-ui-core/motion.md#trait.Lerp) - trait, `lune_ui_core::motion`
+- [`level_color`](lune-ui-core/widgets/battery.md#fn.level_color) - function, `lune_ui_core::widgets::battery`
 - [`LINE`](lune-ui-core/widgets/badge.md#constant.LINE) - constant, `lune_ui_core::widgets::badge`
 - [`LINE`](lune-ui-core/widgets/callout.md#constant.LINE) - constant, `lune_ui_core::widgets::callout`
 - [`LINE`](lune-ui-core/widgets/code_editor.md#constant.LINE) - constant, `lune_ui_core::widgets::code_editor`

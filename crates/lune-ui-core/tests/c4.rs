@@ -3985,6 +3985,7 @@ mod m10 {
     type Rgb = [u8; 3];
 
     // What `extras` draws beyond the controls and `more`.
+    use lune_ui_core::widgets::battery::BatteryOptions;
     use lune_ui_core::widgets::bottom_sheet::BottomSheet;
     use lune_ui_core::widgets::callout::CalloutOptions;
     use lune_ui_core::widgets::caption::CaptionOptions;
@@ -4558,6 +4559,18 @@ mod m10 {
                         &SparklineOptions::new(&up, [90, 160, 250, 255], "History")
                             .with_mirror(&down, [240, 170, 80, 255])
                             .with_style(style),
+                    );
+                }
+                // A battery, charging and not: the outline, the fill colours and the bolt from the theme.
+                for (at, level, charging) in [
+                    (350.0, 0.8, true),
+                    (420.0, 0.15, false),
+                    (490.0, 0.05, false),
+                ] {
+                    ui.battery(
+                        ("battery", at as u32),
+                        Rect::new(at, 485.0, 50.0, 24.0),
+                        &BatteryOptions::new(level, "Charge").with_charging(charging),
                     );
                 }
                 // A tree with a nested level: the guides (`tree_guide`) and a mark.
