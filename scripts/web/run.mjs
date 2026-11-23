@@ -359,6 +359,107 @@ function checkBrowserPath(p) {
   return real;
 }
 
+// ---------------------------------------------------------------------------------------------
+// --smoke: the web text bridge (D429). The page's search field is clicked, typed into, composed into,
+// tabbed out of and clicked away from; each step is judged on the demo's own `probe` lines.
+
+/** The text the demo's `probe field` lines last printed, `{:?}`-decoded for the plain ASCII and CJK this check types. */
+function lastField(lines) {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^probe field "(.*)"$/.exec(lines[i]);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+async function smokeTextInput(page, context, lines, waitLine) {
+  const count = (re) => lines.filter((l) => re.test(l)).length;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const expectField = async (want, what) => {
+    await waitLine(new RegExp(`^probe field "${want}"$`), 5_000, `\`probe field "${want}"\` (${what})`);
+    await sleep(400); // a doubled character would show as a later line
+    const got = lastField(lines);
+    if (got !== want) throw new Error(`${what}: the field is ${JSON.stringify(got)}, wanted ${JSON.stringify(want)}`);
+  };
+  const stays = async (what) => {
+    const before = lastField(lines);
+    await sleep(500);
+    if (lastField(lines) !== before) throw new Error(`${what}: the field changed to ${JSON.stringify(lastField(lines))}`);
+  };
+  const active = () => page.evaluate(() => document.activeElement?.getAttribute("data-luneui") ?? document.activeElement?.tagName);
+
+  // One bridge element; an attach adds one and its drop removes it (so a second attach does not double keys).
+  const counts = await waitLine(/^probe text_input_elements /, 5_000, "`probe text_input_elements`");
+  if (counts !== "probe text_input_elements 1 2 1") throw new Error(`${counts} (wanted 1 2 1: one bridge, two while a second is attached, one after its drop)`);
+
+  const target = (await waitLine(/^probe search -?\d+,-?\d+$/, 5_000, "`probe search`")).slice("probe search ".length).split(",").map(Number);
+  const box = await page.locator("#luneui").boundingBox();
+  if (!box) throw new Error("the page has no canvas to click");
+  const at = { x: box.x + target[0] / SCALE, y: box.y + target[1] / SCALE };
+
+  const focusedBefore = count(/^probe focused /);
+  await page.mouse.click(at.x, at.y);
+  await waitLine(/^probe ime Enabled$/, 5_000, "`probe ime Enabled` after the click in the field");
+  await sleep(500);
+  if ((await active()) !== "text-input") throw new Error(`after the click the focused element is ${await active()}, not the text bridge`);
+  const first = count(/^probe focused /) - focusedBefore;
+  if (first > 1) throw new Error(`${first} Focused changes reached the translator for one click (at most 1)`);
+  // A second click in the field: the canvas takes the focus on press and gives it back on release.
+  const before2 = count(/^probe focused /);
+  await page.mouse.click(at.x, at.y);
+  await sleep(500);
+  const second = count(/^probe focused /) - before2;
+  if (second > 1) throw new Error(`${second} Focused changes reached the translator for the second click (at most 1)`);
+  if ((await active()) !== "text-input") throw new Error(`after the second click the focused element is ${await active()}`);
+  process.stdout.write(`web-run: field focus ok (${first} then ${second} Focused change(s) for two clicks)\n`);
+
+  await page.keyboard.type("hello");
+  await expectField("hello", "typing `hello`");
+  await page.keyboard.press("Backspace");
+  await expectField("hell", "Backspace");
+  process.stdout.write("web-run: typing and Backspace ok (hello, hell)\n");
+
+  // An input method's composition, then its commit.
+  const cdp = await context.newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", { text: "にほん", selectionStart: 3, selectionEnd: 3 });
+  await waitLine(/^probe ime Preedit\("にほん", Some\(\(9, 9\)\)\)$/, 5_000, "the preedit `にほん` (cursor 9 bytes)");
+  await cdp.send("Input.insertText", { text: "日本" });
+  await expectField("hell日本", "the composition's commit");
+  process.stdout.write("web-run: composition ok (preedit にほん, commit 日本)\n");
+
+  // A shortcut reaches the toolkit: select all, then Backspace empties the field. (The browser's
+  // keymap is the PC one, so Ctrl+A on every OS.)
+  await page.keyboard.press("Control+A");
+  await sleep(300);
+  await page.keyboard.press("Backspace");
+  await expectField("", "select all then Backspace");
+  process.stdout.write("web-run: shortcut ok (Ctrl+A, Backspace empties the field)\n");
+
+  // Tab leaves the field: typing after it changes nothing.
+  await page.keyboard.type("ab");
+  await expectField("ab", "typing `ab`");
+  await page.keyboard.press("Tab");
+  await sleep(500);
+  if ((await active()) === "text-input") throw new Error("after Tab the text bridge still holds the focus");
+  await page.keyboard.type("xyz");
+  await stays("typing after Tab");
+  if (lastField(lines) !== "ab") throw new Error(`typing after Tab changed the field to ${JSON.stringify(lastField(lines))}`);
+  process.stdout.write("web-run: Tab out ok (typing after it changes nothing)\n");
+
+  // A click on the page outside the canvas is a lost focus: typing after it changes nothing.
+  await page.mouse.click(at.x, at.y);
+  await sleep(500);
+  if ((await active()) !== "text-input") throw new Error(`the re-click left ${await active()} focused`);
+  const lostBefore = count(/^probe focused \d+ false$/);
+  await page.mouse.click(8, 8);
+  await sleep(500);
+  if (count(/^probe focused \d+ false$/) !== lostBefore + 1) throw new Error("a click outside the canvas was not reported as one lost focus");
+  await page.keyboard.type("xyz");
+  await stays("typing after a click outside");
+  if (lastField(lines) !== "ab") throw new Error(`typing after a click outside changed the field to ${JSON.stringify(lastField(lines))}`);
+  process.stdout.write("web-run: click outside ok (one lost focus, typing after it changes nothing)\n");
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.selfTest) {
@@ -374,7 +475,7 @@ async function main() {
   const origin = `http://${SERVER_HOST}:${port}`;
   const params = [];
   if (opts.demo) params.push("demo", "touches");
-  if (opts.smoke) params.push("probe", "probe-clipboard");
+  if (opts.smoke) params.push("probe", "probe-clipboard", "probe-text-input");
   if (opts.gl) params.push("backend=gl");
   const url = `${origin}/index.html${params.length ? "?" + params.join("&") : ""}`;
 
@@ -535,6 +636,8 @@ async function main() {
       if (inPage !== written) throw new Error("navigator.clipboard.readText() in the page does not return the written text");
       process.stdout.write("web-run: clipboard round trip ok (the text is the probe's own)\n");
     }
+
+    if (opts.smoke) await smokeTextInput(page, context, lines, waitLine);
 
     if (opts.demo) {
       const marks = [

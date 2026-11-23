@@ -1425,6 +1425,8 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "raw-window-handle",
  "tray-icon",
+ "wasm-bindgen",
+ "web-sys",
  "window-vibrancy",
  "windows-sys 0.61.2",
  "winit",

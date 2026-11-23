@@ -149,7 +149,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-7 modules, 31 items. Left out and counted: 183 blanket impls, 169 items of the omitted impls, 41 items of the trait impls shown as one line, 90 synthetic impls.
+8 modules, 32 items. Left out and counted: 194 blanket impls, 178 items of the omitted impls, 42 items of the trait impls shown as one line, 96 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -160,14 +160,15 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 5 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
+| [`lune_ui_platform::web`](lune-ui-platform/web.md) | 1 |
 
 ### `lune-ui` (`lune_ui`)
 
-7 modules, 156 re-exports shown as links.
+7 modules, 157 re-exports shown as links.
 
 | Module | Re-exports |
 | --- | --- |
-| [`lune_ui`](lune-ui/index.md) | 39 |
+| [`lune_ui`](lune-ui/index.md) | 40 |
 | [`lune_ui::access`](lune-ui/access.md) | 19 |
 | [`lune_ui::desktop`](lune-ui/desktop.md) | 20 |
 | [`lune_ui::input`](lune-ui/input.md) | 32 |
@@ -1284,6 +1285,7 @@ Every top-level item of the four owning crates, by name.
 - [`text_system_contract`](lune-ui-core/testing.md#fn.text_system_contract) - function, `lune_ui_core::testing`
 - [`TextCache`](lune-ui-wgpu/text_cache.md#struct.TextCache) - struct, `lune_ui_wgpu::text_cache`
 - [`TextEdit`](lune-ui-core/text_edit.md#struct.TextEdit) - struct, `lune_ui_core::text_edit`
+- [`TextInput`](lune-ui-platform/web.md#struct.TextInput) - struct, `lune_ui_platform::web`
 - [`TextItem`](lune-ui-core/scene.md#struct.TextItem) - struct, `lune_ui_core::scene`
 - [`TextKey`](lune-ui-core/text.md#struct.TextKey) - struct, `lune_ui_core::text`
 - [`TextRaster`](lune-ui-wgpu/text_cache.md#struct.TextRaster) - struct, `lune_ui_wgpu::text_cache`

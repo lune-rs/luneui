@@ -100,3 +100,14 @@ pub(super) fn spawn_setup(
 pub(super) fn spawn(event_loop: EventLoop<()>, app: super::App) {
     event_loop.spawn_app(app);
 }
+
+/// How many text bridge elements the page holds now (`probe text_input_elements`).
+pub(super) fn text_input_elements() -> u32 {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| {
+            d.query_selector_all("textarea[data-luneui=\"text-input\"]")
+                .ok()
+        })
+        .map_or(0, |list| list.length())
+}

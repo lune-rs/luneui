@@ -17,6 +17,11 @@
 #                   It also runs the clipboard round trip (`?probe-clipboard`, the browser's clipboard-read and
 #                   clipboard-write granted for the server's origin): `probe clipboard` must equal `probe
 #                   clipboard_write`, and `navigator.clipboard.readText()` in the page must return that text.
+#                   It also drives the web text bridge (D429; the query gains `probe-text-input`): the page's search
+#                   field is clicked twice (at most one `probe focused` line for both), `hello` is typed
+#                   (exactly `hello`), Backspace gives `hell`, a CDP composition then commit gives `hell日本`,
+#                   Ctrl+A and Backspace empty it, then typing after Tab and after a click outside the canvas
+#                   changes nothing; a second bridge attached and dropped leaves one element (`1 2 1`).
 #   --no-build      serve what target/web/<package>/ holds.
 #   --keep-serving  print the URL and wait for Ctrl-C, for a person; no browser is launched.
 #   --self-test     the server's path rules (`..`, encoded and absolute paths answer 404) and the blank-shot check

@@ -10,6 +10,7 @@ mod macos;
 pub(crate) mod mobile;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod other;
+pub(crate) mod web;
 #[cfg(target_os = "windows")]
 mod windows;
 

@@ -39,12 +39,13 @@ use lune_ui::frame::FrameRenderer;
 #[cfg(not(target_family = "wasm"))]
 use lune_ui::gpu;
 use lune_ui::gpu::Gpu;
-use lune_ui::input::{Event, OutputState, Translator, control_flow};
+use lune_ui::input::{Event, ImePlan, OutputState, Translator, control_flow, ime_area_physical};
 use lune_ui::layout::Insets;
 use lune_ui::mobile::{self, KeyboardInset, SceneAttach};
 use lune_ui::scene::FrameParams;
 use lune_ui::surface::{Acquired, SurfaceOptions, WindowSurface};
 use lune_ui::text::TextCache;
+use lune_ui::web::TextInput;
 
 use showcase::{Demo, Extras, Layout, MarkResult, Play};
 
@@ -205,6 +206,10 @@ pub struct Options {
     /// On frame 2 write `luneui-probe-<pid>` to the clipboard, on frame 4 read it back, and print
     /// `probe clipboard_write <text>` and `probe clipboard <text>` (or `unavailable`).
     pub probe_clipboard: bool,
+    /// After frame 3 attach a second text bridge, drop it, and print `probe text_input_elements
+    /// <before> <during> <after>` (browser only): the count of the page's bridge elements, which
+    /// shows an attach adds one and a drop removes it.
+    pub probe_text_input: bool,
     /// Play the showcase tour hands-free through the frame's input events (`playback`), printing
     /// `demo mark <name> ok` or `demo mark <name> FAIL <reason>` at each mark and
     /// `demo end <ok>/<total>` at the end; live input still works while it plays.
@@ -230,6 +235,7 @@ impl Default for Options {
             pause: true,
             focus_field: false,
             probe_clipboard: false,
+            probe_text_input: false,
             demo: false,
             repeat: false,
             touches: false,
@@ -240,7 +246,7 @@ impl Default for Options {
 }
 
 /// The window flags' usage line, printed when an Android launch-arguments file does not parse.
-pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--backend gl|auto] [--demo [--loop | --exit-after-demo] [--touches]]";
+pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--probe-text-input] [--backend gl|auto] [--demo [--loop | --exit-after-demo] [--touches]]";
 
 /// The options the window flags ask for, or `None` for an argument that is not understood or a
 /// combination that makes no sense. The command line's `--dump` is not a window flag: the binary
@@ -256,6 +262,7 @@ pub fn parse_window_args(args: impl Iterator<Item = String>) -> Option<Options> 
             "--draw-while-suspended" => options.pause = false,
             "--focus-field" => options.focus_field = true,
             "--probe-clipboard" => options.probe_clipboard = true,
+            "--probe-text-input" => options.probe_text_input = true,
             "--demo" => options.demo = true,
             "--loop" => options.repeat = true,
             "--touches" => options.touches = true,
@@ -476,7 +483,8 @@ fn probe_changed(seen: &mut String, key: &str, value: String) {
 /// positions are physical pixels, the unit `adb shell input` takes: `probe tab_item <index>
 /// <x>,<y>` for each tab bar item's centre, `probe pager <x0>,<y>,<x1>` a swipe line across the
 /// Cards pager's card, from the right of it to the left (the next card); then `probe tab <index>`,
-/// `probe page <n>` and `probe field <text>` (the search field's text, `{:?}` quoted).
+/// `probe page <n>` and `probe field <text>` (the search field's text, `{:?}` quoted); `probe search
+/// <x>,<y>` is the search field's centre.
 fn probe_touch_targets(
     seen: &mut ProbeSeen,
     layout: &Layout,
@@ -491,7 +499,12 @@ fn probe_touch_targets(
     }
     let (x0, y) = layout.card_point(0.85, 0.5);
     let (x1, _) = layout.card_point(0.15, 0.5);
-    targets.push_str(&format!("pager {},{},{}", px(x0), px(y), px(x1)));
+    targets.push_str(&format!("pager {},{},{}\n", px(x0), px(y), px(x1)));
+    let (sx, sy) = (
+        layout.search.x + layout.search.w / 2.0,
+        layout.search.y + layout.search.h / 2.0,
+    );
+    targets.push_str(&format!("search {},{}", px(sx), px(sy)));
     if seen.targets != targets {
         for line in targets.lines() {
             say!("probe {line}");
@@ -517,6 +530,8 @@ struct Shown {
     translator: Translator,
     output: OutputState,
     keyboard: KeyboardInset,
+    /// The text bridge (a browser's hidden textarea; inert elsewhere).
+    text_input: TextInput,
     access: access::Access,
 }
 
@@ -573,7 +588,10 @@ struct App {
     clipboard: Clipboard,
     /// The keyboard inset the last frame saw, to print it when it changes.
     last_keyboard: Insets,
-    /// Set by the keyboard observer when the inset moves; `about_to_wait` turns it into a frame.
+    /// Focus changes that reached the translator (`probe focused`).
+    focus_changes: u32,
+    /// Set by the keyboard observer when the inset moves, and by the text bridge when it has
+    /// something to give; `about_to_wait` turns it into a frame.
     keyboard_changed: Rc<Cell<bool>>,
     /// Between `suspended` and `resumed`: nothing is acquired, drawn or presented.
     paused: bool,
@@ -652,10 +670,20 @@ async fn open_gpu(
     // The observer runs inside the OS's notification, which can fall inside a frame: it only wakes
     // the app. A request made inside `RedrawRequested` is lost while iOS is idle, so the flag
     // `about_to_wait` reads is the one that counts.
+    let text_changed = keyboard_changed.clone();
     let keyboard = {
         let waker = window.clone();
         KeyboardInset::new(&window, move || {
             keyboard_changed.set(true);
+            waker.request_redraw();
+        })
+    };
+    // The text bridge wakes the app the same way: it runs inside a browser event.
+    let text_input = {
+        let waker = window.clone();
+        let changed = text_changed;
+        TextInput::attach(&window, move || {
+            changed.set(true);
             waker.request_redraw();
         })
     };
@@ -681,6 +709,7 @@ async fn open_gpu(
         translator,
         output: OutputState::new(),
         keyboard,
+        text_input,
         access,
     })
 }
@@ -746,6 +775,7 @@ impl App {
             translator,
             output,
             keyboard,
+            text_input,
             access,
         } = shown;
         // No surface (between `suspended` and `resumed`, or after a rebuild that failed): nothing
@@ -779,6 +809,20 @@ impl App {
         translator.scale_factor(scale);
         let s = scale as f32;
         access.drain(translator);
+        // The text bridge's focus and composition are the window's, as winit's own would be.
+        if let Some(focus) = text_input.take_focus() {
+            self.focus_changes += 1;
+            if self.options.probe {
+                probe_line("focused", format!("{} {focus}", self.focus_changes));
+            }
+            translator.focused(focus);
+        }
+        for ime in text_input.take() {
+            if self.options.probe {
+                probe_line("ime", format!("{ime:?}"));
+            }
+            translator.ime(&ime);
+        }
         let mut input = translator.take(self.start.elapsed());
         if self.options.probe_clipboard {
             for event in &input.events {
@@ -829,6 +873,20 @@ impl App {
         let tour_ended = self
             .tour
             .report(&rendered.marks, rendered.restarted, rendered.finished);
+        // What the output will set on the window, for the text bridge first (a browser's winit
+        // window has no input method of its own).
+        match output.plan_output(&out).ime {
+            ImePlan::Area { enable, area } => {
+                if enable {
+                    text_input.set_allowed(true);
+                }
+                if let Some(physical) = ime_area_physical(area, s) {
+                    text_input.set_area(physical);
+                }
+            }
+            ImePlan::Disable => text_input.set_allowed(false),
+            ImePlan::Keep => {}
+        }
         if output.apply(window, &out, s) {
             event_loop.exit();
         }
@@ -844,6 +902,16 @@ impl App {
         surface.present(gpu, target);
         gpu.end_frame(text);
         self.presented += 1;
+        #[cfg(target_family = "wasm")]
+        if self.options.probe_text_input && self.presented == 3 {
+            // A second bridge adds its element and its drop takes it away again.
+            let before = web::text_input_elements();
+            let second = TextInput::attach(window, || {});
+            let during = web::text_input_elements();
+            drop(second);
+            let after = web::text_input_elements();
+            probe_line("text_input_elements", format!("{before} {during} {after}"));
+        }
         let probe = self.options.probe;
         if probe || self.presented <= self.options.log_frames {
             say!("presented {} {}x{}", self.presented, size.0, size.1);
@@ -1013,7 +1081,17 @@ impl ApplicationHandler for App {
             self.want_frame = true;
         }
         if let Some(shown) = &mut self.shown {
-            shown.translator.window_event(&event);
+            // A focus event reaches the translator through the text bridge, which tells the focus
+            // moving between the canvas and its textarea from a loss; elsewhere it passes as is.
+            if shown.text_input.passes(&event) {
+                if let WindowEvent::Focused(focus) = &event {
+                    self.focus_changes += 1;
+                    if self.options.probe {
+                        probe_line("focused", format!("{} {focus}", self.focus_changes));
+                    }
+                }
+                shown.translator.window_event(&event);
+            }
             shown.access.window_event(&shown.window, &event);
         }
         match event {
@@ -1087,6 +1165,7 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
             let _ = wake.send_event(());
         }),
         last_keyboard: Insets::ZERO,
+        focus_changes: 0,
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
         #[cfg(target_family = "wasm")]
