@@ -21,7 +21,7 @@ Aligned key and value pairs: facts, paths, ids, figures. Named by Wane's UI mock
 
 ## Existing code
 
-`crates/lune-ui-core/src/widgets/kv_list.rs` (`KvOptions`, `Ui::kv_list`) and `crates/lune-ui-core/src/widgets/selectable.rs` (`Ui::selectable_text`), M6. Gallery page `apps/gallery/src/pages/kv_list.rs`; tests `crates/lune-ui-core/tests/widget_kv_list.rs`. Design source (not code moved): Wane `docs/ui/mocks/css/components.css` (data.kv-list); no lune-ui source.
+`crates/lune-ui-core/src/widgets/kv_list.rs` (`KvOptions`, `KvRow`, `Ui::kv_list`, `Ui::kv_rows`) and `crates/lune-ui-core/src/widgets/selectable.rs` (`Ui::selectable_text`), M6. Gallery page `apps/gallery/src/pages/kv_list.rs`; tests `crates/lune-ui-core/tests/widget_kv_list.rs`. Design source (not code moved): Wane `docs/ui/mocks/css/components.css` (data.kv-list); no lune-ui source.
 
 ## Spec
 
@@ -82,11 +82,12 @@ n/a — static (Wane: "Static"); a value change follows the app's data without m
 - `kv-list-stacked` (new): stacked two-column variant, settled.
 - `kv-list-wrap` (new): a wrapped value over two lines, settled.
 - `kv-list-selected` (new): the commit value selected whole, focused by a press, settled.
+- `kv-list-swatches` (new, [D438]): four rows, two plain (flush) and two with a swatch (indented); the key column takes the indent, settled.
 - `kv-list-copy` (new, [D275]): `KvOptions::copy` on, the pointer on the second row, whose copy control shows at its right end; the others stay hidden.
 
 ### Painter primitives
 
-- Existing: text, clip-rect (the ellipsis). [R crates/lune-ui-core/src/paint.rs:274,167]
+- Existing: text, clip-rect (the ellipsis). [R crates/lune-ui-core/src/paint.rs:274,167] `fill` (a row's swatch, [D438]).
 - New: none.
 
 ### Acceptance
@@ -97,6 +98,7 @@ n/a — static (Wane: "Static"); a value change follows the app's data without m
 - Semantic node: `group` per pair; key and value `static-text`.
 - Tests, bullet by bullet. `crates/lune-ui-core/tests/widget_kv_list.rs`: behaviour `a_drag_across_a_value_then_copy_writes_the_substring`, `a_press_on_an_elided_value_selects_it_whole_and_copy_writes_all_of_it`, `a_value_is_not_a_tab_stop`, `a_press_outside_a_value_does_nothing`, `the_selection_draws_while_focused_and_a_focus_loss_clears_it`; pixel probes `at_scale_2_the_row_is_48_px_and_the_gap_32_px`, `the_key_column_is_the_longest_keys_measured_width_and_the_gap_is_16`, `rows_are_24_high_with_the_text_on_a_20_px_line_2_px_down`, `key_and_value_colours_and_the_mono_option`; `a_long_value_is_elided_to_the_value_column_and_a_key_never_is`; node `each_pair_is_a_group_over_a_key_and_a_selectable_value`; no motion `the_list_is_static_and_settles`; disabled `a_value_focused_then_disabled_takes_its_keys_and_changes_nothing`.
 
+- Swatched rows ([D438]), tests in `widget_kv_list.rs`: `a_swatched_key_starts_after_the_swatch_and_a_plain_one_stays_flush`, `the_value_column_moves_right_only_when_an_indented_key_is_the_widest`, `the_swatch_is_decoration_with_no_node_of_its_own`, `rows_with_no_swatch_draw_and_register_exactly_what_the_pairs_do_in_every_mode`, `a_stacked_cell_puts_the_swatch_before_its_key_line`, `a_wrap_row_with_a_swatch_keeps_the_swatch_on_its_first_line_and_wraps_at_the_wider_column`; in `kv_list.rs`: `height_is_what_swatched_rows_draw`.
 - Copy control ([D275]), tests in `widget_kv_list.rs`: `copy_off_draws_and_registers_what_it_did`, `a_hover_shows_one_control_on_its_own_row`, `a_click_writes_that_rows_value_and_no_other`, `the_name_carries_the_key_and_the_control_is_a_button`, `tab_reaches_a_hidden_control_and_shows_it`, `disabled_the_controls_are_inert`, `the_value_gives_up_the_controls_room`.
 
 ### Build
@@ -107,7 +109,7 @@ n/a — static (Wane: "Static"); a value change follows the app's data without m
 
 ## Open questions
 
-- None. The selection look (`text_selection`) and a toolkit component are settled by [D125]. The copy control is an option, off by default ([D275]). Column sizing measures the longest key with `Painter::measure`.
+- None. The selection look (`text_selection`) and a toolkit component are settled by [D125]. The copy control is an option, off by default ([D275]). Column sizing measures the longest key with `Painter::measure`. A row can carry a colour swatch before its key (`KvRow`, `Ui::kv_rows`): the bar chart's legend square, then an 8 px gap, then the key; only swatched rows are indented, and the key column is the widest indent plus key ([D438]).
 
 ## Notes for the planner
 

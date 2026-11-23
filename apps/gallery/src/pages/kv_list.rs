@@ -5,7 +5,7 @@ use lune_ui::input::Modifiers;
 use lune_ui::motion::MotionTier;
 use lune_ui::paint::Rect;
 use lune_ui::ui::Ui;
-use lune_ui::widgets::kv_list::{KvMode, KvOptions};
+use lune_ui::widgets::kv_list::{KvMode, KvOptions, KvRow};
 
 use super::{card, heading};
 use crate::page::Stage;
@@ -153,6 +153,25 @@ fn copy_section(ui: &mut Ui<'_>, x: f32, y: f32) -> f32 {
     20.0 + ui.kv_list("copy", Rect::new(x, y + 20.0, 560.0, 0.0), &SHORT, &opts)
 }
 
+/// Rows with a colour swatch before the key, as the legend of a chart: the plain rows stay flush
+/// and the key column takes the indent (D438).
+fn swatch_section(ui: &mut Ui<'_>, x: f32, y: f32) -> f32 {
+    heading(ui, "SWATCHES: A LEGEND BEFORE THE KEY", x, y);
+    let t = *ui.theme();
+    let rows = [
+        KvRow::new("Usage", "36%"),
+        KvRow::new("Idle", "64%"),
+        KvRow::new("E-cores", "12%").with_swatch(t.data),
+        KvRow::new("P-cores", "24%").with_swatch(t.warn),
+    ];
+    20.0 + ui.kv_rows(
+        "swatches",
+        Rect::new(x, y + 20.0, 280.0, 0.0),
+        &rows,
+        &KvOptions::default(),
+    )
+}
+
 fn all() -> Box<dyn PageState> {
     Box::new(Sections::new(&[
         default_section,
@@ -168,6 +187,10 @@ fn default() -> Box<dyn PageState> {
 
 fn copying() -> Box<dyn PageState> {
     Box::new(Sections::new(&[copy_section]))
+}
+
+fn swatches() -> Box<dyn PageState> {
+    Box::new(Sections::new(&[swatch_section]))
 }
 
 fn stacked() -> Box<dyn PageState> {
@@ -210,6 +233,16 @@ const SCENES: &[UiScene] = &[
         scale: 2.0,
         tier: MotionTier::Full,
         state: wrap,
+        script: &[],
+        capture_ms: 0,
+        expect: Expect::Settled,
+    },
+    // Two plain rows and two with a swatch: the swatched keys are indented, the others flush.
+    UiScene {
+        id: "kv-list-swatches",
+        scale: 2.0,
+        tier: MotionTier::Full,
+        state: swatches,
         script: &[],
         capture_ms: 0,
         expect: Expect::Settled,

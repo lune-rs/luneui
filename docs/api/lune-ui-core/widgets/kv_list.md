@@ -13,6 +13,12 @@ Stacked: two columns of cells, the key (11 on a 16 px line, tertiary) over the v
 a 20 px line), 12 px between rows. Values are [selectable](selectable.md): the keys and
 the rest of a row take no input, except the optional [copy control](kv_list.md#structfield.KvOptions.copy).
 
+A row can carry a colour swatch before its key ([`KvRow`](kv_list.md#struct.KvRow), [`Ui::kv_rows`](../ui.md#method.Ui.kv_rows)): a legend square
+the size of the bar chart's, then a gap, then the key. Only rows with a swatch are indented, so
+a plain row stays flush; the key column is as wide as the widest indent plus key. The swatch is
+decoration: no node and no hit region. A list of plain pairs ([`Ui::kv_list`](../ui.md#method.Ui.kv_list)) is the same
+layout with no swatch.
+
 Source: `crates/lune-ui-core/src/widgets/kv_list.rs:1`
 
 ## Structs
@@ -30,7 +36,7 @@ pub struct KvOptions {
 
 What [`Ui::kv_list`](../ui.md#method.Ui.kv_list) is given besides its rect and pairs.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:47`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:102`
 
 **Fields**
 
@@ -56,6 +62,59 @@ Source: `crates/lune-ui-core/src/widgets/kv_list.rs:47`
 - `impl PartialEq for KvOptions`
 - `impl StructuralPartialEq for KvOptions`
 
+<a id="struct.KvRow"></a>
+### Struct `KvRow`
+
+```rust
+#[non_exhaustive]
+pub struct KvRow<'a> {
+    pub key: &'a str,
+    pub value: &'a str,
+    pub swatch: Option<Rgba>,
+}
+```
+
+One row of [`Ui::kv_rows`](../ui.md#method.Ui.kv_rows): a key, a value and an optional colour swatch before the key.
+
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:58`
+
+**Fields**
+
+- <a id="structfield.KvRow.key"></a>`pub key: &'a str`
+
+  The key text.
+
+- <a id="structfield.KvRow.value"></a>`pub value: &'a str`
+
+  The value text.
+
+- <a id="structfield.KvRow.swatch"></a>`pub swatch: Option<Rgba>`
+
+  The colour of a legend square before the key; `None` draws none and does not indent the row.
+
+**Methods and associated items**
+
+`impl<'a> KvRow<'a>`
+
+- <a id="method.KvRow.new"></a>`pub const fn new(key: &'a str, value: &'a str) -> Self`
+  `#[must_use]`
+
+  A row of `key` and `value` with no swatch.
+
+- <a id="method.KvRow.with_swatch"></a>`pub const fn with_swatch(self, color: Rgba) -> Self`
+  `#[must_use]`
+
+  This row with a swatch of `color` before its key.
+
+**Trait implementations**
+
+- `impl<'a> Clone for KvRow<'a>`
+- `impl<'a> Copy for KvRow<'a>`
+- `impl<'a> Debug for KvRow<'a>`
+- `impl<'a> Eq for KvRow<'a>`
+- `impl<'a> PartialEq for KvRow<'a>`
+- `impl<'a> StructuralPartialEq for KvRow<'a>`
+
 ## Enums
 
 <a id="enum.KvMode"></a>
@@ -71,7 +130,7 @@ pub enum KvMode {
 
 How the pairs are laid out.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:35`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:45`
 
 **Variants**
 
@@ -108,7 +167,7 @@ pub const COPY_FEEDBACK_MS: u64 = 1_500;
 
 How long the check mark shows after a row's copy, in milliseconds of app time.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:58`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:113`
 
 <a id="constant.GAP"></a>
 ### Constant `GAP`
@@ -119,7 +178,7 @@ pub const GAP: f32 = 16.0;
 
 Between the key column and the value column, and between the two columns of the stacked mode.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:24`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:32`
 
 <a id="constant.LINE"></a>
 ### Constant `LINE`
@@ -130,7 +189,7 @@ pub const LINE: f32 = 20.0;
 
 A text line of the default and wrap modes.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:26`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:34`
 
 <a id="constant.ROW"></a>
 ### Constant `ROW`
@@ -141,7 +200,7 @@ pub const ROW: f32 = 24.0;
 
 A row's height in the default mode.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:22`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:30`
 
 <a id="constant.STACKED_KEY_LINE"></a>
 ### Constant `STACKED_KEY_LINE`
@@ -152,7 +211,7 @@ pub const STACKED_KEY_LINE: f32 = 16.0;
 
 The stacked key's line and the gap between its rows.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:30`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:38`
 
 <a id="constant.STACKED_ROW_GAP"></a>
 ### Constant `STACKED_ROW_GAP`
@@ -161,7 +220,18 @@ Source: `crates/lune-ui-core/src/widgets/kv_list.rs:30`
 pub const STACKED_ROW_GAP: f32 = 12.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:31`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:39`
+
+<a id="constant.SWATCH_GAP"></a>
+### Constant `SWATCH_GAP`
+
+```rust
+pub const SWATCH_GAP: f32 = 8.0;
+```
+
+Between a row's swatch and its key.
+
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:41`
 
 <a id="constant.WRAP_PAD"></a>
 ### Constant `WRAP_PAD`
@@ -172,5 +242,5 @@ pub const WRAP_PAD: f32 = 2.0;
 
 A wrapped value's padding above and below.
 
-Source: `crates/lune-ui-core/src/widgets/kv_list.rs:28`
+Source: `crates/lune-ui-core/src/widgets/kv_list.rs:36`
 

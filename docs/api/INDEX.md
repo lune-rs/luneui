@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-105 modules, 1164 items. Left out and counted: 3688 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5312 items of the omitted impls, 1410 items of the trait impls shown as one line, 2472 synthetic impls.
+105 modules, 1166 items. Left out and counted: 3697 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5325 items of the omitted impls, 1413 items of the trait impls shown as one line, 2478 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -69,7 +69,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::form_field`](lune-ui-core/widgets/form_field.md) | 6 |
 | [`lune_ui_core::widgets::icon_rail`](lune-ui-core/widgets/icon_rail.md) | 20 |
 | [`lune_ui_core::widgets::kanban_board`](lune-ui-core/widgets/kanban_board.md) | 48 |
-| [`lune_ui_core::widgets::kv_list`](lune-ui-core/widgets/kv_list.md) | 9 |
+| [`lune_ui_core::widgets::kv_list`](lune-ui-core/widgets/kv_list.md) | 11 |
 | [`lune_ui_core::widgets::label`](lune-ui-core/widgets/label.md) | 2 |
 | [`lune_ui_core::widgets::lane_graph`](lune-ui-core/widgets/lane_graph.md) | 13 |
 | [`lune_ui_core::widgets::list_row`](lune-ui-core/widgets/list_row.md) | 10 |
@@ -753,6 +753,7 @@ Every top-level item of the four owning crates, by name.
 - [`knob_rect`](lune-ui-core/widgets/slider.md#fn.knob_rect) - function, `lune_ui_core::widgets::slider`
 - [`KvMode`](lune-ui-core/widgets/kv_list.md#enum.KvMode) - enum, `lune_ui_core::widgets::kv_list`
 - [`KvOptions`](lune-ui-core/widgets/kv_list.md#struct.KvOptions) - struct, `lune_ui_core::widgets::kv_list`
+- [`KvRow`](lune-ui-core/widgets/kv_list.md#struct.KvRow) - struct, `lune_ui_core::widgets::kv_list`
 - [`label`](lune-ui-core/widgets/label.md#fn.label) - function, `lune_ui_core::widgets::label`
 - [`LABEL_GAP`](lune-ui-core/widgets/toolbar.md#constant.LABEL_GAP) - constant, `lune_ui_core::widgets::toolbar`
 - [`LABEL_GAP`](lune-ui-core/widgets/tree_view.md#constant.LABEL_GAP) - constant, `lune_ui_core::widgets::tree_view`
@@ -1262,6 +1263,7 @@ Every top-level item of the four owning crates, by name.
 - [`SWAP_OPACITY`](lune-ui-core/widgets/page.md#constant.SWAP_OPACITY) - constant, `lune_ui_core::widgets::page`
 - [`SWAP_SLIDE`](lune-ui-core/widgets/page.md#constant.SWAP_SLIDE) - constant, `lune_ui_core::widgets::page`
 - [`SWATCH`](lune-ui-core/widgets/bar_chart.md#constant.SWATCH) - constant, `lune_ui_core::widgets::bar_chart`
+- [`SWATCH_GAP`](lune-ui-core/widgets/kv_list.md#constant.SWATCH_GAP) - constant, `lune_ui_core::widgets::kv_list`
 - [`SWATCH_RADIUS`](lune-ui-core/widgets/bar_chart.md#constant.SWATCH_RADIUS) - constant, `lune_ui_core::widgets::bar_chart`
 - [`SWEEP_PASSES`](lune-ui-core/widgets/tab_strip.md#constant.SWEEP_PASSES) - constant, `lune_ui_core::widgets::tab_strip`
 - [`sweeps`](lune-ui-core/widgets/pie_chart.md#fn.sweeps) - function, `lune_ui_core::widgets::pie_chart`

@@ -926,6 +926,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   (its height is ignored). Returns the height drawn. Each pair is a `Group` named by its key
   over a `StaticText` key and a selectable `StaticText` value named by the key.
 
+- <a id="method.Ui.kv_rows"></a>`pub fn kv_rows(&mut self, key: impl Hash, rect: Rect, rows: &[KvRow<'_>], opts: &KvOptions) -> f32`
+
+  [`Ui::kv_list`](ui.md#method.Ui.kv_list) over rows, each of which can carry a colour swatch before its key (a legend
+  for a chart): a square of the bar chart's legend size, a gap, then the key. Only rows with
+  a swatch are indented; the key column is as wide as the widest indent plus key. The swatch
+  is drawn only, with no node and no hit region. Rows with no swatch draw, register and
+  return exactly what [`Ui::kv_list`](ui.md#method.Ui.kv_list) does for the same pairs. Returns the height drawn.
+
 `impl Ui<'_>`
 
 - <a id="method.Ui.label"></a>`pub fn label(&mut self, key: impl Hash, at: (f32, f32), text: &str, role: LabelRole) -> (f32, f32)`
