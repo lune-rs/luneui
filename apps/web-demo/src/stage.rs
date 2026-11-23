@@ -562,10 +562,12 @@ fn draw_bars(ui: &mut Ui<'_>, l: &Layout, pos: f32) -> Option<usize> {
     let t = *ui.theme();
     glass(ui, l.title_bar, 0.0);
     glass(ui, l.tab_bar, 0.0);
-    // The title cross-fades with the push (opacity only): the two names share the row.
+    // The title fades through on the push's clock (opacity only): the old name goes out over the
+    // first half, the new one comes in over the second, so the two never show together.
     let lo = pos.floor();
     let f = pos - lo;
-    for (index, alpha) in [(lo as usize, 1.0 - f), (lo as usize + 1, f)] {
+    let (old, new) = title_opacities(f);
+    for (index, alpha) in [(lo as usize, old), (lo as usize + 1, new)] {
         if alpha > 0.0 {
             let name = SceneId::from_index(index).name();
             let colour = with_alpha(t.fg_bright, alpha);
@@ -656,6 +658,15 @@ impl Show {
 /// The old page's opacity at `f` of a Full push (its eased progress): gone by the middle.
 pub fn old_opacity(f: f32) -> f32 {
     1.0 - Easing::QuadOut.eval(f * 2.0)
+}
+
+/// The narrow title's opacities at `f`: the old name out over the first half (quad-in), the new one in
+/// over the second (quad-out). Neither is above 0.2 while the other is not 0 (a fade-through).
+pub fn title_opacities(f: f32) -> (f32, f32) {
+    (
+        1.0 - Easing::QuadIn.eval(f * 2.0),
+        Easing::QuadOut.eval(f * 2.0 - 1.0),
+    )
 }
 
 /// The push's scrim (a share of the theme's `dialog_backdrop`) at `f`: 0 at both ends, `SCRIM_PEAK` a

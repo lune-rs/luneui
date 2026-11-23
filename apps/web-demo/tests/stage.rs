@@ -11,7 +11,7 @@ use lune_ui::scene::Scene;
 use web_demo::scenes::SceneId;
 use web_demo::stage::{
     BLOBS, Headless, Layout, NARROW_BELOW, RAIL_W, STILL_AT, blob_centre, blob_speed_bound,
-    old_opacity, scrim, shortest_period,
+    old_opacity, scrim, shortest_period, title_opacities,
 };
 
 const FRAME: Duration = Duration::from_micros(16_667);
@@ -352,4 +352,22 @@ fn the_old_page_is_gone_by_the_middle_and_the_scrim_leaves_no_trace_at_the_end()
     assert!(scrim(1.0 / 3.0) > 0.99, "the scrim reaches its peak");
     // At 90 % of the time the eased progress is 0.976: under 1 % of the backdrop's alpha.
     assert!(scrim(0.976) < 0.01, "{}", scrim(0.976));
+}
+
+#[test]
+fn the_title_fades_through_and_never_shows_two_names_together() {
+    for f in [0.45_f32, 0.5, 0.6] {
+        let (old, new) = title_opacities(f);
+        println!("title opacities at {f}: old {old:.3}, new {new:.3}");
+    }
+    for i in 0..=1000 {
+        let (old, new) = title_opacities(i as f32 / 1000.0);
+        assert!(
+            old.min(new) == 0.0 || old.max(new) <= 0.2 || old.min(new) < 0.05,
+            "{i}: {old} {new}"
+        );
+        assert!(old.min(new) <= 0.0, "both visible at {i}: {old} {new}");
+    }
+    assert_eq!(title_opacities(0.0), (1.0, 0.0));
+    assert_eq!(title_opacities(1.0), (0.0, 1.0));
 }
