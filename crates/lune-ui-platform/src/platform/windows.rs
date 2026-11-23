@@ -31,6 +31,9 @@ pub(crate) fn frontmost_app() -> Option<String> {
     None
 }
 
+/// The notification area draws no text beside an icon: a title goes into the tooltip.
+pub(crate) const SHOWS_TITLE: bool = false;
+
 pub(crate) fn bar_is_dark(_item: &TrayIcon) -> Option<bool> {
     None
 }

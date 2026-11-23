@@ -6,6 +6,11 @@
 //! window's own surface is resized and acquired from (the `render.surface` stage: no test reaches a
 //! real `WindowSurface`). It uses no clipboard.
 //!
+//! A title check follows the placing: where the OS draws a title beside the item (macOS) it sets one,
+//! waits for the item's width to grow and clears it again, waiting for the width to return; where it
+//! draws none (Windows) it checks that the title folds into the tooltip and that a picture with text
+//! in it can be set (the recipe of `popover::text_icon`), then puts the item's own picture back.
+//!
 //! It prints each fact it measured. Exit 0 only if the surface stage ran, the frames drew, the
 //! frontmost app stayed the same and teardown finished; exit 1 if any of those failed; exit 2 (with a line saying why) if
 //! there is no GUI session to run in.
@@ -24,7 +29,10 @@ use lune_ui::popover::frontmost_app;
 use lune_ui::surface::Acquired;
 use lune_ui::tray::{TrayButton, TrayError, TrayEvent, TrayState};
 
-use crate::popover::{AppEvent, TrayHost, event_loop, route_tray_events};
+use lune_ui::lunegit_dark::THEME;
+use lune_ui::text::GlyphRasterizer;
+
+use crate::popover::{AppEvent, TrayHost, event_loop, route_tray_events, text_icon, tone_color};
 use crate::window::{Shown, setup};
 
 /// The most the whole run may take.
@@ -42,6 +50,14 @@ const HIDE_WITHIN: Duration = Duration::from_secs(2);
 enum Step {
     /// Wait for the OS to place the item.
     Place,
+    /// Give the item a title (or, where the OS draws none, check what stands in for it).
+    Title,
+    /// Wait for the item to follow the title: its rect widens.
+    TitleOn,
+    /// Clear the title.
+    TitleClear,
+    /// Wait for the rect to return to its width.
+    TitleOff,
     /// Resize the hidden window's surface and acquire from it.
     Resize,
     /// Open the surface and let it draw.
@@ -67,6 +83,9 @@ struct Facts {
     resized: Option<String>,
     teardown: bool,
     failure: Option<String>,
+    /// The item's width before its title, with it, and after clearing it (logical or physical px as
+    /// the OS reports the rect); `None` where the title is folded into the tooltip.
+    title_widths: Option<[f64; 3]>,
 }
 
 struct Smoke {
@@ -216,6 +235,113 @@ impl Smoke {
         self.facts.resized = Some(format!("{old:?} -> {new:?}: {answer}"));
     }
 
+    /// The item's width as the OS reports it now.
+    fn width(&self) -> Option<f64> {
+        self.host.as_ref()?.tray().rect().map(|r| r.w)
+    }
+
+    /// Where the OS draws a title beside the item: set one and wait for the width to follow. Where
+    /// it draws none: the title goes into the tooltip, and an image with text in it stands in.
+    fn title_step(&mut self) {
+        let Some(host) = &self.host else {
+            return;
+        };
+        let tray = host.tray();
+        if tray.shows_title() {
+            let before = self.width();
+            match tray.set_title("CPU 36%") {
+                Ok(()) => {
+                    self.facts.title_widths = Some([before.unwrap_or(0.0), 0.0, 0.0]);
+                    self.go(Step::TitleOn);
+                }
+                Err(e) => {
+                    self.fail(format!("set_title: {e}"));
+                    self.go(Step::Resize);
+                }
+            }
+            return;
+        }
+        let side = host.icon_side();
+        let color = tone_color(host.tone(), &THEME);
+        let shown = self.shown.as_mut();
+        let icon = shown.and_then(|s| {
+            text_icon(
+                &mut s.r.text,
+                &mut GlyphRasterizer::new(),
+                "36",
+                side,
+                color,
+            )
+        });
+        let result = (|| -> Result<(), String> {
+            let host = self.host.as_ref().ok_or("no tray")?;
+            let tray = host.tray();
+            tray.set_title("CPU 36%")
+                .map_err(|e| format!("set_title: {e}"))?;
+            let icon = icon.ok_or("no text icon (no text drawn)")?;
+            tray.set_image(icon)
+                .map_err(|e| format!("set_image: {e}"))?;
+            host.restore_image().map_err(|e| format!("restore: {e}"))?;
+            tray.set_title("")
+                .map_err(|e| format!("set_title(\"\"): {e}"))?;
+            Ok(())
+        })();
+        match result {
+            Ok(()) => println!("smoke: title folded into the tooltip; icon text set"),
+            Err(why) => self.fail(why),
+        }
+        self.go(Step::Resize);
+    }
+
+    /// Waits up to [`PLACE_WITHIN`] for the item to follow its title: with the title it must be at
+    /// least 1 px wider than before, and cleared it must be back within 1 px of that width. A
+    /// miss fails the run. Prints the widths either way.
+    fn title_wait(&mut self, waited: Duration) {
+        let Some(widths) = self.facts.title_widths else {
+            self.go(Step::Resize);
+            return;
+        };
+        let on = self.step == Step::TitleOn;
+        let now = self
+            .width()
+            .unwrap_or(if on { widths[0] } else { widths[1] });
+        let done = if on {
+            now - widths[0] >= 1.0
+        } else {
+            (now - widths[0]).abs() <= 1.0
+        };
+        if !done && waited < PLACE_WITHIN {
+            return;
+        }
+        let mut next = widths;
+        if on {
+            next[1] = now;
+            println!("smoke: title shown, width {} -> {}", widths[0], now);
+            if !done {
+                self.fail(format!(
+                    "the title did not widen the item within {} s ({} -> {now})",
+                    PLACE_WITHIN.as_secs(),
+                    widths[0]
+                ));
+            }
+            self.facts.title_widths = Some(next);
+            self.go(Step::TitleClear);
+        } else {
+            next[2] = now;
+            println!("smoke: title cleared, width {} -> {}", widths[1], now);
+            if !done {
+                self.fail(format!(
+                    "the item did not return to its width within {} s ({} -> {now}, placed at {})",
+                    PLACE_WITHIN.as_secs(),
+                    widths[1],
+                    widths[0]
+                ));
+            }
+            self.facts.title_widths = Some(next);
+            self.go(Step::Resize);
+        }
+    }
+
     fn popover_frames(&self) -> u64 {
         self.host
             .as_ref()
@@ -251,10 +377,23 @@ impl Smoke {
                         h.sync(event_loop, TrayState::Serving);
                     }
                     self.facts.placed = true;
-                    self.go(Step::Resize);
+                    self.go(Step::Title);
                 } else if waited > PLACE_WITHIN {
                     self.fail("the tray item was not placed by the OS".into());
                     self.go(Step::Teardown);
+                }
+            }
+            Step::Title => self.title_step(),
+            Step::TitleOn | Step::TitleOff => self.title_wait(waited),
+            Step::TitleClear => {
+                let Some(host) = &self.host else {
+                    return;
+                };
+                if let Err(e) = host.tray().set_title("") {
+                    self.fail(format!("set_title(\"\"): {e}"));
+                    self.go(Step::Resize);
+                } else {
+                    self.go(Step::TitleOff);
                 }
             }
             Step::Resize => {

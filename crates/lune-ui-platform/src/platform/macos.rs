@@ -146,6 +146,9 @@ pub(crate) fn frontmost_app() -> Option<String> {
     Some(app.localizedName()?.to_string())
 }
 
+/// The status item draws a title of its own beside the image.
+pub(crate) const SHOWS_TITLE: bool = true;
+
 pub(crate) fn bar_is_dark(item: &TrayIcon) -> Option<bool> {
     let mtm = MainThreadMarker::new()?;
     let button = item.ns_status_item()?.button(mtm)?;

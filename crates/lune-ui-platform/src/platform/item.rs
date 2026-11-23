@@ -32,6 +32,12 @@ impl TrayItem {
         self.0.set_tooltip(Some(tooltip)).map_err(os)
     }
 
+    /// The status item's own title (macOS). `""` clears it: `tray-icon` clears only on `Some`.
+    pub(crate) fn set_title(&self, title: &str) -> Result<(), TrayError> {
+        self.0.set_title(Some(title));
+        Ok(())
+    }
+
     pub(crate) fn rect(&self) -> Option<TrayRect> {
         self.0.rect().map(tray_rect)
     }

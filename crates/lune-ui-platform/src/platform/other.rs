@@ -55,6 +55,9 @@ pub(crate) fn frontmost_app() -> Option<String> {
     None
 }
 
+/// No item can exist here, so no title is shown.
+pub(crate) const SHOWS_TITLE: bool = false;
+
 /// Never built: [`TrayItem::new`] refuses, so the methods have no value to run on.
 #[derive(Debug)]
 pub(crate) enum TrayItem {}
@@ -69,6 +72,10 @@ impl TrayItem {
     }
 
     pub(crate) fn set_tooltip(&self, _tooltip: &str) -> Result<(), TrayError> {
+        match *self {}
+    }
+
+    pub(crate) fn set_title(&self, _title: &str) -> Result<(), TrayError> {
         match *self {}
     }
 
