@@ -317,10 +317,17 @@ fn a_capacity_past_the_clamp_draws_the_clamped_slots_and_a_drawable_fill() {
 }
 
 #[test]
-fn a_capacity_of_one_slot_draws_no_line_and_a_zero_graph_draws_nothing() {
+fn a_capacity_of_one_slot_draws_the_newest_sample_flat_and_a_zero_graph_draws_nothing() {
     let up = [1.0, 2.0, 3.0];
     let scene = draw(&SparklineOptions::new(&up, UP, "").with_capacity(1));
-    assert!(scene.layers[0].geometry.strokes.is_empty());
+    let xs = stroke_xs(&scene, UP);
+    assert!(!xs.is_empty(), "the one sample in view shows as a segment");
+    let (graph_x, graph_w) = (RECT.x + INSET, RECT.w - 2.0 * INSET);
+    let (lo, hi) = (
+        xs.iter().copied().fold(f32::MAX, f32::min),
+        xs.iter().copied().fold(f32::MIN, f32::max),
+    );
+    assert!(close(lo, graph_x, 0.01) && close(hi, graph_x + graph_w, 0.01));
     for rect in [
         Rect::new(0.0, 0.0, 8.0, 40.0),
         Rect::new(0.0, 0.0, 100.0, 8.0),
@@ -331,6 +338,59 @@ fn a_capacity_of_one_slot_draws_no_line_and_a_zero_graph_draws_nothing() {
         assert!(scene.layers[0].geometry.under.is_empty(), "{rect:?}");
         assert!(scene.layers[0].geometry.strokes.is_empty(), "{rect:?}");
     }
+}
+
+#[test]
+fn one_sample_in_view_draws_a_flat_segment_across_its_slot_with_its_fill_at_any_capacity() {
+    let (graph_x, graph_w) = (RECT.x + INSET, RECT.w - 2.0 * INSET);
+    let (graph_y, graph_h) = (RECT.y + INSET, RECT.h - 2.0 * INSET);
+    let base = graph_y + graph_h;
+    let up = [0.5];
+    for capacity in [0, 1, 10, 60, 1024] {
+        let o = SparklineOptions::new(&up, UP, "")
+            .with_max(1.0)
+            .with_capacity(capacity);
+        let scene = draw(&o);
+        let slots = capacity.max(1) as f32;
+        let pitch = graph_w / slots;
+        let (xs, ys) = (stroke_xs(&scene, UP), stroke_ys(&scene, UP));
+        assert!(!xs.is_empty(), "capacity {capacity}: a segment is drawn");
+        let (lo, hi) = (
+            xs.iter().copied().fold(f32::MAX, f32::min),
+            xs.iter().copied().fold(f32::MIN, f32::max),
+        );
+        // The newest sample's slot is the last one: its span ends at the graph's right edge.
+        assert!(
+            close(hi, graph_x + graph_w, 0.01) && close(lo, graph_x + graph_w - pitch, 0.01),
+            "capacity {capacity}: {lo}..{hi} vs the last slot"
+        );
+        // Flat: the line sits at half the graph's height above the baseline (a 1 px stroke and its
+        // antialiasing fringe reach 1.5 px either side of its centre).
+        let mid = base - 0.5 * graph_h;
+        assert!(
+            ys.iter().all(|&y| close(y, mid, 1.6)),
+            "capacity {capacity}: {ys:?} vs {mid}"
+        );
+        assert!(
+            !shapes_of(&scene, with_alpha(UP, 0.25)).is_empty(),
+            "capacity {capacity}: its fill is drawn"
+        );
+    }
+    // The mirrored series with one sample shows too, below the baseline.
+    let down = [0.5];
+    let o = SparklineOptions::new(&up, UP, "")
+        .with_mirror(&down, DOWN)
+        .with_max(1.0)
+        .with_capacity(60);
+    let scene = draw(&o);
+    assert!(!stroke_xs(&scene, UP).is_empty() && !stroke_xs(&scene, DOWN).is_empty());
+    let middle = graph_y + graph_h / 2.0;
+    assert!(stroke_ys(&scene, UP).iter().all(|&y| y < middle));
+    assert!(stroke_ys(&scene, DOWN).iter().all(|&y| y > middle));
+    // A single sample of 0 draws nothing but the baseline, as an all-zero history does.
+    let zero = [0.0];
+    let scene = draw(&SparklineOptions::new(&zero, UP, "").with_capacity(10));
+    assert!(stroke_xs(&scene, UP).is_empty());
 }
 
 #[test]

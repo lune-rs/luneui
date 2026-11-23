@@ -256,7 +256,25 @@ impl Ui<'_> {
                     .enumerate()
                     .map(|(i, &v)| [centre(first + i), base + sign * v * reach])
                     .collect();
-                if line.len() < 2 || series.iter().all(|&v| v <= 0.0) {
+                if series.iter().all(|&v| v <= 0.0) {
+                    continue;
+                }
+                if let [point] = line[..] {
+                    // One sample has no neighbour to join: it is a flat segment across its slot,
+                    // with the fill under it, so a history's first reading shows.
+                    let (left, right) = (
+                        (point[0] - pitch / 2.0).max(graph.x),
+                        (point[0] + pitch / 2.0).min(graph.right()),
+                    );
+                    let top = point[1].min(base);
+                    let height = (base - point[1]).abs();
+                    let fill = Rect::new(left, top.min(base), right - left, height);
+                    p.fill(fill, 0.0, with_alpha(color, FILL_ALPHA));
+                    let flat = [[left, point[1]], [right, point[1]]];
+                    p.stroke(&flat, false, StrokeStyle::solid(color, LINE));
+                    continue;
+                }
+                if line.len() < 2 {
                     continue;
                 }
                 let mut area = line.clone();
