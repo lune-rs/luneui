@@ -20,7 +20,7 @@
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/100%25-Rust-f0743e?style=flat-square&logo=rust&logoColor=white">
   <img alt="Edition 2024" src="https://img.shields.io/badge/edition-2024-7c9cff?style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.7.7-3c4255?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.7.8-3c4255?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3c4255?style=flat-square">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-c9a227?style=flat-square">
 </p>
