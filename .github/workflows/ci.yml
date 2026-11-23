@@ -80,3 +80,21 @@ jobs:
 
       - name: compatibility (API)
         run: scripts/check-compat.sh --api-only
+
+  # The library crates for the browser (D425): a compile and lint check, no run.
+  web:
+    name: web (wasm32)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: toolchain
+        run: |
+          rustup toolchain install
+          rustup target add wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: clippy (wasm32)
+        run: cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui --lib --bins --locked --target wasm32-unknown-unknown -- -D warnings

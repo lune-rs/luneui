@@ -50,6 +50,9 @@ struct Inner {
 
 impl Cache {
     /// Creates a new `Cache` with the given `device`.
+    // On the browser target wgpu's objects are neither `Send` nor `Sync`; the `Arc` is one thread's shared
+    // handle there, as it is natively.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub(crate) fn new(device: &Device) -> Self {
         let sampler = device.create_sampler(&SamplerDescriptor {
             label: Some("glyphon sampler"),

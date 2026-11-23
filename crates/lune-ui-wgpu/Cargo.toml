@@ -19,6 +19,9 @@ bytemuck = { version = "1", features = ["derive"] }
 png = "0.18"
 unicode-segmentation = "1"
 
+[target.'cfg(target_family = "wasm")'.dependencies]
+wgpu = { version = "30", features = ["webgl"] }
+
 [dev-dependencies]
 pollster = "0.4"
 
