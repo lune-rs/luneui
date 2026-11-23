@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-105 modules, 1166 items. Left out and counted: 3697 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5325 items of the omitted impls, 1413 items of the trait impls shown as one line, 2478 synthetic impls.
+105 modules, 1171 items. Left out and counted: 3706 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5338 items of the omitted impls, 1417 items of the trait impls shown as one line, 2484 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -108,7 +108,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::steps`](lune-ui-core/widgets/steps.md) | 10 |
 | [`lune_ui_core::widgets::swipe_actions`](lune-ui-core/widgets/swipe_actions.md) | 4 |
 | [`lune_ui_core::widgets::tab_bar`](lune-ui-core/widgets/tab_bar.md) | 3 |
-| [`lune_ui_core::widgets::tab_strip`](lune-ui-core/widgets/tab_strip.md) | 24 |
+| [`lune_ui_core::widgets::tab_strip`](lune-ui-core/widgets/tab_strip.md) | 29 |
 | [`lune_ui_core::widgets::table`](lune-ui-core/widgets/table.md) | 18 |
 | [`lune_ui_core::widgets::text_area`](lune-ui-core/widgets/text_area.md) | 1 |
 | [`lune_ui_core::widgets::text_lines`](lune-ui-core/widgets/text_lines.md) | 3 |
@@ -425,6 +425,10 @@ Every top-level item of the four owning crates, by name.
 - [`COUNT_GAP`](lune-ui-core/widgets/kanban_board.md#constant.COUNT_GAP) - constant, `lune_ui_core::widgets::kanban_board`
 - [`cubic_bezier`](lune-ui-core/motion.md#fn.cubic_bezier) - function, `lune_ui_core::motion`
 - [`cubic_bezier`](lune-ui-core/widgets/menu.md#fn.cubic_bezier) - function, `lune_ui_core::widgets::menu`
+- [`CUE_DOT`](lune-ui-core/widgets/tab_strip.md#constant.CUE_DOT) - constant, `lune_ui_core::widgets::tab_strip`
+- [`CUE_GAP`](lune-ui-core/widgets/tab_strip.md#constant.CUE_GAP) - constant, `lune_ui_core::widgets::tab_strip`
+- [`CUE_POP`](lune-ui-core/widgets/tab_strip.md#constant.CUE_POP) - constant, `lune_ui_core::widgets::tab_strip`
+- [`CUE_POP_SCALE`](lune-ui-core/widgets/tab_strip.md#constant.CUE_POP_SCALE) - constant, `lune_ui_core::widgets::tab_strip`
 - [`cursor_icon`](lune-ui-winit/input.md#fn.cursor_icon) - function, `lune_ui_winit::input`
 - [`CursorIcon`](lune-ui-core/input.md#enum.CursorIcon) - enum, `lune_ui_core::input`
 - [`CustomDraw`](lune-ui-wgpu/custom.md#trait.CustomDraw) - trait, `lune_ui_wgpu::custom`
@@ -1282,6 +1286,7 @@ Every top-level item of the four owning crates, by name.
 - [`TableResponse`](lune-ui-core/widgets/table.md#struct.TableResponse) - struct, `lune_ui_core::widgets::table`
 - [`TableState`](lune-ui-core/widgets/table.md#struct.TableState) - struct, `lune_ui_core::widgets::table`
 - [`TabSpan`](lune-ui-core/chrome.md#struct.TabSpan) - struct, `lune_ui_core::chrome`
+- [`TabStripExtras`](lune-ui-core/widgets/tab_strip.md#struct.TabStripExtras) - struct, `lune_ui_core::widgets::tab_strip`
 - [`TabStripOptions`](lune-ui-core/widgets/tab_strip.md#struct.TabStripOptions) - struct, `lune_ui_core::widgets::tab_strip`
 - [`TabStripResponse`](lune-ui-core/widgets/tab_strip.md#struct.TabStripResponse) - struct, `lune_ui_core::widgets::tab_strip`
 - [`TAG_PAD_X`](lune-ui-core/widgets/kanban_board.md#constant.TAG_PAD_X) - constant, `lune_ui_core::widgets::kanban_board`

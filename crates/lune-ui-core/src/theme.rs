@@ -176,6 +176,19 @@ impl Theme {
         self
     }
 
+    /// The attention colour: what asks to be looked at (a tab with something new, a count
+    /// badge's fill). It is a role, not a field of its own, and reads [`Theme::warn`], so a theme
+    /// file sets it through `FileStatusModified` together with that colour.
+    pub fn attention(&self) -> Rgba {
+        self.warn
+    }
+
+    /// The colour of text or a glyph drawn on [`Theme::attention`]: reads
+    /// [`Theme::status_warning_dark`] (4.96:1 on the preset's attention colour).
+    pub fn on_attention(&self) -> Rgba {
+        self.status_warning_dark
+    }
+
     /// The colour a theme file's colour `key` sets in this theme (the first field it sets, when
     /// it sets more than one), or `None` for a key that is not in [`COLOR_KEYS`].
     pub fn color_key(&self, key: &str) -> Option<Rgba> {
@@ -416,6 +429,37 @@ pub mod near_black;
 #[cfg(test)]
 mod tests {
     use super::lunegit_dark::{CARD, PANEL, THEME, WINDOW};
+
+    /// WCAG relative luminance of an opaque colour.
+    fn luminance(c: [u8; 4]) -> f64 {
+        let lin = |v: u8| {
+            let v = f64::from(v) / 255.0;
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+    }
+
+    fn contrast(a: [u8; 4], b: [u8; 4]) -> f64 {
+        let (a, b) = (luminance(a), luminance(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    #[test]
+    fn the_attention_role_reads_the_warning_colours_and_is_legible() {
+        for theme in [THEME, super::near_black::THEME] {
+            assert_eq!(theme.attention(), theme.warn);
+            assert_eq!(theme.on_attention(), theme.status_warning_dark);
+            let ratio = contrast(theme.on_attention(), theme.attention());
+            assert!(ratio >= 4.5, "contrast {ratio}");
+        }
+        // Known answer for the instrument: black on white is 21:1.
+        let known = contrast([0, 0, 0, 255], [255, 255, 255, 255]);
+        assert!((known - 21.0).abs() < 1e-9, "{known}");
+    }
 
     #[test]
     fn the_preset_glass_is_the_old_constants() {

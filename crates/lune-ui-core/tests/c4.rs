@@ -3974,7 +3974,7 @@ mod m10 {
     use lune_ui_core::widgets::slider::SliderOptions;
     use lune_ui_core::widgets::sparkline::{SparkStyle, SparklineOptions};
     use lune_ui_core::widgets::spinner::SpinnerOptions;
-    use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripOptions};
+    use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripExtras, TabStripOptions};
     use lune_ui_core::widgets::toast::{ToastKind, ToastSpec, Toasts};
     use lune_ui_core::widgets::tone::Tone;
     use lune_ui_core::widgets::tree_view::{
@@ -4331,7 +4331,8 @@ mod m10 {
                 progress: None,
             },
         ];
-        ui.tab_strip(
+        // The second tab asks for attention: its dot is in `attention()`, which the theme sets.
+        ui.tab_strip_with(
             "strip",
             Rect::new(300.0, 170.0, 400.0, 32.0),
             &tabs,
@@ -4344,6 +4345,7 @@ mod m10 {
                 name: "Documents",
                 header_tint: None,
             },
+            &TabStripExtras::new().with_attention(&[TabKey(2)]),
         );
         ui.filter_bar(
             "filter",

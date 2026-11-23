@@ -14,15 +14,16 @@ use lune_ui_core::motion::{Cadence, MotionTier, Token, conformance};
 use lune_ui_core::paint::{Rect, polyline_length};
 use lune_ui_core::scene::{Scene, StrokeVertex};
 use lune_ui_core::shortcuts::{Binding, Chord, Scope};
-use lune_ui_core::testing::UiHarness;
-use lune_ui_core::text::{Spec, Style};
+use lune_ui_core::testing::{FakeText, UiHarness};
+use lune_ui_core::text::{Spec, Style, TextSystem, elide};
 use lune_ui_core::theme::DARK;
 use lune_ui_core::ui::{Sense, Ui, WidgetId};
 use lune_ui_core::widgets::progress::breath_opacity;
 use lune_ui_core::widgets::shine;
 use lune_ui_core::widgets::tab_strip::{
-    BRUSH, BusyCue, CONTENT_SWAP, FOCUS, GAP, HOVER, MAX_WIDTH, MIN_WIDTH, SLIDE as NOTCH_SLIDE,
-    Tab, TabEvent, TabKey, TabStripOptions, TabStripResponse,
+    BRUSH, BusyCue, CONTENT_SWAP, CUE_DOT, CUE_GAP, CUE_POP, CUE_POP_SCALE, FOCUS, GAP, HOVER,
+    MAX_WIDTH, MIN_WIDTH, SLIDE as NOTCH_SLIDE, Tab, TabEvent, TabKey, TabStripExtras,
+    TabStripOptions, TabStripResponse,
 };
 use lune_ui_core::widgets::tone::Tone;
 
@@ -53,6 +54,8 @@ struct App {
     tint: bool,
     /// The whole strip under `Ui::with_enabled`.
     enabled: bool,
+    /// The tabs marked for attention; empty draws through `tab_strip`, else `tab_strip_with`.
+    cued: Vec<u64>,
 }
 
 impl App {
@@ -71,6 +74,7 @@ impl App {
             parent: (0.0, 0.0),
             tint: false,
             enabled: true,
+            cued: Vec::new(),
         }
     }
 
@@ -132,7 +136,15 @@ fn draw_response(ui: &mut Ui<'_>, app: &App) -> TabStripResponse {
     if translated {
         ui.painter().push_translate(app.parent.0, app.parent.1);
     }
-    let response = ui.with_enabled(app.enabled, |ui| ui.tab_strip("s", STRIP, &tabs, &opts));
+    let cued: Vec<TabKey> = app.cued.iter().map(|k| TabKey(*k)).collect();
+    let response = ui.with_enabled(app.enabled, |ui| {
+        if cued.is_empty() {
+            ui.tab_strip("s", STRIP, &tabs, &opts)
+        } else {
+            let extras = TabStripExtras::new().with_attention(&cued);
+            ui.tab_strip_with("s", STRIP, &tabs, &opts, &extras)
+        }
+    });
     if translated {
         ui.painter().pop_translate();
     }
@@ -2364,4 +2376,257 @@ fn the_busy_cue_asks_at_the_cadence_under_full_and_reduced_and_not_under_off() {
         let (_, out, _) = busy_run(cue, MotionTier::Off, 900);
         assert_eq!(out.repaint, Repaint::Idle, "{cue:?} Off");
     }
+}
+
+// The attention cue (D3 to D5 of the tab-attention-cue task).
+
+/// The `attention()` fills (the dot) of the first layer: physical rects at scale 1.
+fn dots(scene: &Scene) -> Vec<[f32; 4]> {
+    let want = premul(DARK.attention());
+    scene.layers[0]
+        .geometry
+        .under
+        .iter()
+        .filter(|s| s.color == want)
+        .map(|s| s.rect)
+        .collect()
+}
+
+/// The text items of `title` drawn in `color`.
+fn title_items(scene: &Scene, title: &str, color: [u8; 4]) -> Vec<lune_ui_core::scene::TextItem> {
+    let key = Spec::plain(title, Style::ui(DARK.font_s, color)).cache_key(1.0);
+    scene.layers[0]
+        .texts
+        .iter()
+        .filter(|t| t.key.0 == key)
+        .copied()
+        .collect()
+}
+
+/// Three tabs `t0` active, `t1` and `t2` inactive, with `cued` marked, drawn at 0 ms.
+fn cue_bench(cued: &[u64]) -> (UiHarness, App) {
+    let mut app = App::of(3, Some(0));
+    app.cued = cued.to_vec();
+    let mut h = UiHarness::new(WIN);
+    h.at_ms(0);
+    run(&mut h, &mut app);
+    (h, app)
+}
+
+#[test]
+fn an_inactive_cued_tab_draws_a_dot_before_a_bright_title() {
+    let (mut h, mut app) = cue_bench(&[1]);
+    let r = run(&mut h, &mut app);
+    let tab = tab_node(&r.out.tree, "t1").bounds;
+    let d = dots(&r.scene);
+    assert_eq!(d.len(), 1, "{d:?}");
+    let [x, y, w, hh] = d[0];
+    assert_eq!((w, hh), (CUE_DOT, CUE_DOT));
+    assert_eq!(x, tab.x + 10.0, "at the tab's left padding");
+    assert_eq!(y + hh / 2.0, tab.y + tab.h / 2.0, "centred");
+    let title = title_items(&r.scene, "t1", DARK.fg_bright);
+    assert_eq!(title.len(), 1, "the title is fg_bright");
+    assert_eq!(title[0].x, tab.x + 10.0 + CUE_DOT + CUE_GAP);
+    assert!(title_items(&r.scene, "t1", DARK.fg_muted).is_empty());
+    // The other tabs are as before.
+    assert_eq!(title_items(&r.scene, "t2", DARK.fg_muted).len(), 1);
+}
+
+#[test]
+fn the_active_tab_in_attention_draws_no_cue() {
+    let (mut h, mut app) = cue_bench(&[0]);
+    let r = run(&mut h, &mut app);
+    assert!(dots(&r.scene).is_empty());
+    assert_eq!(title_items(&r.scene, "t0", DARK.fg_primary).len(), 1);
+    assert!(title_items(&r.scene, "t0", DARK.fg_bright).is_empty());
+    // A key that names no tab is ignored.
+    let (mut h, mut app) = cue_bench(&[99]);
+    let r = run(&mut h, &mut app);
+    assert!(dots(&r.scene).is_empty());
+}
+
+/// Two tabs, `t1` shining in 8 characters, cued or not, drawn at `ms`.
+fn shining_pair(cued: bool, ms: u64) -> Run {
+    let title = chars(8);
+    let mut app = App::new(&["t0", &title], Some(0));
+    app.tabs[1].3 = Some(Tone::Neutral);
+    if cued {
+        app.cued = vec![1];
+    }
+    let mut h = UiHarness::new(WIN);
+    h.at_ms(ms);
+    run(&mut h, &mut app)
+}
+
+/// The text items of tab `t1`, left to right.
+fn t1_texts(r: &Run) -> Vec<lune_ui_core::scene::TextItem> {
+    let tab = tab_node(&r.out.tree, &chars(8)).bounds;
+    let mut v: Vec<_> = r.scene.layers[0]
+        .texts
+        .iter()
+        .filter(|t| t.x >= tab.x && t.x < tab.right())
+        .copied()
+        .collect();
+    v.sort_by(|a, b| a.clip.x.total_cmp(&b.clip.x));
+    v
+}
+
+#[test]
+fn a_cued_tab_that_shines_keeps_its_band_and_shows_the_dot() {
+    // At 0 ms the band is off the title: it is drawn whole, in the base colour fg_muted.
+    let r = shining_pair(true, 0);
+    assert_eq!(dots(&r.scene).len(), 1);
+    assert_eq!(title_items(&r.scene, &chars(8), DARK.fg_muted).len(), 1);
+    assert!(title_items(&r.scene, &chars(8), DARK.fg_bright).is_empty());
+    // Mid-pass the same pieces are drawn as without the cue, each moved by the dot and its gap.
+    for ms in [450u64, 900] {
+        let (c, p) = (shining_pair(true, ms), shining_pair(false, ms));
+        let (a, b) = (t1_texts(&c), t1_texts(&p));
+        assert!(a.len() > 2, "{ms} ms: the band is on the title");
+        assert_eq!(a.len(), b.len(), "{ms} ms");
+        for (x, y) in a.iter().zip(&b) {
+            assert!(
+                (x.x - y.x - (CUE_DOT + CUE_GAP)).abs() < 0.01,
+                "{ms} ms: {} vs {}",
+                x.x,
+                y.x
+            );
+        }
+    }
+}
+
+#[test]
+fn a_cued_title_elides_sooner_and_the_tab_keeps_its_width() {
+    let wide = "x".repeat(100);
+    let mut plain = App::new(&["a", &wide], Some(0));
+    let mut h = bench(&mut plain);
+    let p = run(&mut h, &mut plain);
+    let mut cued = App::new(&["a", &wide], Some(0));
+    cued.cued = vec![1];
+    let mut h = bench(&mut cued);
+    let c = run(&mut h, &mut cued);
+    assert_eq!(slots(&p.out.tree), slots(&c.out.tree), "no tab is wider");
+    // The elided titles, as the strip's own room cuts them: 270 less the padding and the close
+    // column, and 14 px less for the dot and its gap.
+    let cut = |color: [u8; 4], room: f32| {
+        let spec = Spec::plain(&wide, Style::ui(DARK.font_s, color));
+        elide(&mut FakeText, &spec, 1.0, room)
+    };
+    let (sp, sc) = (cut(DARK.fg_muted, 224.0), cut(DARK.fg_bright, 224.0 - 14.0));
+    let has = |r: &Run, spec: &Spec| {
+        r.scene.layers[0]
+            .texts
+            .iter()
+            .any(|t| t.key.0 == spec.cache_key(1.0))
+    };
+    assert!(has(&p, &sp), "the plain tab draws its title cut to 224");
+    assert!(has(&c, &sc), "the cued tab draws its title cut to 210");
+    let width = |spec: &Spec| FakeText.measure(spec, 1.0).0;
+    // The fake text steps 5.5 px a character, so the cut titles differ by 11 here, not 14; the
+    // room itself is 14 px smaller.
+    assert!(width(&sc) <= 224.0 - CUE_DOT - CUE_GAP, "{}", width(&sc));
+    assert!(width(&sc) < width(&sp), "{} vs {}", width(&sc), width(&sp));
+}
+
+/// The dot's width at `ms` after the cue of `t1` turned on at 1000 ms, under `tier`.
+fn pop_width(tier: MotionTier, after: u64) -> f32 {
+    let mut app = App::of(3, Some(0));
+    let mut h = UiHarness::new(WIN);
+    h.tier = tier;
+    h.at_ms(900);
+    run(&mut h, &mut app);
+    h.at_ms(1000);
+    app.cued = vec![1];
+    let first = run(&mut h, &mut app);
+    assert_eq!(dots(&first.scene).len(), 1);
+    h.at_ms(1000 + after);
+    let r = run(&mut h, &mut app);
+    dots(&r.scene)[0][2]
+}
+
+#[test]
+fn the_dot_pops_once_when_the_cue_turns_on() {
+    let mid = pop_width(MotionTier::Full, 175);
+    assert!(mid > 9.0 && mid <= CUE_DOT * CUE_POP_SCALE + 0.01, "{mid}");
+    assert!((pop_width(MotionTier::Full, 0) - CUE_DOT).abs() < 0.01);
+    assert_eq!(pop_width(MotionTier::Full, 400), CUE_DOT);
+    assert_eq!(pop_width(MotionTier::Reduced, 175), CUE_DOT);
+    assert_eq!(pop_width(MotionTier::Off, 175), CUE_DOT);
+    assert_eq!(CUE_POP.token, Token::Moderate);
+}
+
+#[test]
+fn a_pop_asks_for_frames_and_a_settled_cue_does_not() {
+    let mut app = App::of(3, Some(0));
+    let mut h = UiHarness::new(WIN);
+    h.at_ms(900);
+    run(&mut h, &mut app);
+    h.at_ms(1000);
+    app.cued = vec![1];
+    run(&mut h, &mut app);
+    h.at_ms(1100);
+    assert_eq!(run(&mut h, &mut app).out.repaint, Repaint::Now);
+    h.at_ms(1500);
+    run(&mut h, &mut app);
+    h.at_ms(1516);
+    assert_eq!(run(&mut h, &mut app).out.repaint, Repaint::Idle);
+}
+
+#[test]
+fn a_tab_first_drawn_cued_does_not_pop() {
+    let (mut h, mut app) = cue_bench(&[1]);
+    for ms in [0u64, 100, 175, 300] {
+        h.at_ms(ms);
+        let r = run(&mut h, &mut app);
+        assert_eq!(dots(&r.scene)[0][2], CUE_DOT, "{ms} ms");
+    }
+}
+
+#[test]
+fn the_node_description_names_the_cue_only_while_it_is_drawn() {
+    let (mut h, mut app) = cue_bench(&[1, 0]);
+    let tree = run(&mut h, &mut app).out.tree;
+    assert_eq!(
+        tab_node(&tree, "t1").description.as_deref(),
+        Some("t1, Needs attention")
+    );
+    assert_eq!(
+        tab_node(&tree, "t2").description.as_deref(),
+        Some("t2"),
+        "not marked"
+    );
+    assert_eq!(
+        tab_node(&tree, "t0").description.as_deref(),
+        Some("t0"),
+        "the active tab draws no cue"
+    );
+}
+
+#[test]
+fn tab_strip_and_default_extras_draw_the_same_scene() {
+    let mut app = App::of(3, Some(1));
+    let mut h = bench(&mut app);
+    let a = run(&mut h, &mut app);
+    // `with_attention(&[])` is the default extras, through `tab_strip_with`.
+    let tabs: Vec<Tab<'_>> = app
+        .tabs
+        .iter()
+        .map(|t| Tab {
+            key: TabKey(t.0),
+            title: &t.1,
+            closable: t.2,
+            progress: t.3,
+        })
+        .collect();
+    let opts = TabStripOptions {
+        active: app.active.map(TabKey),
+        panel_focused: true,
+        card: CARD,
+        name: "Sessions",
+        ..TabStripOptions::default()
+    };
+    let (scene, _) = h.frame(|ui| {
+        ui.tab_strip_with("s", STRIP, &tabs, &opts, &TabStripExtras::default());
+    });
+    assert_eq!(format!("{:?}", a.scene), format!("{scene:?}"));
 }

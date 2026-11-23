@@ -1513,6 +1513,28 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   the tab and its rect; the strip opens no menu, the app opens its own with [`Ui::menu`](ui.md#method.Ui.menu)
   there. See the module docs.
 
+- <a id="method.Ui.tab_strip_with"></a>
+
+  ```rust
+  pub fn tab_strip_with(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      tabs: &[Tab<'_>],
+      opts: &TabStripOptions<'_>,
+      extras: &TabStripExtras<'_>,
+  ) -> TabStripResponse
+  ```
+
+  [`Self::tab_strip`](ui.md#method.Ui.tab_strip) with `extras`: the tabs that ask for attention draw a dot in
+  [`Theme::attention`](theme.md#method.Theme.attention) before their title and a bright
+  title, unless they are the active tab. The dot and its gap ([`CUE_DOT`](widgets/tab_strip.md#constant.CUE_DOT), [`CUE_GAP`](widgets/tab_strip.md#constant.CUE_GAP)) come
+  out of the title's room, so a cued tab is no wider and the title elides sooner. When a
+  tab's cue turns on the dot pops once ([`CUE_POP`](widgets/tab_strip.md#constant.CUE_POP)); a tab first drawn cued does not pop.
+  The cued tab's node description adds the string `luneui.tab-strip.attention`. Under the same
+  `key` it has the same ids and state as `tab_strip`, so an app may use either from frame to
+  frame; with default extras it draws exactly what `tab_strip` does.
+
 `impl Ui<'_>`
 
 - <a id="method.Ui.table"></a>
