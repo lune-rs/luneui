@@ -30,6 +30,8 @@ asynchronous, all reached through one helper. Files, images and rich text are no
 `crates/lune-ui-winit/src/clipboard.rs` (M10 step 5: `Clipboard`, `MAX_PASTE_BYTES`, the `arboard` backend); tests `crates/lune-ui-winit/tests/clipboard.rs`. The core side (`ClipboardRequest`, the reply events) is `crates/lune-ui-core/src/input.rs`.
 Lunegit: `src/Lunegit.Desktop/ViewModels/SidePanels/ClipboardHelper.cs:1-24`.
 
+In a browser (`wasm32`, D428) `Clipboard::new()` is `navigator.clipboard` (`crates/lune-ui-winit/src/platform/clipboard_web.rs`): a read settles on a later task, so its reply is queued by a later `service` call in request order and the app is woken through `Clipboard::with_wake`; the 32 MiB cap holds for it. It needs a secure context and the browser's clipboard permission, else a read answers `ClipboardUnavailable`.
+
 ## Spec
 
 ### Evidence

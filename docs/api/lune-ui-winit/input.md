@@ -23,7 +23,7 @@ pub struct OutputPlan {
 
 What [`OutputState::apply`](input.md#method.OutputState.apply) changes on the window for a frame, apart from its commands.
 
-Source: `crates/lune-ui-winit/src/input.rs:440`
+Source: `crates/lune-ui-winit/src/input.rs:444`
 
 **Fields**
 
@@ -52,7 +52,7 @@ pub struct OutputState {
 
 Applies a window's [`FrameOutput`](../lune-ui-core/input.md#struct.FrameOutput), touching the cursor and the IME only when they changed.
 
-Source: `crates/lune-ui-winit/src/input.rs:448`
+Source: `crates/lune-ui-winit/src/input.rs:452`
 
 **Methods and associated items**
 
@@ -98,7 +98,7 @@ does not ask sees no touch, as at 0.7.0); then each `WindowEvent::Touch` becomes
 [`Event::Touch`](../lune-ui-core/input.md#variant.Event.Touch) at its logical position and does not move the pointer. Gestures, theme, moved,
 occluded, axis motion and touchpad pressure events are ignored.
 
-Source: `crates/lune-ui-winit/src/input.rs:36`
+Source: `crates/lune-ui-winit/src/input.rs:40`
 
 **Methods and associated items**
 
@@ -212,7 +212,7 @@ pub enum ImePlan {
 
 What [`OutputState::apply`](input.md#method.OutputState.apply) does with the IME for a frame.
 
-Source: `crates/lune-ui-winit/src/input.rs:429`
+Source: `crates/lune-ui-winit/src/input.rs:433`
 
 **Variants**
 
@@ -253,7 +253,7 @@ The event loop's control flow for a frame's [`Repaint`](../lune-ui-core/input.md
 where `origin` is the instant the app's time `0` was taken (a `t` too far to represent waits
 for input). Reads no clock.
 
-Source: `crates/lune-ui-winit/src/input.rs:390`
+Source: `crates/lune-ui-winit/src/input.rs:394`
 
 <a id="fn.cursor_icon"></a>
 ### Function `cursor_icon`
@@ -264,7 +264,7 @@ pub fn cursor_icon(icon: lune_ui_core::input::CursorIcon) -> winit::window::Curs
 
 The winit cursor icon of `icon`.
 
-Source: `crates/lune-ui-winit/src/input.rs:342`
+Source: `crates/lune-ui-winit/src/input.rs:346`
 
 <a id="fn.ime_area_physical"></a>
 ### Function `ime_area_physical`
@@ -283,7 +283,7 @@ scale is not finite, or the scale is not above 0: nothing is sent for it.
 The UI's scale is the display's scale times the page's zoom, so under a zoom the area is not
 in the window's own logical units; physical pixels are the one unit both agree on.
 
-Source: `crates/lune-ui-winit/src/input.rs:409`
+Source: `crates/lune-ui-winit/src/input.rs:413`
 
 <a id="fn.keymap"></a>
 ### Function `keymap`
@@ -295,5 +295,5 @@ pub fn keymap() -> lune_ui_core::input::Keymap
 The keyboard conventions of the platform this adapter was built for: `Keymap::MAC` on macOS,
 `Keymap::PC` elsewhere. The app passes it in `FrameConfig` (the core never reads the OS, D7).
 
-Source: `crates/lune-ui-winit/src/input.rs:286`
+Source: `crates/lune-ui-winit/src/input.rs:290`
 

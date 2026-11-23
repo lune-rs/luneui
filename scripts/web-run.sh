@@ -14,6 +14,9 @@
 #                   its files are prefixed `gl-`.
 #   --smoke         the query gains `probe` (the demo prints its probe lines): the run also requires the frame
 #                   the demo schedules a second after its frame 30 with `Repaint::At` (`presented 31`).
+#                   It also runs the clipboard round trip (`?probe-clipboard`, the browser's clipboard-read and
+#                   clipboard-write granted for the server's origin): `probe clipboard` must equal `probe
+#                   clipboard_write`, and `navigator.clipboard.readText()` in the page must return that text.
 #   --no-build      serve what target/web/<package>/ holds.
 #   --keep-serving  print the URL and wait for Ctrl-C, for a person; no browser is launched.
 #   --self-test     the server's path rules (`..`, encoded and absolute paths answer 404) and the blank-shot check

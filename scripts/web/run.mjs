@@ -374,7 +374,7 @@ async function main() {
   const origin = `http://${SERVER_HOST}:${port}`;
   const params = [];
   if (opts.demo) params.push("demo", "touches");
-  if (opts.smoke) params.push("probe");
+  if (opts.smoke) params.push("probe", "probe-clipboard");
   if (opts.gl) params.push("backend=gl");
   const url = `${origin}/index.html${params.length ? "?" + params.join("&") : ""}`;
 
@@ -500,6 +500,8 @@ async function main() {
     });
     // Nothing but this server is reachable: the page's one external request (the font stylesheet)
     // fails at once instead of making a run depend on the network.
+    // The clipboard round trip of --smoke needs both permissions, for this server's origin only.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
     await context.route(
       (u) => u.origin !== origin,
       (route) => route.abort("blockedbyclient"),
@@ -522,6 +524,16 @@ async function main() {
     if (opts.smoke) {
       // `--probe` asks for frame 31 a second after frame 30 with `Repaint::At`: the browser's timer.
       await waitLine(/^presented 31 \d+x\d+$/, 20_000, "the timed `presented 31`");
+      // The clipboard probe: the demo writes `luneui-probe-<pid>` through the toolkit's clipboard
+      // service in frame 2 and reads it back in frame 4. The replies must match, and the page's own
+      // `navigator.clipboard.readText()` must return that text (the write reached the browser).
+      const written = (await waitLine(/^probe clipboard_write \S+$/, 5_000, "`probe clipboard_write`")).slice("probe clipboard_write ".length);
+      const read = (await waitLine(/^probe clipboard \S+$/, 10_000, "`probe clipboard`")).slice("probe clipboard ".length);
+      if (read === "unavailable") throw new Error("probe clipboard unavailable (the read was refused)");
+      if (read !== written) throw new Error(`probe clipboard ${read} does not equal probe clipboard_write ${written}`);
+      const inPage = await page.evaluate(() => navigator.clipboard.readText());
+      if (inPage !== written) throw new Error("navigator.clipboard.readText() in the page does not return the written text");
+      process.stdout.write("web-run: clipboard round trip ok (the text is the probe's own)\n");
     }
 
     if (opts.demo) {

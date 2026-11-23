@@ -1455,7 +1455,11 @@ dependencies = [
  "accesskit_consumer",
  "accesskit_winit",
  "arboard",
+ "js-sys",
  "lune-ui-core",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "web-time",
  "winit",
 ]

@@ -1066,19 +1066,26 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
             touches: options.touches,
         });
     }
+    let proxy = event_loop.create_proxy();
+    let wake = proxy.clone();
     let app = App {
-        proxy: event_loop.create_proxy(),
+        proxy,
         options,
         tour: Tour::default(),
         shown: None,
         demo,
         start: Instant::now(),
         presented: 0,
+        // A reply that settles after the frame (the browser's clipboard) wakes the loop, which
+        // runs the frame that takes it; a synchronous backend never calls it.
         clipboard: if cfg!(any(target_os = "ios", target_os = "android")) {
             Clipboard::with_backend(Box::new(mobile::Pasteboard::new()))
         } else {
             Clipboard::new()
-        },
+        }
+        .with_wake(move || {
+            let _ = wake.send_event(());
+        }),
         last_keyboard: Insets::ZERO,
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
