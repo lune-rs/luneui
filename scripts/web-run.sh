@@ -13,7 +13,7 @@
 #                   `web-demo` it is the attract tour, played once through its six scenes (13 marks, `demo end
 #                   13/13`); the shots are at `glass-live`, `data-live` and `theme-live` (one, at `motion-live`,
 #                   with `--phone`), and the run prints the app's `web-demo frames` readings summarised (report
-#                   only, no check waits on them). Every other `web-demo` run asks for no tour (`?interactive`).
+#                   only, no check waits on them). Every other `web-demo` run asks for no tour (`?interactive`), except `--keep-serving`, whose URL is a visitor's.
 #   --gl            the query gains `backend=gl` (WebGL2 only) and the run requires `probe adapter_backend Gl`;
 #                   its files are prefixed `gl-`.
 #   --smoke         the query gains `probe` (the demo prints its probe lines): the run also requires the frame

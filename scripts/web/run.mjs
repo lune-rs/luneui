@@ -588,7 +588,7 @@ async function main() {
   if (opts.demo) params.push("demo", "touches");
   // The web demo plays its attract tour on a plain load; every check that is not the tour judges the
   // page itself, so it asks for none.
-  if (opts.package !== "demo" && !opts.demo) params.push("interactive");
+  if (opts.package !== "demo" && !opts.demo && !opts.keepServing) params.push("interactive");
   if (opts.smoke) params.push("probe", "probe-clipboard", "probe-text-input");
   if (opts.typeField) params.push("probe-text");
   if (opts.gl) params.push("backend=gl");

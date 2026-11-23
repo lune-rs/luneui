@@ -630,6 +630,13 @@ Since 0.7.4 (mobile support M7, demo mode, D415 to D419; the workspace version i
 - `lune_ui_core::playback` (re-exported as `lune_ui::playback`): `Script`, `Player`, `Advance`, `Contact`, `draw_touches` and the constants `SAMPLE`, `TAP_HOLD`, `DRAG_SETTLE`, `FADE`, `TOUCH_ID_BASE` (D415, R-core-13): scripted input in app time, played through `RawInput.events`;
 - the demo (`apps/demo`): a three-tab phone app, its `--demo` tour with 16 checked marks, `--loop`, `--touches`, `--exit-after-demo`, `--dump` (D416, D417); `scripts/ios-sim.sh --demo` (D418); `docs/demo-mode.md`.
 
+Since 0.7.6 (the web target, D425 to D434; the workspace version is 0.7.7, D434; `docs/consuming.md`, "0.7.6 to 0.7.7"; additive, nothing breaks):
+
+- `lune-ui-winit`: `Clipboard::with_wake`; on wasm `Clipboard::new()` is the page's `navigator.clipboard` (`platform/clipboard_web.rs`; replies in request order, the 32 MiB cap kept; D428); `control_flow` takes `web_time::Instant` on wasm (D425);
+- `lune-ui-platform`: the `web` module (`TextInput`, `keymap`; D429, D430), re-exported as `lune_ui::web`; `PopoverWindow::wrap` answers `Err` on wasm (D430);
+- `lune-ui-wgpu`: wgpu's `webgl` feature on wasm only (D425);
+- the apps and scripts: `apps/web-demo` (D431 to D433), the web shell of `apps/demo` (D426), `scripts/web-build.sh`, `scripts/web-run.sh`, `scripts/web/run.mjs` (D427), the `web` half of `scripts/check-targets.sh`, and the CI `web` job.
+
 Since 0.7.5 (mobile support M8, Android run time, D420 to D424; the workspace version is 0.7.6, D424; `docs/consuming.md`, "0.7.5 to 0.7.6"; no public item changes, nothing for an app to do):
 
 - `lune-ui-platform`: `platform/mobile/android.rs` gives `mobile::safe_area`, `KeyboardInset` and `Pasteboard` their Android bodies (content rect, a split baseline, `ClipboardManager` through JNI; D422), with two Android-only dependencies, `jni` and `ndk-context`;

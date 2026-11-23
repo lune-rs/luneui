@@ -549,6 +549,24 @@ No migration map: nothing an app already calls changes. An app that wants Androi
 
 **Unverified here.** A real device and its GPU; 120 Hz. Typing on the soft keyboard's own keys (IME composition; `input text` proves the key path only). TalkBack: accessibility is not wired on Android (D10). Other API levels and 16 KB page-size devices. `-gpu host`: it presented 5 frames and stalled.
 
+## 0.7.6 to 0.7.7: the web target
+
+D425 to D434. Additive, hence 0.7.7: no public item is removed or re-signed, so **nothing breaks** and a desktop or phone app needs nothing changed (`scripts/check-compat.sh` against `v0.7.0`: part 1 passes; parts 2 and 3 fail only on the four D411 items that fail on `main` too, listed in D434). The release makes the toolkit build, run and be checked in a browser: `wasm32-unknown-unknown`, one `<canvas>`, WebGPU with a WebGL2 fallback. There is no DOM UI and no CSS styling of the UI (D425).
+
+What is new:
+
+- `lune_ui_winit::Clipboard::with_wake(wake)` (D428): a builder that sets the callback a browser clipboard's late reply calls, so the app runs a frame to take it. `Clipboard::new()` is the page's asynchronous `navigator.clipboard` on wasm (replies one per read, in request order, under the 32 MiB cap); on every other target it is the OS clipboard as before and `wake` is never called.
+- `lune_ui_platform::web` (D429, D430), re-exported as `lune_ui::web`: `TextInput`, the hidden-textarea text bridge for IME composition and phone keyboards (inert off the web, as `mobile::KeyboardInset` is off a phone), and `keymap()`, the keymap by the platform name a browser reports (what `lune_ui_winit::keymap()` answers off the web). The API pages are `docs/api/lune-ui-platform/web.md`.
+- `PopoverWindow::wrap` answers `Err` on wasm, as on the phones (a page has no floating window); a tray item is `Unsupported`, window material is `Opaque`, window shapes are `Unsupported`, docking and groups record only (D430).
+- Dependencies: wasm-only entries in `lune-ui-wgpu` (wgpu's `webgl` feature), `lune-ui-winit` (`web-time`, `js-sys`, `wasm-bindgen`, `wasm-bindgen-futures`, `web-sys`; `arboard` is not built on wasm) and `lune-ui-platform` (`wasm-bindgen`, `web-sys`, for the text bridge). `Cargo.lock` moves no version except the workspace's own: its new packages are the member `web-demo` and wgpu's wasm-only `wgpu-core-deps-wasm`, so a desktop or phone build does not see any of it and its release size is unchanged (D425).
+- The apps and scripts (not library API): `apps/web-demo`, the fully animated showcase (D431 to D433); the web shell of `apps/demo` (D426); `scripts/web-build.sh`, `scripts/web-run.sh` and the driver `scripts/web/run.mjs` (an exact-pinned `playwright-core`, loopback-only server, the separate Chromium; D427); the `web` half of `scripts/check-targets.sh` and a `web` CI job.
+
+No migration map: nothing an app already calls changes. An app that wants a web build copies "Web apps" above and `docs/web.md`.
+
+**Readings.** `docs/web.md`: `apps/demo` passes its 16-mark tour and `apps/web-demo` its 13-mark tour in headless Chromium 159 on WebGPU and on WebGL2 (the phone layout too); the clipboard round trip, the text bridge (typing, a composition, shortcuts, focus hand-over) and the Mac and PC keymaps pass their `--smoke` checks.
+
+**Unverified here.** Safari, Firefox and any browser but Chromium 159; a real phone's soft keyboard and touch; a GPU but this Mac's; accessibility (AccessKit has no web adapter); hosting (nothing is published).
+
 ## API changes of the library pass
 
 The library pass after the gallery showcase (DECISIONS D255 to D282) changed the public API with no version bump (the plan's D24): Luneterm pins the toolkit by git rev (`lune-ui` at `5216931`, `Cargo.toml:16`), not by version, so
