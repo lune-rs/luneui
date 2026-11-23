@@ -22,6 +22,7 @@ OS notifications are app-side (D43).
 ## Needs
 
 - Tray icon with status dot, its glass flyout and glass menu in tray-anchored popover windows (R-platform-6).
+- In a browser there is no tray: `TrayItem::new` answers `Unsupported`, and a popover window cannot be made (`PopoverWindow::wrap` answers `Err`, R-platform-8, D430).
 - Placement that keeps a surface on screen and dismisses on outside click and focus loss (R-overlay-4): `overlay.popover`.
 - Wane — Variants: `--2x` (the same icon at 32 px for high-DPI trays) (R-platform-6)
 - Wane — States: serving (`__dot--ok`), degraded (`__dot--warn`), paused (`__dot--paused`). The three differ only by the dot colour; the glyph stays monochrome. (R-platform-6)

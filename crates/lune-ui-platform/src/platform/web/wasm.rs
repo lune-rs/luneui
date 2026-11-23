@@ -16,10 +16,26 @@ use winit::event::{Ime, WindowEvent};
 use winit::platform::web::WindowExtWebSys;
 use winit::window::Window;
 
+use lune_ui_core::input::Keymap;
+
 use super::keys::{
     FocusTracker, KeyRoute, composition_end, composition_update, edit_key, input_text,
-    releases_at_once, route_keydown,
+    keymap_for_platform, releases_at_once, route_keydown,
 };
+
+/// The keyboard conventions for the platform the browser reports: `navigator.platform`, else the
+/// user agent string (a page with no `window` gets the PC map).
+pub(crate) fn keymap() -> Keymap {
+    let Some(navigator) = web_sys::window().map(|w| w.navigator()) else {
+        return Keymap::PC;
+    };
+    let platform = navigator.platform().unwrap_or_default();
+    if platform.is_empty() {
+        keymap_for_platform(&navigator.user_agent().unwrap_or_default())
+    } else {
+        keymap_for_platform(&platform)
+    }
+}
 
 /// What the listeners and the owner share.
 #[derive(Debug, Default)]

@@ -17,6 +17,7 @@ The desktop as the OS reports it, in desktop units: the OS's own global space (p
 
 - Monitors and their work areas, the pointer and window frames in one unit, so an app can place and snap windows across displays (R-platform-4).
 - An atomic move of several windows, so a docked set moves as one (R-platform-4).
+- In a browser `monitors` is empty and `pointer`, `window_at` and `display_depth` answer `None` (R-platform-8, `docs/web.md`).
 
 ## Existing code
 

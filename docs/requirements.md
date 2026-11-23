@@ -123,6 +123,7 @@ and 4 `external`. Ids no entry cites are met by a script, a rule or a manifest, 
   single instance, autostart at sign-in and OS notifications (Wane lists them,
   `docs/ui/components.md:702-717`).
 - R-platform-7 [new] An app runs on Android through winit's NativeActivity (D420 to D423): the life cycle (the surface dropped on `suspended` and rebuilt on `resumed`), the safe area and the soft keyboard's inset (`mobile::safe_area`, `KeyboardInset`), and the clipboard through `ClipboardManager` (`mobile::Pasteboard`). The packaging and the emulator run are `scripts/android-emu.sh`. Not wired: accessibility and Back. Unverified: a physical device and IME composition on the keyboard's own keys (`docs/mobile.md`, "Android" and "M8 reading").
+- R-platform-8 [new] An app runs in a browser (D425 to D430, `docs/web.md`): the five library crates compile for `wasm32-unknown-unknown` and draw on one `<canvas>` with the toolkit's own renderer, on WebGPU with a WebGL2 fallback; the page's asynchronous clipboard (`Clipboard::with_wake`), a hidden-textarea text bridge for input methods and phone keyboards (`web::TextInput`) and the platform's chords (`web::keymap`) are in the toolkit; the OS-only parts degrade (no popover window, tray, OS glass, window shape, real window groups or second window; AccessKit does nothing). The build and the checks are `scripts/web-build.sh` and `scripts/web-run.sh`. Unverified: Safari, Firefox, real phones and their soft keyboards.
 
 ### Widgets
 

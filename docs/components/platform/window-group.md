@@ -16,6 +16,7 @@ A `WindowGroup` makes several windows of one app act as one to the OS. On Window
 ## Needs
 
 - Several windows that come to the front, stay on top and minimise as one app window (R-platform-4).
+- In a browser a group records only: nothing is raised, minimised or kept on top (R-platform-8, `docs/web.md`).
 
 ## Existing code
 

@@ -4,7 +4,7 @@ title: Clipboard
 area: platform
 status: done
 consumers: any
-source: crates/lune-ui-core/src/input.rs, crates/lune-ui-winit/src/clipboard.rs
+source: crates/lune-ui-core/src/input.rs, crates/lune-ui-winit/src/clipboard.rs, crates/lune-ui-winit/src/platform/clipboard_web.rs
 owner: —
 summary: Text clipboard through FrameOutput requests and input events; types in M4, fake in M5, platform adapter in M10
 ---
@@ -21,6 +21,7 @@ asynchronous, all reached through one helper. Files, images and rich text are no
 
 - OS clipboard (R-platform-5, narrowed in M3: clipboard is in scope; types M4, fake M5, adapter M10).
 - On Android the same requests run through `ClipboardManager` (`mobile::Pasteboard`, R-platform-7, D420 to D423).
+- In a browser the same requests run through the page's asynchronous `navigator.clipboard` (R-platform-8, D428): one reply per read in request order, the 32 MiB cap kept, `Clipboard::with_wake` wakes the app for a late reply; an insecure context answers `ClipboardUnavailable`.
 - Cut, copy and paste for the editing engine (R-text-5): `text.text-edit`.
 - Copy buttons and copy-selected-rows (code block, diff rows, detail fields) (R-text-3).
 - Third-party crates only for platform layers (hard rule 4); a new dependency needs a DECISIONS row and a size note (hard rule 5).

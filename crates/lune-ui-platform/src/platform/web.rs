@@ -9,6 +9,6 @@ mod other;
 mod wasm;
 
 #[cfg(not(target_family = "wasm"))]
-pub(crate) use other::TextInput;
+pub(crate) use other::{TextInput, keymap};
 #[cfg(target_family = "wasm")]
-pub(crate) use wasm::TextInput;
+pub(crate) use wasm::{TextInput, keymap};

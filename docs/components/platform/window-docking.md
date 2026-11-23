@@ -16,6 +16,7 @@ The maths of windows that dock: two windows are docked when they share an edge s
 ## Needs
 
 - Snap windows to each other and to the work area, and drag a docked set as one (R-platform-4).
+- In a browser there is one canvas and no window to dock: groups and docking record only (R-platform-8, `docs/web.md`).
 
 ## Existing code
 

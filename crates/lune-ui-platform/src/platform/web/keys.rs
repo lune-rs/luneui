@@ -3,7 +3,24 @@
 //! the canvas-to-textarea hand-over from reaching the toolkit as a lost focus. No browser type here,
 //! so the rules compile for the tests on every host (the bridge itself, `wasm.rs`, is wasm only).
 
+use lune_ui_core::input::Keymap;
 use winit::event::Ime;
+
+/// The keyboard conventions for the platform name a browser reports (`navigator.platform`
+/// or the user agent string): the Mac ones for macOS, iOS and iPadOS (`"macOS"`, `"MacIntel"`,
+/// `"iPhone"`, `"iPad"`; an iPad in desktop mode says `"MacIntel"`, and its hardware keyboard has a
+/// Command key), the PC ones for everything else, including an empty name.
+pub(crate) fn keymap_for_platform(platform: &str) -> Keymap {
+    let p = platform.to_ascii_lowercase();
+    if ["mac", "iphone", "ipad", "ipod", "ios"]
+        .iter()
+        .any(|n| p.contains(n))
+    {
+        Keymap::MAC
+    } else {
+        Keymap::PC
+    }
+}
 
 /// Where a `keydown` of the textarea goes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,6 +173,32 @@ impl FocusTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_keymap_follows_the_platform_name_the_browser_reports() {
+        for name in [
+            "macOS",
+            "MacIntel",
+            "MacPPC",
+            "iPhone",
+            "iPad",
+            "iPod touch",
+            "iOS",
+        ] {
+            assert_eq!(keymap_for_platform(name), Keymap::MAC, "{name}");
+        }
+        for name in [
+            "Windows",
+            "Win32",
+            "Linux x86_64",
+            "Linux armv81",
+            "Android",
+            "CrOS",
+            "",
+        ] {
+            assert_eq!(keymap_for_platform(name), Keymap::PC, "{name}");
+        }
+    }
 
     fn route(key: &str) -> KeyRoute {
         route_keydown(key, false, false, false, false, 0)

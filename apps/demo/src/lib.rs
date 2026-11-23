@@ -699,6 +699,11 @@ async fn open_gpu(
         // The browser checks read which backend the page got: WebGPU or the WebGL2 fallback.
         probe_line("adapter_backend", format!("{:?}", info.backend));
     }
+    if probe || cfg!(target_family = "wasm") {
+        // The keymap the frames use (`Demo::set_keymap` in `run`).
+        let mac = lune_ui::web::keymap() == lune_ui::input::Keymap::MAC;
+        probe_line("keymap", if mac { "Mac" } else { "PC" });
+    }
     Ok(Shown {
         window,
         surface: Some(surface),
@@ -1138,6 +1143,9 @@ impl ApplicationHandler for App {
 /// Runs the demo on `event_loop` until its window closes. On iOS `run_app` never returns.
 pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     let mut demo = Demo::new();
+    // A browser reports the machine it runs on (a Mac's chords are Cmd-based); elsewhere this is
+    // the adapter's own keymap.
+    demo.set_keymap(lune_ui::web::keymap());
     if options.demo {
         demo.play(Play {
             repeat: options.repeat,

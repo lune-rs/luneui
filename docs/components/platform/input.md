@@ -4,7 +4,7 @@ title: winit input translation and output
 area: platform
 status: done
 consumers: any
-source: crates/lune-ui-winit/src/input.rs, crates/lune-ui-winit/src/platform.rs
+source: crates/lune-ui-winit/src/input.rs, crates/lune-ui-winit/src/platform.rs, crates/lune-ui-platform/src/web.rs
 owner: —
 summary: Translator turns winit events into RawInput; OutputState applies FrameOutput to a window
 ---
@@ -18,6 +18,7 @@ summary: Translator turns winit events into RawInput; OutputState applies FrameO
 - Input and output as data between winit and the toolkit (R-nfr-8, R-platform-5 for cursors).
 - Inbound OS file-drop events translated from winit (R-platform-5, D43).
 - The accessibility bridge: tree out, `AccessAction` in, behind a cargo feature (R-infra-4, D46).
+- In a browser (R-platform-8, D429, D430): `lune_ui_platform::web::TextInput`, a hidden `<textarea>`, gives the canvas an input method and a phone's keyboard as `Ime` values for `Translator::ime`, and `web::keymap()` gives a web app the Mac or PC chords by the platform name the browser reports (`lune_ui_winit::keymap()` is `Keymap::PC` on wasm). Phone keyboards and AccessKit on web are unverified (`docs/web.md`).
 
 ## Existing code
 

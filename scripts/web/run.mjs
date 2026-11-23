@@ -427,8 +427,8 @@ async function smokeTextInput(page, context, lines, waitLine) {
   await expectField("hell日本", "the composition's commit");
   process.stdout.write("web-run: composition ok (preedit にほん, commit 日本)\n");
 
-  // A shortcut reaches the toolkit: select all, then Backspace empties the field. (The browser's
-  // keymap is the PC one, so Ctrl+A on every OS.)
+  // A shortcut reaches the toolkit: select all, then Backspace empties the field. (The
+  // first page reports a PC platform name, so the keymap is the PC one and the chord is Ctrl+A.)
   await page.keyboard.press("Control+A");
   await sleep(300);
   await page.keyboard.press("Backspace");
@@ -458,6 +458,64 @@ async function smokeTextInput(page, context, lines, waitLine) {
   await stays("typing after a click outside");
   if (lastField(lines) !== "ab") throw new Error(`typing after a click outside changed the field to ${JSON.stringify(lastField(lines))}`);
   process.stdout.write("web-run: click outside ok (one lost focus, typing after it changes nothing)\n");
+}
+
+// --smoke: the browser's keymap (D430). A second page reports a Mac (`navigator.platform` is
+// overridden before the page's scripts run), so the toolkit's keymap is the Mac one: Cmd+A selects all,
+// Backspace then empties the field. (The first page reports `Win32`, the PC keymap, and uses Ctrl+A in
+// `smokeTextInput`.)
+async function smokeMacKeymap(context, origin, params) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const page = await context.newPage();
+  const seen = [];
+  let broke = null;
+  page.on("console", (m) => seen.push(m.text()));
+  page.on("pageerror", (e) => (broke = `pageerror: ${e.message}`));
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, "platform", { get: () => "MacIntel", configurable: true });
+  });
+  await page.goto(`${origin}/index.html?${params.join("&")}`, { waitUntil: "load", timeout: 30_000 });
+  const until = async (re, ms, what) => {
+    const end = Date.now() + ms;
+    for (;;) {
+      if (broke !== null) throw new Error(`mac keymap page: ${broke}`);
+      const hit = seen.find((l) => re.test(l));
+      if (hit !== undefined) return hit;
+      if (Date.now() > end) throw new Error(`mac keymap page: timeout waiting for ${what}`);
+      await sleep(50);
+    }
+  };
+  const field = () => {
+    for (let i = seen.length - 1; i >= 0; i--) {
+      const m = /^probe field "(.*)"$/.exec(seen[i]);
+      if (m) return m[1];
+    }
+    return null;
+  };
+  const expectField = async (want, what) => {
+    await until(new RegExp(`^probe field "${want}"$`), 5_000, `\`probe field "${want}"\` (${what})`);
+    await sleep(400);
+    if (field() !== want) throw new Error(`mac keymap page, ${what}: the field is ${JSON.stringify(field())}, wanted ${JSON.stringify(want)}`);
+  };
+  await until(/^presented 1 \d+x\d+$/, PRESENTED_MS, "`presented 1`");
+  await until(/^probe keymap /, 5_000, "`probe keymap`");
+  const keymap = seen.find((l) => /^probe keymap /.test(l));
+  if (keymap !== "probe keymap Mac") throw new Error(`mac keymap page: ${keymap} (wanted probe keymap Mac)`);
+  const target = (await until(/^probe search -?\d+,-?\d+$/, 5_000, "`probe search`")).slice("probe search ".length).split(",").map(Number);
+  const box = await page.locator("#luneui").boundingBox();
+  if (!box) throw new Error("mac keymap page: no canvas to click");
+  await page.bringToFront();
+  await page.mouse.click(box.x + target[0] / SCALE, box.y + target[1] / SCALE);
+  await until(/^probe ime Enabled$/, 5_000, "`probe ime Enabled`");
+  await sleep(500);
+  await page.keyboard.type("hello");
+  await expectField("hello", "typing `hello`");
+  await page.keyboard.press("Meta+A");
+  await sleep(300);
+  await page.keyboard.press("Backspace");
+  await expectField("", "Cmd+A then Backspace");
+  process.stdout.write("web-run: keymap ok (a Mac platform name makes Cmd+A select all)\n");
+  await page.close();
 }
 
 async function main() {
@@ -607,6 +665,13 @@ async function main() {
       (u) => u.origin !== origin,
       (route) => route.abort("blockedbyclient"),
     );
+    // --smoke judges Ctrl+A on a PC platform name (this Mac's own would make the keymap the Mac one);
+    // the keymap page overrides it again with `MacIntel`.
+    if (opts.smoke) {
+      await context.addInitScript(() => {
+        Object.defineProperty(Navigator.prototype, "platform", { get: () => "Win32", configurable: true });
+      });
+    }
     const page = context.pages()[0] ?? (await context.newPage());
     page.on("console", (m) => record(m.type(), m.text()));
     page.on("pageerror", (e) => {
@@ -623,6 +688,8 @@ async function main() {
     if (!opts.demo) await shoot(page, "shot-1");
 
     if (opts.smoke) {
+      const keymap = await waitLine(/^probe keymap /, 5_000, "`probe keymap`");
+      if (keymap !== "probe keymap PC") throw new Error(`${keymap} (wanted probe keymap PC for the platform name Win32)`);
       // `--probe` asks for frame 31 a second after frame 30 with `Repaint::At`: the browser's timer.
       await waitLine(/^presented 31 \d+x\d+$/, 20_000, "the timed `presented 31`");
       // The clipboard probe: the demo writes `luneui-probe-<pid>` through the toolkit's clipboard
@@ -664,6 +731,7 @@ async function main() {
       if (end !== `demo end ${MARKS}/${MARKS}` || okMarks !== MARKS) throw new Error(`${end} with ${okMarks} marks ok (wanted ${MARKS}/${MARKS})`);
       if (next < marks.length) throw new Error(`the tour ended before the shot at mark ${marks[next][0]}`);
     }
+    if (opts.smoke) await smokeMacKeymap(context, origin, params.filter((p) => !["demo", "touches", "probe-clipboard"].includes(p)));
     // A last look: nothing failed while the checks ran.
     await new Promise((r) => setTimeout(r, 300));
     if (failure !== null) throw new Error(failure);

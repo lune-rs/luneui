@@ -3,8 +3,19 @@
 
 use std::marker::PhantomData;
 
+use lune_ui_core::input::Keymap;
 use winit::event::{Ime, WindowEvent};
 use winit::window::Window;
+
+/// The keyboard conventions of the platform this was built for, as `lune_ui_winit::keymap()`
+/// answers off the web: `Keymap::MAC` on macOS, `Keymap::PC` elsewhere.
+pub(crate) fn keymap() -> Keymap {
+    if cfg!(target_os = "macos") {
+        Keymap::MAC
+    } else {
+        Keymap::PC
+    }
+}
 
 /// Inert: `take` is always empty, the setters do nothing, every window event passes. `!Send`, as
 /// the browser one is.

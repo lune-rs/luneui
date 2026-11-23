@@ -16,6 +16,7 @@ Core: `Material`, `BackdropKind`, `GlassLayer` and the `Backdrop` trait (`best_s
 ## Needs
 
 - macOS glass (R-platform-1); Windows glass (R-platform-2); opaque fallback elsewhere (R-platform-3).
+- In a browser the material is `Opaque` and a glass request answers `Err` (R-platform-8, D430); the in-canvas frost and backdrop blur are the toolkit's own and work there (`docs/web.md`).
 - The only `unsafe` blocks (3, in `lune-ui-platform/src/material/macos.rs`) stay in this crate under `src/material/`, each with a `// SAFETY:` comment (R-nfr-3; boundary rule 6).
 
 ## Existing code

@@ -63,7 +63,7 @@ Dropping the value removes the element and every listener it added; a second [`a
 after that does not double a keystroke. It owns a DOM element: create, use and drop it on the
 main thread (`!Send`). The element carries `data-luneui="text-input"`.
 
-Source: `crates/lune-ui-platform/src/web.rs:54`
+Source: `crates/lune-ui-platform/src/web.rs:68`
 
 **Methods and associated items**
 
@@ -107,4 +107,25 @@ Source: `crates/lune-ui-platform/src/web.rs:54`
 **Trait implementations**
 
 - `impl Debug for TextInput`
+
+## Functions
+
+<a id="fn.keymap"></a>
+### Function `keymap`
+
+```rust
+pub fn keymap() -> lune_ui_core::input::Keymap
+```
+
+The keyboard conventions of the machine the page runs on. In a browser `lune_ui_winit::keymap()`
+is the compile-time one, `Keymap::PC` for a wasm build, so on a Mac the select-all, copy and
+paste chords would be Ctrl-based; this reads the platform name the browser reports
+(`navigator.platform`, else the user agent string) once per call and answers
+`Keymap::MAC` for macOS, iOS and iPadOS and `Keymap::PC` for everything else. An app passes it
+as `FrameConfig::keymap` on the web. Off the web it answers what `lune_ui_winit::keymap()`
+does (`Keymap::MAC` on macOS, `Keymap::PC` elsewhere), so one call serves every target. The
+browser's name is the user agent's claim, not the keyboard's: a Mac keyboard on a PC, or a
+spoofed name, gets the other map.
+
+Source: `crates/lune-ui-platform/src/web.rs:39`
 

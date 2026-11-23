@@ -149,7 +149,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-platform` (`lune_ui_platform`)
 
-8 modules, 32 items. Left out and counted: 194 blanket impls, 178 items of the omitted impls, 42 items of the trait impls shown as one line, 96 synthetic impls.
+8 modules, 33 items. Left out and counted: 194 blanket impls, 178 items of the omitted impls, 42 items of the trait impls shown as one line, 96 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -160,7 +160,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_platform::mobile`](lune-ui-platform/mobile.md) | 5 |
 | [`lune_ui_platform::popover`](lune-ui-platform/popover.md) | 2 |
 | [`lune_ui_platform::tray`](lune-ui-platform/tray.md) | 7 |
-| [`lune_ui_platform::web`](lune-ui-platform/web.md) | 1 |
+| [`lune_ui_platform::web`](lune-ui-platform/web.md) | 2 |
 
 ### `lune-ui` (`lune_ui`)
 
@@ -743,6 +743,7 @@ Every top-level item of the four owning crates, by name.
 - [`Keyframes`](lune-ui-core/motion.md#struct.Keyframes) - struct, `lune_ui_core::motion`
 - [`Keymap`](lune-ui-core/input.md#struct.Keymap) - struct, `lune_ui_core::input`
 - [`keymap`](lune-ui-winit/input.md#fn.keymap) - function, `lune_ui_winit::input`
+- [`keymap`](lune-ui-platform/web.md#fn.keymap) - function, `lune_ui_platform::web`
 - [`Kind`](lune-ui-core/motion.md#enum.Kind) - enum, `lune_ui_core::motion`
 - [`knob_rect`](lune-ui-core/widgets/slider.md#fn.knob_rect) - function, `lune_ui_core::widgets::slider`
 - [`KvMode`](lune-ui-core/widgets/kv_list.md#enum.KvMode) - enum, `lune_ui_core::widgets::kv_list`

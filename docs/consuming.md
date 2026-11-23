@@ -109,6 +109,22 @@ For Android (the demo's reference: `apps/demo/src/lib.rs` and `apps/demo/android
 
 Demo mode: the core's `playback` module (D415, R-core-13) plays a scripted tour through `RawInput.events` against the app's time, and `playback::draw_touches` is an opt-in indicator for a recording. `docs/demo-mode.md` says how to run the demo's tour, record it and write one for an app.
 
+## Web apps
+
+What an app adds to run in a browser (`wasm32-unknown-unknown`, one `<canvas>`, WebGPU with a WebGL2 fallback; D425 to D430), with `apps/demo` as the reference (`apps/demo/src/web.rs`, `apps/demo/web/index.html`). `docs/web.md` has the build, the checks, what degrades and what is unverified. A desktop or phone app adds none of it, and the toolkit builds for them as before.
+
+- The page: one static `web/index.html` with `<canvas id="luneui" tabindex="0">`, CSS that only sizes the canvas and the page background, and a module script that imports the generated glue and calls its init after checking `navigator.gpu` or a `webgl2` context. No other DOM UI: the toolkit draws everything.
+- The window is the canvas: `WindowAttributesExtWebSys::with_canvas(Some(canvas)).with_append(false)`; the app hands itself to `EventLoopExtWebSys::spawn_app` (the browser owns the loop, `main` returns at once) and installs a panic hook that writes to `console.error`.
+- The GPU opens asynchronously, on the page's task queue (`wasm_bindgen_futures::spawn_local`): `wgpu::util::new_instance_with_webgpu_detection` over `Backends::BROWSER_WEBGPU | Backends::GL`, then the surface and `Gpu::new` as on a desktop. `lune-ui-wgpu` already enables wgpu's `webgl` feature on wasm, so the fallback needs nothing from the app. Draw no frame before the GPU is there or while the canvas has no size (winit reports it once its resize observer fires).
+- Time is `web_time::Instant`, not `std::time::Instant`, which panics in a browser; `lune_ui_winit::input::control_flow` takes the right one by target. Wake the app from a browser callback through the event-loop proxy or `Window::request_redraw`.
+- The clipboard: `Clipboard::new()` is the page's asynchronous `navigator.clipboard` on wasm; give it `Clipboard::with_wake(..)` so a reply that settles later runs a frame (D428). It needs a secure context (https or `localhost`) and the browser's permission; without them every read answers `ClipboardUnavailable`.
+- Typing: `web::TextInput::attach(&window, wake)` once, kept alive. Per frame: each `WindowEvent` goes to `passes` first; before `Translator::take` give `take_focus()` to `Translator::focused` and each `take()` value to `Translator::ime`; after the frame call `set_allowed` and `set_area(ime_area_physical(..))` from the output plan. It is what makes an input method and a phone's keyboard work; the exact order is in `lune_ui_platform::web`'s module docs (D429).
+- The keymap: pass `web::keymap()` as `FrameConfig::keymap`, not `lune_ui_winit::keymap()`, which is `Keymap::PC` on a wasm build; on a Mac the select all, copy and paste chords are then Cmd-based (D430).
+- Fonts: embed font bytes as a native app does (`TextCache::new_static`); the canvas draws text from bytes, so a web font loaded by CSS is no help. No CJK font is bundled, so composed CJK text draws as missing glyphs. Only the page's one loading line may use CSS fonts.
+- Not on the web (D430): popover windows (`PopoverWindow::wrap` answers `Err`), the tray (`Unsupported`), OS glass (`Opaque`; the in-canvas frost and backdrop blur work), window shapes (`Unsupported`), real window groups and docking (they record only), more than one window, and AccessKit (it compiles and does nothing).
+- Build and check: `scripts/web-build.sh <package>` writes `target/web/<package>/`, a static directory; `scripts/web-run.sh <package>` serves it on loopback and checks it in the separate Chromium. Serving it on the internet is the app's own matter.
+- Unverified: Safari, Firefox, real phones and their soft keyboards (`docs/web.md`).
+
 ## Unverified here
 
 The tests run against scripted input and fake adapters. What only a real OS shows is not ticked
