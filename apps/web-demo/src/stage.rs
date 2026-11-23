@@ -877,7 +877,9 @@ impl Stage {
     }
 
     /// Runs one frame over `input` and returns what it drew and asked for.
-    pub fn frame(&mut self, input: RawInput, text: &mut dyn TextSystem) -> Rendered {
+    pub fn frame(&mut self, mut input: RawInput, text: &mut dyn TextSystem) -> Rendered {
+        // A scene's own hand (a finger dragging a card) speaks through the input like any other.
+        self.scenes.inject(input.time, &mut input.events);
         let animating = self.animating();
         // The theme follows the look the Theme scene chose, colours only: the push's token and
         // easing (`moderate`, sine-in-out; `fast` under Reduced; a cut under Off).

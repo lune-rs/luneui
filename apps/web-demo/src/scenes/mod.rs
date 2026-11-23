@@ -460,6 +460,12 @@ impl Scenes {
         }
     }
 
+    /// The events a scene's own hand has due at `now` (a finger dragging a card), for the stage to
+    /// add to the frame's input before it begins.
+    pub fn inject(&mut self, now: Duration, events: &mut Vec<Event>) {
+        self.data.inject(now, events);
+    }
+
     /// The controls `scene` drew in its last frame.
     pub fn targets(&self, scene: SceneId) -> Option<&Targets> {
         match scene {

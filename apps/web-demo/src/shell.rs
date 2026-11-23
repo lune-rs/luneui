@@ -70,6 +70,10 @@ pub struct Options {
     pub log_frames: u32,
     /// Print `probe <key> <value>` lines for what the platform reports.
     pub probe: bool,
+    /// Print `probe field_at <x>,<y>` (where the Text scene's field is, in physical px, once the
+    /// scene rests) and `probe field "<text>"` (its text, `{:?}` quoted, whenever it changes): what
+    /// the browser check types into and reads back.
+    pub probe_text: bool,
     /// Exit the event loop after this many presented frames (desktop only).
     pub frames: Option<u32>,
     /// The background does not move and asks for no frames.
@@ -89,6 +93,7 @@ impl Default for Options {
         Self {
             log_frames: 3,
             probe: false,
+            probe_text: false,
             frames: None,
             still: false,
             motion: None,
@@ -100,7 +105,7 @@ impl Default for Options {
 }
 
 /// The window flags' usage line.
-pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky] [--backend gl|auto]";
+pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--probe-text] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky] [--backend gl|auto]";
 
 /// The motion tier a word names.
 pub fn tier_from_word(word: &str) -> Option<MotionTier> {
@@ -120,6 +125,7 @@ pub fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--probe" => options.probe = true,
+            "--probe-text" => options.probe_text = true,
             "--frames" => options.frames = Some(args.next()?.parse().ok()?),
             "--still" => options.still = true,
             "--motion" => options.motion = Some(tier_from_word(&args.next()?)?),
@@ -206,6 +212,9 @@ pub(crate) struct App {
     want_frame: bool,
     /// The layout word the last `probe layout` line said.
     last_layout: Option<bool>,
+    /// What `--probe-text` last said: the field's place and its text.
+    seen_field_at: String,
+    seen_field: Option<String>,
     error: Option<String>,
 }
 
@@ -353,6 +362,7 @@ impl App {
             .events
             .push(Event::SafeArea(mobile::safe_area(window)));
         let rendered = self.stage.frame(input, text);
+        let rendered_position = rendered.position;
         let (display, out, layout) = (rendered.scene, rendered.out, rendered.layout);
         // What the output will set on the window, for the text bridge first (a browser's winit
         // window has no input method of its own).
@@ -386,6 +396,9 @@ impl App {
             say!("presented {} {}x{}", self.presented, size.0, size.1);
         }
         self.report_layout(&layout);
+        if self.options.probe_text {
+            self.report_text(rendered_position, s);
+        }
         if self.presented < self.options.log_frames {
             self.want_frame = true;
         }
@@ -402,6 +415,30 @@ impl App {
             self.want_frame = true;
         }
         Ok(())
+    }
+
+    /// Prints `probe field_at` and `probe field` (`--probe-text`) when they change.
+    fn report_text(&mut self, position: f32, scale: f32) {
+        let text = &self.stage.scenes.text;
+        if self.stage.want == SceneId::Text
+            && (position - SceneId::Text.index() as f32).abs() < 1e-3
+            && let Some((x, y)) = text.targets.centre("field")
+        {
+            let line = format!(
+                "{},{}",
+                (f64::from(x) * f64::from(scale)).round() as i64,
+                (f64::from(y) * f64::from(scale)).round() as i64
+            );
+            if line != self.seen_field_at {
+                say!("probe field_at {line}");
+                self.seen_field_at = line;
+            }
+        }
+        let field = format!("{:?}", text.field);
+        if self.seen_field.as_deref() != Some(field.as_str()) {
+            say!("probe field {field}");
+            self.seen_field = Some(field);
+        }
     }
 
     /// Prints `probe layout wide|narrow <w>x<h>` when the frame's layout kind changes (the browser
@@ -558,6 +595,8 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         pending: Rc::new(RefCell::new(None)),
         want_frame: false,
         last_layout: None,
+        seen_field_at: String::new(),
+        seen_field: None,
         error: None,
     };
     // A browser owns its loop: the app goes to the page and `run` returns at once, so a failure

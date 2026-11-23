@@ -3,7 +3,7 @@
 // console lines and judges them. Exit codes: 0 passed, 1 a check failed (the line is quoted), 2 usage
 // or setup. The browser is killed on every exit path.
 //
-//   node run.mjs --package <name> --build-dir <dir> --out <dir> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--keep-serving]
+//   node run.mjs --package <name> --build-dir <dir> --out <dir> [--demo] [--gl] [--smoke] [--type-field] [--phone] [--query <q>] [--keep-serving]
 //   node run.mjs --self-test       (the server's path rules and the blank-shot check; no browser)
 import fs from "node:fs";
 import http from "node:http";
@@ -319,7 +319,7 @@ async function selfTest(scratchRoot) {
 // The browser run.
 
 function parseArgs(argv) {
-  const opts = { demo: false, gl: false, smoke: false, phone: false, query: "", keepServing: false, selfTest: false };
+  const opts = { demo: false, gl: false, smoke: false, typeField: false, phone: false, query: "", keepServing: false, selfTest: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -333,6 +333,7 @@ function parseArgs(argv) {
     else if (a === "--demo") opts.demo = true;
     else if (a === "--gl") opts.gl = true;
     else if (a === "--smoke") opts.smoke = true;
+    else if (a === "--type-field") opts.typeField = true;
     else if (a === "--phone") opts.phone = true;
     else if (a === "--query") opts.query = val();
     else if (a === "--keep-serving") opts.keepServing = true;
@@ -523,6 +524,34 @@ async function smokeMacKeymap(context, origin, params) {
   await page.close();
 }
 
+// --type-field: a real keyboard types into the web demo's Text scene (the text bridge, D429). The page's field is
+// clicked, everything in it is selected with the platform's chord and `keys` is typed; the app's
+// `probe field` line must then say exactly `keys`, and a shot is taken.
+async function typeIntoField(page, lines, waitLine, shoot) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const at = (await waitLine(/^probe field_at -?\d+,-?\d+$/, 10_000, "`probe field_at` (the Text scene at rest)"))
+    .slice("probe field_at ".length)
+    .split(",")
+    .map(Number);
+  const box = await page.locator("#luneui").boundingBox();
+  if (!box) throw new Error("the page has no canvas to click");
+  const p = { x: box.x + at[0] / VIEW.scale, y: box.y + at[1] / VIEW.scale };
+  await page.mouse.click(p.x, p.y);
+  await sleep(600);
+  const active = await page.evaluate(() => document.activeElement?.getAttribute("data-luneui") ?? document.activeElement?.tagName);
+  if (active !== "text-input") throw new Error(`after the click the focused element is ${active}, not the text bridge`);
+  const mac = await page.evaluate(() => /mac|iphone|ipad/i.test(navigator.platform));
+  await page.keyboard.press(mac ? "Meta+A" : "Control+A");
+  await sleep(300);
+  await page.keyboard.type("keys");
+  await waitLine(/^probe field "keys"$/, 5_000, "`probe field \"keys\"` (typed with real key events over a select all)");
+  await sleep(400); // a doubled character would show as a later line
+  const got = lastField(lines);
+  if (got !== "keys") throw new Error(`the field is ${JSON.stringify(got)}, wanted "keys"`);
+  process.stdout.write("web-run: typing into the Text field ok (select all, `keys`)\n");
+  await shoot(page, "text-typed");
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.selfTest) {
@@ -542,6 +571,7 @@ async function main() {
   const params = [];
   if (opts.demo) params.push("demo", "touches");
   if (opts.smoke) params.push("probe", "probe-clipboard", "probe-text-input");
+  if (opts.typeField) params.push("probe-text");
   if (opts.gl) params.push("backend=gl");
   if (opts.query) params.push(opts.query.replace(/^\?/, ""));
   const url = `${origin}/index.html${params.length ? "?" + params.join("&") : ""}`;
@@ -734,6 +764,7 @@ async function main() {
     }
 
     if (opts.smoke) await smokeTextInput(page, context, lines, waitLine);
+    if (opts.typeField) await typeIntoField(page, lines, waitLine, shoot);
 
     if (opts.demo) {
       const marks = [
@@ -765,7 +796,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 300));
     if (failure !== null) throw new Error(failure);
     exitCode = 0;
-    process.stdout.write(`web-run: passed (${opts.demo ? "demo " : ""}${opts.phone ? "phone " : ""}${opts.gl ? "WebGL2" : "WebGPU"}${opts.smoke ? ", smoke" : ""})\n`);
+    process.stdout.write(`web-run: passed (${opts.demo ? "demo " : ""}${opts.phone ? "phone " : ""}${opts.gl ? "WebGL2" : "WebGPU"}${opts.smoke ? ", smoke" : ""}${opts.typeField ? ", typed" : ""})\n`);
   } catch (e) {
     process.stderr.write(`web-run: FAILED: ${failure ?? e.message}\n`);
     exitCode = 1;

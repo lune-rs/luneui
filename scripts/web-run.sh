@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds a web app and checks it in a browser: the web counterpart of ios-sim.sh (D427). Usage:
-#   scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--no-build] [--keep-serving]
+#   scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--type-field] [--phone] [--query <q>] [--no-build] [--keep-serving]
 #   scripts/web-run.sh --self-test
 #   (default)       scripts/web-build.sh <package>, serve target/web/<package>/ on 127.0.0.1 (an ephemeral port,
 #                   loopback only, only files under that directory), open it in the separate Chromium (headless,
@@ -22,6 +22,10 @@
 #                   (exactly `hello`), Backspace gives `hell`, a CDP composition then commit gives `hell日本`,
 #                   Ctrl+A and Backspace empty it, then typing after Tab and after a click outside the canvas
 #                   changes nothing; a second bridge attached and dropped leaves one element (`1 2 1`).
+#   --type-field    for the web demo on its Text scene (`--query scene=text`): the query gains `probe-text`; the page's
+#                   field is clicked, all of it is selected with the platform's chord (Cmd or Ctrl and A) and
+#                   `keys` is typed with real key events; the app's `probe field` line must then say exactly
+#                   `keys` (the text bridge, the keymap and the field's engine in one), and `text-typed.png` is shot.
 #   --phone         for an app that fills the window (not `demo`): a phone viewport, 390x844 at device scale 3 with
 #                   touch, instead of the desktop's 1440x900 at 2; the run requires `probe layout narrow` (the
 #                   desktop run requires `probe layout wide`); files are prefixed `phone-`. Such an app also
@@ -45,7 +49,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 usage() {
-  echo "usage: scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--no-build] [--keep-serving] | --self-test" >&2
+  echo "usage: scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--type-field] [--phone] [--query <q>] [--no-build] [--keep-serving] | --self-test" >&2
   exit 2
 }
 fail() {
@@ -61,7 +65,7 @@ while [ "$#" -gt 0 ]; do
   arg="$1"
   shift
   case "$arg" in
-    --demo | --gl | --smoke | --phone | --keep-serving) driver_flags+=("$arg") ;;
+    --demo | --gl | --smoke | --type-field | --phone | --keep-serving) driver_flags+=("$arg") ;;
     --query)
       [ "$#" -gt 0 ] || usage
       case "$1" in *[!A-Za-z0-9_=\&.-]*) fail "bad --query \`$1\`" ;; esac

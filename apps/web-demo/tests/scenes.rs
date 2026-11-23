@@ -793,7 +793,39 @@ fn the_grow_in_changes_the_picture_and_a_scene_at_rest_has_none() {
 }
 
 #[test]
-fn the_board_keeps_every_lane_filled_and_none_over_three() {
+fn a_finger_drags_a_card_across_the_board_and_the_board_reports_the_move() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Data;
+    let start = run.stage.scenes.data.lanes.clone();
+    let mut seen = std::collections::HashSet::new();
+    let mut ghosted = false;
+    // 40 s of 16 ms frames: the autopilot's board step comes every 12 s.
+    let mut last = None;
+    for _ in 0..(40 * 60) {
+        let r = run.step(FRAME, Vec::new());
+        seen.insert(run.stage.scenes.data.lanes.clone());
+        if run.stage.scenes.data.hand_busy() {
+            // While the finger is down the frame differs from the frame before.
+            ghosted |= last.as_ref().is_some_and(|l| *l != r.scene);
+        }
+        last = Some(r.scene);
+    }
+    let d = &run.stage.scenes.data;
+    assert!(d.drops >= 3, "the board reported {} drags in 40 s", d.drops);
+    assert!(
+        seen.len() >= 4 && !seen.contains(&Vec::new()),
+        "{start:?} -> {seen:?}"
+    );
+    assert!(ghosted);
+    for lane in 0..3 {
+        assert!((1..=2).contains(&d.lane_len(lane)));
+    }
+    // The finger is not a person's hand: the autopilot kept going through its drags.
+    assert!(d.pilot.acted >= 20, "{}", d.pilot.acted);
+}
+
+#[test]
+fn the_board_keeps_every_lane_filled_and_none_over_two() {
     let mut d = data::Data::default();
     let mut seen = std::collections::HashSet::new();
     for round in 0..40 {

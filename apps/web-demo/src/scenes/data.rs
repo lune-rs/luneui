@@ -11,12 +11,14 @@
 use std::time::Duration;
 
 use lune_ui::color::{Rgba, with_alpha};
-use lune_ui::motion::{Kind, Motion};
+use lune_ui::input::{Event, Modifiers, PointerButton, TouchEvent, TouchPhase};
+use lune_ui::motion::{Easing, Kind, Motion};
 use lune_ui::paint::Rect;
+use lune_ui::playback::{Player, Script};
 use lune_ui::text::{Spec, Style};
 use lune_ui::ui::Ui;
 use lune_ui::widgets::bar_chart::{self, BarChartOptions, BarColumn, BarSeries};
-use lune_ui::widgets::kanban_board::{BoardOptions, KanbanCard, KanbanColumn};
+use lune_ui::widgets::kanban_board::{self, BoardOptions, KanbanCard, KanbanColumn, landed_index};
 use lune_ui::widgets::pie_chart::{self, PieOptions, PieSlice};
 use lune_ui::widgets::progress::ProgressOptions;
 use lune_ui::widgets::stat::StatOptions;
@@ -68,7 +70,7 @@ fn min_h(card: Card) -> f32 {
     match card {
         Card::Stats => 100.0,
         Card::Bars | Card::Pie | Card::Table => 292.0,
-        Card::Board | Card::Meters => 336.0,
+        Card::Board | Card::Meters => 304.0,
     }
 }
 
@@ -187,6 +189,9 @@ const SERVICES: [Service; 7] = [
         latency: 73,
     },
 ];
+
+/// The table's own text sits this far above the middle of its slot (the hairline under each row).
+const ROW_NUDGE: f32 = 3.0;
 
 const NAME: u64 = 1;
 const REQUESTS: u64 = 2;
@@ -333,6 +338,12 @@ pub struct Data {
     pub grew: Option<Duration>,
     /// How many sorts the autopilot has asked for.
     sorts: usize,
+    /// The finger that drags a card across the board, while it does.
+    hand: Option<Player>,
+    /// How many cards the hand has dropped in a lane (the board reported each as a move).
+    pub drops: u32,
+    /// The app time of the last frame the scene drew.
+    seen: Option<Duration>,
     /// The controls of the last frame.
     pub targets: Targets,
 }
@@ -359,6 +370,9 @@ impl Default for Data {
             rolled: 0,
             grew: None,
             sorts: 0,
+            hand: None,
+            drops: 0,
+            seen: None,
             targets: Targets::default(),
         }
     }
@@ -402,17 +416,151 @@ impl Data {
 
     /// Moves one task a lane to the right (the last lane wraps to the first), the `round`th in turn
     /// among those that can: a task whose lane keeps another, into a lane with room, so no lane
-    /// is ever empty of the board's three and none holds more than three.
+    /// is ever empty and none holds more than two (the board shows two cards a column).
     pub fn advance_board(&mut self, round: usize) {
         for k in 0..TASKS.len() {
             let task = TASKS[(round * 2 + k) % TASKS.len()];
             let from = self.lane_of(task.key);
             let to = (from + 1) % LANES.len();
-            if self.lane_len(from) > 1 && self.lane_len(to) < 3 {
+            if self.lane_len(from) > 1 && self.lane_len(to) < 2 {
                 self.move_task(task.key, to);
                 return;
             }
         }
+    }
+
+    /// Puts task `key` in `lane` at `index` (counted on the lane as it stands, the task still in
+    /// it when the lane is its own).
+    pub fn place(&mut self, key: u64, lane: usize, index: usize) {
+        let from = self
+            .lanes
+            .iter()
+            .filter(|(_, l)| *l == lane)
+            .position(|(k, _)| *k == key);
+        let index = landed_index(from, index);
+        self.lanes.retain(|(k, _)| *k != key);
+        let at = self
+            .lanes
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, l))| *l == lane)
+            .nth(index)
+            .map_or(self.lanes.len(), |(i, _)| i);
+        self.lanes.insert(at, (key, lane));
+    }
+
+    /// Whether the finger is dragging a card now.
+    pub fn hand_busy(&self) -> bool {
+        self.hand.as_ref().is_some_and(|p| !p.is_finished())
+    }
+
+    /// The events the finger has due at app time `now`, appended to `events`: the stage calls this
+    /// before the frame, so the drag reaches the board as any hand's would. It lets go of a drag
+    /// the scene was not drawn for.
+    pub fn inject(&mut self, now: Duration, events: &mut Vec<Event>) {
+        let drawn = self
+            .seen
+            .is_some_and(|t| now.saturating_sub(t) < Duration::from_millis(250));
+        match &mut self.hand {
+            Some(p) if drawn => {
+                p.advance(now, events);
+                if p.is_finished() {
+                    self.hand = None;
+                }
+            }
+            Some(p) => {
+                // The finger lifts: whatever it held is cancelled where it was.
+                for c in p.contacts(now).iter().filter(|c| c.down) {
+                    events.push(Event::Touch(TouchEvent::new(
+                        c.id,
+                        TouchPhase::Cancelled,
+                        c.pos,
+                    )));
+                }
+                self.hand = None;
+            }
+            None => {}
+        }
+    }
+
+    /// Starts a drag of the first card of a lane that has two to the top of the next lane, which has
+    /// room: the board's own gesture, ghost and drop line and landing. `false` when the board is
+    /// narrower than its columns (a phone scrolls it sideways) and the card has to be moved by the
+    /// model.
+    fn start_drag(&mut self, ui: &mut Ui<'_>, round: usize) -> bool {
+        let Some(board) = self.targets.get("board") else {
+            return false;
+        };
+        if board.w + 1.0 < BOARD_W || self.hand_busy() {
+            return false;
+        }
+        let t = *ui.theme();
+        let Some(from) = (0..LANES.len())
+            .map(|k| (round + k) % LANES.len())
+            .find(|l| self.lane_len(*l) > 1 && self.lane_len((l + 1) % LANES.len()) < 2)
+        else {
+            return false;
+        };
+        let to = (from + 1) % LANES.len();
+        let Some(first) = self.lanes.iter().find(|(_, l)| *l == from).map(|(k, _)| *k) else {
+            return false;
+        };
+        let Some(task) = TASKS.iter().find(|x| x.key == first) else {
+            return false;
+        };
+        let card = KanbanCard {
+            key: task.key,
+            title: task.title,
+            tags: task.tags,
+            assignee: Some(task.who),
+            note: false,
+        };
+        let h = kanban_board::card_height(ui.painter(), &card, &t);
+        let lane_x = |c: usize| {
+            board.x
+                + kanban_board::MARGIN
+                + c as f32 * (kanban_board::COLUMN_W + kanban_board::COLUMN_GAP)
+                + kanban_board::BORDER
+                + kanban_board::COLUMN_PAD
+                + kanban_board::CARD_W / 2.0
+        };
+        let list_y = board.y
+            + kanban_board::MARGIN
+            + kanban_board::HEADER
+            + kanban_board::HEADER_GAP
+            + kanban_board::BORDER
+            + kanban_board::COLUMN_PAD
+            + kanban_board::COLUMN_HEADER
+            + kanban_board::COLUMN_HEADER_GAP;
+        let press = (lane_x(from), list_y + (h / 2.0).min(30.0));
+        let drop = (lane_x(to), list_y + 14.0);
+        // The mouse: it moves to the card, presses, carries it over to the next lane on an eased
+        // line, holds a moment over the drop line, lets go and leaves.
+        let button = |pressed| Event::PointerButton {
+            pos: if pressed { press } else { drop },
+            button: PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::default(),
+        };
+        let mut s = Script::new();
+        let ms = Duration::from_millis;
+        s.event(Event::PointerMoved { pos: press }).wait(ms(150));
+        s.event(button(true)).wait(ms(120));
+        let steps = 56;
+        for i in 1..=steps {
+            let k = Easing::SineInOut.eval(i as f32 / steps as f32);
+            let pos = (
+                press.0 + (drop.0 - press.0) * k,
+                press.1 + (drop.1 - press.1) * k,
+            );
+            s.event(Event::PointerMoved { pos }).wait(ms(16));
+        }
+        s.wait(ms(260));
+        s.event(button(false)).wait(ms(80));
+        s.event(Event::PointerLeft);
+        s.end_hold(ms(0));
+        self.hand = Some(Player::new(s));
+        true
     }
 
     /// What the autopilot does at step `n`: one change, round-robin over the parts.
@@ -453,7 +601,12 @@ impl Data {
                 self.stats[2] += 140.0 + f64::from((noise(n + 2) * 600.0).round());
                 self.stats[3] = 90.0 + f64::from((noise(n + 3) * 70.0).round());
             }
-            4 => self.advance_board((n / 8) as usize),
+            4 => {
+                let round = (n / 8) as usize;
+                if !self.start_drag(ui, round) {
+                    self.advance_board(round);
+                }
+            }
             5 => {
                 for k in 0..2u64 {
                     let at = (noise(n + k * 7) * 5.0) as usize % 5;
@@ -474,9 +627,18 @@ impl Data {
 
     /// Draws the scene into `body`.
     pub fn draw(&mut self, ui: &mut Ui<'_>, body: Rect, env: &Env) {
-        self.pilot.observe(ui, body.inset(-env.pad(), 0.0), env);
+        self.seen = Some(ui.time());
+        // The finger's own events are not a person's hand.
+        if !self.hand_busy() {
+            self.pilot.observe(ui, body.inset(-env.pad(), 0.0), env);
+        }
         if let Some(n) = self.pilot.tick(env, STEP) {
-            self.act(n, ui);
+            if env.entering {
+                // The page has not landed: its board is not where it will be.
+                self.advance_board((n / 8) as usize);
+            } else {
+                self.act(n, ui);
+            }
         }
         let grow = self.entry.elapsed(env);
         self.grew = grow;
@@ -601,7 +763,7 @@ impl Data {
                 tip: "",
             })
             .collect();
-        let labels = [(0, "Nov 10"), (4, "Nov 14"), (8, "Nov 18"), (12, "Nov 22")];
+        let labels = [(0, "Nov 10"), (4, "14"), (8, "18"), (12, "22")];
         let opts = BarChartOptions {
             series: &series,
             columns: &columns,
@@ -763,7 +925,7 @@ impl Data {
                 let spec = p.elide(&Spec::plain(text, style), c.rect.w);
                 let (w, h) = p.measure(&spec);
                 let x = if right { c.rect.right() - w } else { c.rect.x };
-                p.text(&spec, x, c.rect.y + (c.rect.h - h) / 2.0 + dy);
+                p.text(&spec, x, c.rect.y + (c.rect.h - h) / 2.0 - ROW_NUDGE + dy);
                 Cell::Control
             },
         );
@@ -811,7 +973,10 @@ impl Data {
         self.targets.note("board", r);
         if let Some(m) = resp.moved {
             let lane = LANES.iter().position(|(k, _)| *k == m.column).unwrap_or(0);
-            self.move_task(m.card, lane);
+            self.place(m.card, lane, m.index);
+            if self.hand_busy() {
+                self.drops += 1;
+            }
         }
     }
 

@@ -428,7 +428,13 @@ fn min_h(card: Card, narrow: bool) -> f32 {
                 236.0
             }
         }
-        Card::Controls => 300.0,
+        Card::Controls => {
+            if narrow {
+                420.0
+            } else {
+                300.0
+            }
+        }
         Card::Inbox => 268.0,
     }
 }
@@ -736,7 +742,12 @@ impl ThemeScene {
         let gap = 24.0;
         let colw = if two { (inner.w - gap) / 2.0 } else { inner.w };
         let left = Rect::new(inner.x, inner.y + 26.0, colw, inner.h - 26.0);
-        let right = Rect::new(inner.x + colw + gap, left.y, colw, left.h);
+        // One column when narrow: the right half's items follow the left's in the same column.
+        let right = if two {
+            Rect::new(inner.x + colw + gap, left.y, colw, left.h)
+        } else {
+            left
+        };
         // Left: a toggle, a slider and two checkboxes in four slots.
         let slot = |r: Rect, n: usize, i: usize| {
             let pitch = r.h / n as f32;
