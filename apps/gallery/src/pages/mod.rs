@@ -81,6 +81,7 @@ mod status_dot;
 mod stepper;
 mod steps;
 mod swipe_actions;
+mod system_monitor;
 mod tab_bar;
 mod tab_strip;
 mod table;
@@ -208,6 +209,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &ring_gauge::PAGE,
     &sparkline::PAGE,
     &battery::PAGE,
+    &system_monitor::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

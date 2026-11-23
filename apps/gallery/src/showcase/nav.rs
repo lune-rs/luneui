@@ -111,6 +111,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "ring-gauge",
             "sparkline",
             "battery",
+            "system-monitor",
         ],
     },
     Group {
