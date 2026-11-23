@@ -18,7 +18,7 @@ use lune_ui::paint::{Rect, StrokeStyle};
 use lune_ui::text::{Spec, Style};
 use lune_ui::ui::Ui;
 use lune_ui::widgets::badge;
-use lune_ui::widgets::button::{ButtonKind, ButtonOptions, IconButton};
+use lune_ui::widgets::button::{ButtonKind, ButtonOptions, IconButton, button_width_with};
 use lune_ui::widgets::dialog::{Cancel, Dialog, DialogGlass};
 use lune_ui::widgets::progress::ProgressOptions;
 use lune_ui::widgets::stat::StatOptions;
@@ -89,7 +89,7 @@ impl Card {
             Card::Team => 232.0,
             Card::Quick => 196.0,
             Card::Revenue => 200.0,
-            Card::Sync => 196.0,
+            Card::Sync => 176.0,
             Card::Storage => 176.0,
         }
     }
@@ -128,7 +128,8 @@ pub struct Plan {
 }
 
 /// Lays the cards out in `body`: three columns when there is room, two, or one stacked (which
-/// scrolls). The cards grow with the room, and the spare height is spread between them.
+/// scrolls). The cards keep the height their content needs and form a staggered cluster centred in
+/// the stage.
 pub fn plan(body: Rect, wide: bool) -> Plan {
     let n = if !wide || body.w < 560.0 {
         1
@@ -164,23 +165,10 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
         body.w - 2.0 * side,
         body.h - TOP,
     );
-    let raw = (body.w - (n as f32 - 1.0) * GAP) / n as f32;
-    let cw = raw.min(400.0);
-    let gap_x = if n > 1 {
-        (body.w - n as f32 * cw) / (n as f32 - 1.0)
-    } else {
-        0.0
-    };
-    let sums: Vec<f32> = cols
-        .iter()
-        .map(|c| c.iter().map(|k| k.base_h()).sum())
-        .collect();
-    let most = cols.iter().map(Vec::len).max().unwrap_or(1) as f32;
-    let widest = sums.iter().copied().fold(0.0, f32::max);
-    let phases = [0.30_f32, 0.65, 0.45];
     let mut cards = Vec::new();
     let mut height = body.h;
     if n == 1 {
+        let cw = body.w.min(400.0);
         let mut y = body.y;
         let x = body.x + (body.w - cw) / 2.0;
         for k in &cols[0] {
@@ -189,19 +177,45 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
         }
         height = (y - 16.0 - body.y).max(body.h);
     } else {
-        let scale = ((body.h * 0.92 - GAP * (most - 1.0)) / widest).clamp(0.9, 1.4);
-        let need = widest * scale + GAP * (most - 1.0);
-        height = height.max(need);
+        // A staggered cluster, centred in the stage: the cards keep the height their content needs
+        // and the free space lies between them. The columns start at different heights.
+        let stagger = [0.0_f32, if n == 3 { 44.0 } else { 12.0 }, 18.0];
+        let raw = (body.w - (n as f32 - 1.0) * GAP) / n as f32;
+        let cw = raw.min(340.0);
+        let gap_x = ((body.w - n as f32 * cw) / (n as f32 - 1.0)).clamp(GAP, 56.0);
+        let x0 = body.x + (body.w - (n as f32 * cw + (n as f32 - 1.0) * gap_x)) / 2.0;
+        let tallest = |scale: f32, gap: f32| {
+            cols.iter()
+                .enumerate()
+                .map(|(i, c)| {
+                    let sum: f32 = c.iter().map(|k| k.base_h() * scale).sum();
+                    stagger[i] + sum + gap * (c.len() as f32 - 1.0)
+                })
+                .fold(0.0, f32::max)
+        };
+        let scale = if n == 2 {
+            let slack = body.h - TOP - tallest(1.0, 20.0);
+            (1.0 + slack / (tallest(1.0, 20.0) - 20.0 * 2.0)).clamp(0.9, 1.0)
+        } else {
+            1.0
+        };
+        let most = cols.iter().map(Vec::len).max().unwrap_or(1) as f32;
+        let gap_y = if n == 2 {
+            20.0
+        } else {
+            ((body.h * 0.9 - tallest(scale, 0.0)) / (most - 1.0)).clamp(28.0, 96.0)
+        };
+        let cluster = tallest(scale, gap_y);
+        // The bob and the pull need room under the last card as above the first.
+        height = height.max(cluster + TOP);
+        let top = body.y + ((height - cluster) / 2.0).max(0.0);
         for (i, col) in cols.iter().enumerate() {
-            let x = body.x + i as f32 * (cw + gap_x);
-            let total: f32 = col.iter().map(|k| k.base_h() * scale).sum();
-            let k = col.len() as f32;
-            let gap = (height - total) / k;
-            let mut y = body.y + gap * phases[i % 3];
+            let x = x0 + i as f32 * (cw + gap_x);
+            let mut y = top + stagger[i];
             for card in col {
                 let h = card.base_h() * scale;
                 cards.push((*card, Rect::new(x, y, cw, h)));
-                y += h + gap;
+                y += h + gap_y;
             }
         }
     }
@@ -448,7 +462,7 @@ impl Glass {
         let art = Rect::new(r.x, r.y, side, side);
         let p = ui.painter();
         p.linear(art, 10.0, t.data, t.err, 0.9);
-        p.text_centered(&icon::glyph(icon::NOTE, side * 0.46, t.on_accent), art);
+        p.text_centered(&icon::glyph(glyph::MUSIC, side * 0.5, t.on_accent), art);
         let tx = r.x + side + 12.0;
         let w = r.w - side - 12.0;
         let p = ui.painter();
@@ -637,7 +651,7 @@ impl Glass {
         let t = *ui.theme();
         caps(ui, "Sync", r.x, r.y);
         let area = Rect::new(r.x, r.y + 22.0, r.w, (r.h - 22.0).max(0.0));
-        let d = area.h.min(120.0).min(r.w * 0.44);
+        let d = area.h.min(92.0).min(r.w * 0.40);
         let c = [area.x + d / 2.0, area.y + area.h / 2.0];
         let radius = d / 2.0 - 5.0;
         let id = ui.id("ring");
@@ -667,7 +681,7 @@ impl Glass {
             &pct,
             Rect::new(c[0] - radius, c[1] - 12.0, radius * 2.0, 24.0),
         );
-        let x = area.x + d + 16.0;
+        let x = area.x + d + 20.0;
         let w = (area.right() - x).max(0.0);
         let done = SYNC[self.sync] >= 0.9;
         let (tone, word) = if done {
@@ -675,20 +689,20 @@ impl Glass {
         } else {
             (Tone::Data, "Syncing")
         };
-        ui.status_dot("state", (x, area.y + 6.0), tone, word);
+        // The status, the count and the button side by side with the ring, as one block centred on it.
+        let top = c[1] - 38.0;
+        ui.status_dot("state", (x, top), tone, word);
         let files = format!("{} of 18 files", (SYNC[self.sync] * 18.0).round() as u32);
-        line(ui, &files, x, area.y + 40.0, w, t.font_base, t.fg_secondary);
-        let sync_button = Rect::new(x, area.bottom() - 24.0, 92.0_f32.min(w), 24.0);
+        line(ui, &files, x, top + 34.0, w, t.font_base, t.fg_secondary);
+        let options = ButtonOptions {
+            kind: ButtonKind::Primary,
+            small: true,
+            ..ButtonOptions::default()
+        };
+        let bw = button_width_with(ui.painter(), "Sync now", &options).min(w);
+        let sync_button = Rect::new(x, top + 52.0, bw, 24.0);
         self.targets.note("sync", sync_button);
-        let b = ui.button_with(
-            "sync",
-            sync_button,
-            "Sync now",
-            &ButtonOptions {
-                small: true,
-                ..ButtonOptions::default()
-            },
-        );
+        let b = ui.button_with("sync", sync_button, "Sync now", &options);
         if b.clicked {
             self.sync = (self.sync + 1) % SYNC.len();
         }

@@ -20,7 +20,7 @@ use lune_ui::paint::{Rect, StrokeStyle};
 use lune_ui::text::{Spec, Style};
 use lune_ui::ui::{Sense, Ui};
 use lune_ui::widgets::bottom_sheet::{BottomSheet, Detent};
-use lune_ui::widgets::button::{ButtonKind, ButtonOptions};
+use lune_ui::widgets::button::{ButtonKind, ButtonOptions, button_width_with};
 use lune_ui::widgets::nav_bar::NavBar;
 use lune_ui::widgets::pager::PagerOptions;
 
@@ -278,12 +278,13 @@ impl Motions {
                 caps(ui, demo.title(), frame.x + 4.0, frame.y - CAPTION + 5.0);
                 if *demo == Demo::Sheet {
                     // The toolkit's own sheet is a modal over the whole window: a button opens it.
-                    let open =
-                        Rect::new(frame.right() - 112.0, frame.y - CAPTION - 1.0, 112.0, 24.0);
                     let small = ButtonOptions {
+                        kind: ButtonKind::Primary,
                         small: true,
                         ..ButtonOptions::default()
                     };
+                    let bw = button_width_with(ui.painter(), "Open real sheet", &small);
+                    let open = Rect::new(frame.right() - bw, frame.y - CAPTION, bw, 24.0);
                     self.targets.note("real-open", open);
                     if ui
                         .button_with("real-open", open, "Open real sheet", &small)
@@ -392,11 +393,14 @@ impl Motions {
                 let spec = Spec::plain(title, Style::ui(t.font_title, t.on_accent).medium());
                 let tw = p.measure(&spec).0;
                 p.text(&spec, cx - tw / 2.0, disc.bottom() + 18.0);
-                let spec = Spec::plain(text, Style::ui(t.font_base, with_alpha(t.on_accent, 0.9)))
-                    .wrapped(card.w - 40.0);
-                p.text_centered(
-                    &spec,
-                    Rect::new(card.x + 20.0, disc.bottom() + 44.0, card.w - 40.0, 44.0),
+                super::centred_lines(
+                    ui,
+                    text,
+                    cx,
+                    disc.bottom() + 46.0,
+                    card.w - 40.0,
+                    t.font_base,
+                    with_alpha(t.on_accent, 0.9),
                 );
             },
         );

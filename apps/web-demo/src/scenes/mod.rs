@@ -33,6 +33,8 @@ pub mod glyph {
     pub const CODE: &str = "\u{eac4}";
     /// `cod-symbol-color`.
     pub const PALETTE: &str = "\u{eb5c}";
+    /// Material Design `music-note` (in the Nerd Font).
+    pub const MUSIC: &str = "\u{f0387}";
     /// `cod-play`.
     pub const PLAY: &str = "\u{eb2c}";
     /// `cod-debug-pause`.
@@ -274,6 +276,41 @@ pub(crate) fn line(ui: &mut Ui<'_>, text: &str, x: f32, cy: f32, w: f32, size: f
     let spec = p.elide(&Spec::plain(text, Style::ui(size, colour)), w.max(0.0));
     let h = p.measure(&spec).1;
     p.text(&spec, x, cy - h / 2.0);
+}
+
+/// `text` wrapped to `width` and drawn with every line centred on `cx`, the first line's top at
+/// `y`; returns the height drawn.
+pub(crate) fn centred_lines(
+    ui: &mut Ui<'_>,
+    text: &str,
+    cx: f32,
+    y: f32,
+    width: f32,
+    size: f32,
+    colour: Rgba,
+) -> f32 {
+    let p = ui.painter();
+    let style = Style::ui(size, colour);
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let joined = match lines.last() {
+            Some(l) => format!("{l} {word}"),
+            None => word.to_owned(),
+        };
+        let fits = p.measure(&Spec::plain(joined.clone(), style)).0 <= width;
+        match lines.last_mut() {
+            Some(last) if fits => *last = joined,
+            _ => lines.push(word.to_owned()),
+        }
+    }
+    let mut at = y;
+    for l in lines {
+        let spec = Spec::plain(l, style);
+        let (w, h) = p.measure(&spec);
+        p.text(&spec, cx - w / 2.0, at);
+        at += h;
+    }
+    at - y
 }
 
 /// Draws a scene's content in a scroll area over `body` widened by `pad` at the sides and the
