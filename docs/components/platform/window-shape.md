@@ -16,6 +16,7 @@ A `WindowShape` is a union of simple polygons in a frame's logical px (each poly
 ## Needs
 
 - Borderless windows that are not rectangles: the desktop shows, and takes clicks, between the parts (R-platform-4).
+- In a browser the shape mode is `Unsupported` (R-platform-8, `docs/web.md`).
 
 ## Existing code
 

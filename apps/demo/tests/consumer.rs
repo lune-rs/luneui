@@ -5,7 +5,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const ALLOWED: [&str; 4] = ["lune-ui", "winit", "wgpu", "pollster"];
+const ALLOWED: [&str; 8] = [
+    "lune-ui",
+    "winit",
+    "wgpu",
+    "pollster",
+    // The browser build (D426): the clock, and the glue to the page and its console.
+    "web-time",
+    "wasm-bindgen",
+    "wasm-bindgen-futures",
+    "web-sys",
+];
 
 /// The names of the package's dependencies of every kind and target, as cargo resolves them
 /// (`cargo metadata --no-deps`, offline), so no manifest spelling (a `[dependencies.<name>]`

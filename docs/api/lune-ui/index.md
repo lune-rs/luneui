@@ -68,5 +68,6 @@ Source: `crates/lune-ui/src/lib.rs:1`
 | `text_edit` | Module | [`lune_ui_core::text_edit`](../lune-ui-core/text_edit.md) |
 | `theme` | Module | [`lune_ui_core::theme`](../lune-ui-core/theme.md) |
 | `ui` | Module | [`lune_ui_core::ui`](../lune-ui-core/ui.md) |
+| `web` | Module | [`lune_ui_platform::web`](../lune-ui-platform/web.md) |
 | `widgets` | Module | [`lune_ui_core::widgets`](../lune-ui-core/widgets.md) |
 

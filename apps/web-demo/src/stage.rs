@@ -1,0 +1,1223 @@
+//! The stage: the screen the demo draws in every frame. A slowly moving background on the `Base`
+//! layer; over it the glass frame, which is a side rail of the six scenes beside a stage card on a
+//! wide window, and a title bar, a stage card and a bottom tab bar on a narrow one (a phone); and in
+//! the card the current scene, which a click on the rail or the tabs replaces with a push.
+//!
+//! The background and the push are functions of the app's time (`RawInput::time`), so a frame is
+//! deterministic: two dumps of the same state are the same bytes. Every colour comes from the
+//! theme: the app only sets alphas and mixes theme colours.
+
+use std::f32::consts::FRAC_PI_2;
+use std::f64::consts::TAU;
+use std::time::Duration;
+
+use lune_ui::color::{Rgba, clear, mix, premul, with_alpha, with_alpha_byte};
+use lune_ui::input::{CursorIcon, Event, FrameOutput, Key, Keymap, NamedKey, RawInput, keymap};
+use lune_ui::layout::Insets;
+use lune_ui::lunegit_dark;
+use lune_ui::motion::{Cadence, Easing, Kind, Motion, MotionTier};
+use lune_ui::paint::{Falloff, Rect, Xform};
+use lune_ui::playback;
+use lune_ui::scene::{LayerId, Scene};
+use lune_ui::shortcuts::Shortcuts;
+use lune_ui::strings::{DisplayFormat, StringTable};
+use lune_ui::text::{Spec, Style, TextCache, TextSystem};
+use lune_ui::theme::Theme;
+use lune_ui::ui::{FrameConfig, Response, RoveAxis, Sense, Ui, UiStore, WidgetId};
+use lune_ui::widgets::nav_item::{self, NavLook};
+use lune_ui::widgets::{nav_bar, page, tab_bar};
+
+use crate::hud::Hud;
+use crate::scenes::theme::{Fx, Look, Preset, accent_share};
+use crate::scenes::{Env, SceneId, Scenes};
+use crate::tour::{self, MarkResult, Play, Tour};
+
+/// Below this window width, in logical px, the frame is the phone's: a title bar, the stage card and
+/// a tab bar.
+pub const NARROW_BELOW: f32 = 700.0;
+/// The window edge to the content, and the gap between the blocks of a wide frame (the recipes'
+/// `MARGIN` and `GAP`).
+pub const MARGIN: f32 = 16.0;
+/// The gap between the rail and the stage card.
+pub const GAP: f32 = 12.0;
+/// The rail's width: between the sidebar's 208 and 240.
+pub const RAIL_W: f32 = 224.0;
+/// The stage card's corner radius (`page::RADIUS`, `panel::RADIUS`).
+pub const CARD_RADIUS: f32 = page::RADIUS;
+/// The card's padding on a wide window (`page::PAD`).
+pub const PAD: f32 = page::PAD;
+/// The card's padding, and the distance from the edge to the card, on a narrow window.
+pub const NARROW_PAD: f32 = 12.0;
+/// The narrow title bar's row under the safe area (`nav_bar::HEIGHT`).
+pub const TITLE_BAR: f32 = nav_bar::HEIGHT;
+/// The narrow tab bar's row above the safe area (`tab_bar::HEIGHT`).
+pub const TAB_BAR: f32 = tab_bar::HEIGHT;
+/// The space between the rail's top and its first row: the brand block and a gap.
+const RAIL_ROWS_TOP: f32 = 68.0;
+/// The rail's footer line.
+const RAIL_FOOTER: f32 = 20.0;
+/// The tab cell's highlight inset (the tab bar's own).
+const TAB_INSET: (f32, f32) = (6.0, 4.0);
+/// What the push moves the scene it covers, as a share of the distance the new one travels.
+const PARALLAX: f32 = 0.25;
+/// The glyph size of a tab.
+const TAB_GLYPH: f32 = 24.0;
+
+/// The push between scenes: the `drawer` kind (`moderate`, sine-in-out, a fade under Reduced). The
+/// duration is the theme's token, never a number here.
+const PUSH: Motion = Motion::of(Kind::Drawer);
+
+/// The app time the background rests at when it does not move (`--still`, and Reduced or Off
+/// motion): a moment at which the blobs sit apart.
+pub const STILL_AT: Duration = Duration::from_secs(9);
+
+// ---------------------------------------------------------------------------------------------
+// The background.
+
+/// A colour of the theme a blob takes.
+#[derive(Debug, Clone, Copy)]
+enum Hue {
+    Data,
+    DataHi,
+    Link,
+    Ok,
+    Err,
+    /// Halfway between `data` and `err`.
+    Violet,
+}
+
+impl Hue {
+    fn of(self, t: &Theme) -> Rgba {
+        match self {
+            Hue::Data => t.data,
+            Hue::DataHi => t.data_hi,
+            Hue::Link => t.link,
+            Hue::Ok => t.ok,
+            Hue::Err => t.err,
+            Hue::Violet => mix(t.data, t.err, 0.5),
+        }
+    }
+}
+
+/// One drifting light. The centre moves on a closed Lissajous path (two incommensurate periods),
+/// the radius breathes, the colour leans slowly towards a second hue.
+#[derive(Debug, Clone, Copy)]
+pub struct Blob {
+    /// The path's middle, as shares of the window's width and height.
+    pub centre: (f32, f32),
+    /// The path's half-extent, as shares of the width and the height.
+    pub amp: (f32, f32),
+    /// The periods of the two axes, in seconds.
+    pub period: (f64, f64),
+    /// The phases of the two axes, in turns.
+    pub phase: (f64, f64),
+    /// The ellipse radius, as shares of a 1440x900 window's width and height (scaled with the
+    /// window's diagonal), before breathing.
+    pub radius: (f32, f32),
+    /// The breathing: the half-extent (a share of the radius) and the period in seconds.
+    pub breath: (f32, f64),
+    /// The colour at rest, and the one it leans towards over `lean.1` seconds, by at most `lean.0`.
+    hue: Hue,
+    to: Hue,
+    lean: (f32, f64),
+    /// The inner colour's alpha, 0 to 1.
+    alpha: f32,
+}
+
+/// The window the blobs' radii are shares of.
+const REFERENCE: (f32, f32) = (1440.0, 900.0);
+
+/// The blobs: blue, rose, teal and violet (the theme's `data`, `err`, `ok` and their mix).
+pub const BLOBS: [Blob; 4] = [
+    Blob {
+        centre: (0.24, 0.30),
+        amp: (0.09, 0.10),
+        period: (47.0, 58.0),
+        phase: (0.00, 0.30),
+        radius: (0.42, 0.62),
+        breath: (0.10, 31.0),
+        hue: Hue::Data,
+        to: Hue::Link,
+        lean: (0.7, 71.0),
+        alpha: 0.66,
+    },
+    Blob {
+        centre: (0.76, 0.34),
+        amp: (0.10, 0.12),
+        period: (53.0, 41.0),
+        phase: (0.35, 0.10),
+        radius: (0.38, 0.58),
+        breath: (0.12, 37.0),
+        hue: Hue::Err,
+        to: Hue::Violet,
+        lean: (0.6, 83.0),
+        alpha: 0.58,
+    },
+    Blob {
+        centre: (0.55, 0.82),
+        amp: (0.12, 0.08),
+        period: (59.0, 43.0),
+        phase: (0.60, 0.70),
+        radius: (0.44, 0.52),
+        breath: (0.08, 43.0),
+        hue: Hue::Ok,
+        to: Hue::DataHi,
+        lean: (0.8, 79.0),
+        alpha: 0.50,
+    },
+    Blob {
+        centre: (0.14, 0.78),
+        amp: (0.08, 0.09),
+        period: (37.0, 55.0),
+        phase: (0.15, 0.85),
+        radius: (0.34, 0.46),
+        breath: (0.10, 29.0),
+        hue: Hue::Violet,
+        to: Hue::Data,
+        lean: (0.5, 67.0),
+        alpha: 0.52,
+    },
+];
+
+/// The centre of blob `i` at app time `t` (seconds) in a window of `size` logical px.
+pub fn blob_centre(i: usize, t: f64, size: (f32, f32)) -> (f32, f32) {
+    let b = &BLOBS[i];
+    let x = (t / b.period.0 + b.phase.0) * TAU;
+    let y = (t / b.period.1 + b.phase.1) * TAU;
+    (
+        size.0 * (b.centre.0 + b.amp.0 * x.sin() as f32),
+        size.1 * (b.centre.1 + b.amp.1 * y.sin() as f32),
+    )
+}
+
+/// The most blob `i`'s centre can move per second in a window of `size`: the path's speed is at
+/// most this on every instant (the axes' own peak speeds, added in quadrature).
+pub fn blob_speed_bound(i: usize, size: (f32, f32)) -> f32 {
+    let b = &BLOBS[i];
+    let vx = f64::from(size.0 * b.amp.0) * TAU / b.period.0;
+    let vy = f64::from(size.1 * b.amp.1) * TAU / b.period.1;
+    vx.hypot(vy) as f32
+}
+
+/// The shortest period of any motion of the background (a path, the breathing or the colour's
+/// lean), in seconds.
+pub fn shortest_period() -> f64 {
+    BLOBS
+        .iter()
+        .flat_map(|b| [b.period.0, b.period.1, b.breath.1, b.lean.1])
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// `c` made opaque.
+fn opaque(c: Rgba) -> Rgba {
+    with_alpha_byte(c, 255)
+}
+
+/// Draws the background into `win` on the `Base` layer at app time `t` (seconds): the theme's window
+/// tint with a faint wash of its `data` and `err` colours, and the blobs as radial lights. It leaves
+/// the painter on the `Page` layer.
+fn draw_background(ui: &mut Ui<'_>, win: Rect, t: f64) {
+    let th = *ui.theme();
+    // The accent leans two of the lights its way (none for a grey one), and deeper glass dims them.
+    let lean = accent_share(th.accent);
+    let dim = 1.0 - 0.3 * Preset::depth(&th);
+    let size = (win.w, win.h);
+    // The radii are shares of the reference window (1440x900), scaled by the window's diagonal: a
+    // phone's tall window gets round lights, not bands.
+    let reach = win.w.hypot(win.h) / REFERENCE.0.hypot(REFERENCE.1);
+    let p = ui.painter();
+    p.on(LayerId::Base);
+    let base = opaque(th.glass.window.tint);
+    p.fill(win, 0.0, base);
+    p.linear(
+        win,
+        0.0,
+        mix(base, th.data, 0.14),
+        mix(base, th.err, 0.10),
+        1.0,
+    );
+    for (i, b) in BLOBS.iter().enumerate() {
+        let (cx, cy) = blob_centre(i, t, size);
+        let breathe = 1.0 + b.breath.0 * (t / b.breath.1 * TAU).sin() as f32;
+        let lean_to = b.lean.0 * (0.5 + 0.5 * (t / b.lean.1 * TAU + b.phase.0).sin() as f32);
+        let colour = mix(b.hue.of(&th), b.to.of(&th), lean_to);
+        let colour = if i == 0 || i == 3 {
+            mix(colour, th.accent, 0.8 * lean)
+        } else {
+            colour
+        };
+        p.radial(
+            [win.x + cx, win.y + cy],
+            [
+                REFERENCE.0 * b.radius.0 * breathe * reach,
+                REFERENCE.1 * b.radius.1 * breathe * reach,
+            ],
+            with_alpha(colour, b.alpha * dim),
+            clear(colour),
+            Falloff::Gaussian,
+        );
+    }
+    p.on(LayerId::Page);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The layout.
+
+/// Where the frame's parts are in a window of `size` logical px with a `safe` area.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Layout {
+    /// The window's size.
+    pub size: (f32, f32),
+    /// The safe area the layout kept clear.
+    pub safe: Insets,
+    /// The wide frame (a rail), or the narrow one (title bar and tab bar).
+    pub wide: bool,
+    /// The glass rail (wide); an empty rect when narrow.
+    pub rail: Rect,
+    /// The glass title bar from the window's top edge to the row's bottom (narrow); empty when wide.
+    pub title_bar: Rect,
+    /// The glass tab bar from the row's top to the window's bottom edge (narrow); empty when wide.
+    pub tab_bar: Rect,
+    /// The glass stage card the scenes draw in.
+    pub card: Rect,
+}
+
+const NONE: Rect = Rect {
+    x: 0.0,
+    y: 0.0,
+    w: 0.0,
+    h: 0.0,
+};
+
+impl Layout {
+    /// The layout of a window of `size` with `safe` insets.
+    pub fn new(size: (f32, f32), safe: Insets) -> Self {
+        let (w, h) = size;
+        if w >= NARROW_BELOW {
+            let (l, t) = (MARGIN.max(safe.left), MARGIN.max(safe.top));
+            let (r, b) = (MARGIN.max(safe.right), MARGIN.max(safe.bottom));
+            let rail = Rect::new(l, t, RAIL_W, (h - t - b).max(0.0));
+            let x = rail.right() + GAP;
+            let card = Rect::new(x, t, (w - r - x).max(0.0), rail.h);
+            Layout {
+                size,
+                safe,
+                wide: true,
+                rail,
+                title_bar: NONE,
+                tab_bar: NONE,
+                card,
+            }
+        } else {
+            let title_bar = Rect::new(0.0, 0.0, w, safe.top + TITLE_BAR);
+            let tab_h = TAB_BAR + safe.bottom;
+            let tab_bar = Rect::new(0.0, (h - tab_h).max(0.0), w, tab_h);
+            let top = title_bar.bottom() + NARROW_PAD;
+            let x = NARROW_PAD + safe.left;
+            let card = Rect::new(
+                x,
+                top,
+                (w - x - NARROW_PAD - safe.right).max(0.0),
+                (tab_bar.y - NARROW_PAD - top).max(0.0),
+            );
+            Layout {
+                size,
+                safe,
+                wide: false,
+                rail: NONE,
+                title_bar,
+                tab_bar,
+                card,
+            }
+        }
+    }
+
+    /// The card's padding.
+    pub fn pad(&self) -> f32 {
+        if self.wide { PAD } else { NARROW_PAD }
+    }
+
+    /// The card's content area: inside its padding.
+    pub fn page(&self) -> Rect {
+        self.card.inset(self.pad(), self.pad())
+    }
+
+    /// The header's height: a title and a subtitle (wide), or the subtitle alone (narrow: the title
+    /// bar carries the title).
+    pub fn header_h(&self, t: &Theme) -> f32 {
+        if self.wide {
+            t.line_title + 4.0 + (t.font_base * 1.3).round()
+        } else {
+            (t.font_base * 1.3).round()
+        }
+    }
+
+    /// The scene's area: below the header.
+    pub fn body(&self, t: &Theme) -> Rect {
+        let page = self.page();
+        let top = self.header_h(t) + self.pad();
+        Rect::new(page.x, page.y + top, page.w, (page.h - top).max(0.0))
+    }
+
+    /// The rail's six rows, at `nav_item`'s height and pitch.
+    pub fn rail_rows(&self) -> [Rect; 6] {
+        let x = self.rail.x + nav_item::PAD;
+        let w = (self.rail.w - 2.0 * nav_item::PAD).max(0.0);
+        std::array::from_fn(|i| {
+            Rect::new(
+                x,
+                self.rail.y + RAIL_ROWS_TOP + i as f32 * nav_item::PITCH,
+                w,
+                nav_item::ROW_HEIGHT,
+            )
+        })
+    }
+
+    /// The rail's brand block: the mark and the two lines beside it.
+    pub fn brand(&self) -> Rect {
+        Rect::new(
+            self.rail.x + 16.0,
+            self.rail.y + 16.0,
+            (self.rail.w - 32.0).max(0.0),
+            32.0,
+        )
+    }
+
+    /// The rail's footer line (the backend's name; the frame-time readout later).
+    pub fn footer(&self) -> Rect {
+        Rect::new(
+            self.rail.x + 16.0,
+            self.rail.bottom() - 16.0 - RAIL_FOOTER,
+            (self.rail.w - 32.0).max(0.0),
+            RAIL_FOOTER,
+        )
+    }
+
+    /// The tab bar's six cells (the row, above the safe area's bottom inset).
+    pub fn tab_cells(&self) -> [Rect; 6] {
+        let w = self.tab_bar.w / 6.0;
+        std::array::from_fn(|i| {
+            Rect::new(self.tab_bar.x + i as f32 * w, self.tab_bar.y, w, TAB_BAR)
+        })
+    }
+
+    /// The title bar's row: under the safe area's top inset.
+    pub fn title_row(&self) -> Rect {
+        Rect::new(0.0, self.safe.top, self.size.0, TITLE_BAR)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Glass.
+
+/// The alpha of the panels' tint (the theme's panel glass tint): low, so the background glows
+/// through.
+const GLASS_ALPHA: f32 = 0.36;
+/// What the panels' tint gains on the deepest glass (near-black).
+const DEEP_ALPHA: f32 = 0.22;
+
+/// A glass panel over `r`: the theme's glass tint frosted over the background with the noise, a faint
+/// sheen from the top and the theme's popup hairline. `radius` 0 is a bar at the window's edge. It
+/// asks for no backdrop blur: the background is made of soft gradients, so a blur of it changes
+/// nothing a person sees, and a frame without a backdrop request never takes the renderer's
+/// offscreen path (a request on a layer under `Popup` blurs the text of those layers too).
+fn glass(ui: &mut Ui<'_>, r: Rect, radius: f32) {
+    let t = *ui.theme();
+    let p = ui.painter();
+    p.frost(
+        r,
+        radius,
+        premul(with_alpha(
+            t.glass.panel.tint,
+            GLASS_ALPHA + DEEP_ALPHA * Preset::depth(&t),
+        )),
+        true,
+    );
+    p.linear(
+        r,
+        radius,
+        t.surface_hover,
+        clear(t.surface_hover),
+        FRAC_PI_2,
+    );
+    p.ring(r, radius, 1.0, t.menu_popup_border, false);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The navigation: one roving group of six cells, shared by the rail and the tab bar.
+
+/// Registers `cells` as one roving group under `key` (`active` is the current stop) and returns the
+/// index a click, Enter or Space chose and each cell's response.
+fn nav_group(
+    ui: &mut Ui<'_>,
+    key: &str,
+    cells: &[Rect],
+    active: usize,
+    axis: RoveAxis,
+) -> (Option<usize>, Vec<Response>) {
+    let id = ui.id(key);
+    let items: Vec<(WidgetId, bool)> = (0..cells.len()).map(|i| (id.with(i), true)).collect();
+    let stop = ui.rove_stop(&items, Some(active));
+    let mut chose = None;
+    let mut responses = Vec::with_capacity(cells.len());
+    for (i, cell) in cells.iter().enumerate() {
+        let sense = if stop == Some(i) {
+            Sense::CLICK_FOCUS
+        } else {
+            Sense::CLICK_ROVE
+        };
+        let kid = items[i].0;
+        let r = ui.interact(kid, *cell, sense);
+        let enter = ui.consume_key(kid, NamedKey::Enter);
+        let space = ui.consume_key(kid, NamedKey::Space);
+        if r.clicked || enter || space {
+            chose = Some(i);
+        }
+        if r.hovered {
+            ui.set_cursor(CursorIcon::Pointer);
+        }
+        responses.push(r);
+    }
+    ui.rove_keys(&items, axis, false);
+    (chose, responses)
+}
+
+/// How much cell `i` is the current one while the position is `pos`: 1 at it, 0 a cell away.
+fn nearness(pos: f32, i: usize) -> f32 {
+    (1.0 - (pos - i as f32).abs()).clamp(0.0, 1.0)
+}
+
+/// The wide frame's rail: glass, the brand, six rows with a highlight that moves to the current one,
+/// and the footer. Returns the scene a row chose.
+fn draw_rail(ui: &mut Ui<'_>, l: &Layout, pos: f32, backend: &str) -> Option<usize> {
+    let t = *ui.theme();
+    glass(ui, l.rail, CARD_RADIUS);
+    let rows = l.rail_rows();
+    let (chose, responses) = nav_group(ui, "rail", &rows, pos.round() as usize, RoveAxis::Vertical);
+    let reduced = ui.tier() != MotionTier::Full;
+    let shown = if reduced { pos.round() } else { pos };
+    // The highlight: one rect that moves between the rows (kind `move`), under the labels.
+    let top = rows[0].y + shown * nav_item::PITCH;
+    ui.painter().fill(
+        Rect::new(rows[0].x, top, rows[0].w, nav_item::ROW_HEIGHT),
+        nav_item::RADIUS,
+        t.surface_selected,
+    );
+    for (i, scene) in SceneId::ALL.iter().enumerate() {
+        let kid = responses[i].id;
+        let hov = ui.animate_f32(
+            kid.with("hov"),
+            level(responses[i].hovered),
+            &nav_item::HOVER,
+        );
+        let press = ui.animate_f32(
+            kid.with("press"),
+            level(responses[i].pressed),
+            &nav_item::HOVER,
+        );
+        let focus = ui.animate_f32(
+            kid.with("focus"),
+            level(responses[i].focus_visible),
+            &nav_item::FOCUS,
+        );
+        let here = if reduced {
+            level(i == shown as usize)
+        } else {
+            nearness(pos, i)
+        };
+        let mut look = NavLook::mixed(&t, 0.0, hov, press, focus);
+        // The fill is the moving highlight's; the label and its weight follow how current the row is.
+        look.label = mix(look.label, t.fg_bright, here);
+        look.medium = here >= 0.5;
+        nav_item::paint(
+            ui.painter(),
+            rows[i],
+            scene.name(),
+            Some(scene.glyph()),
+            &look,
+        );
+    }
+    // The brand.
+    let b = l.brand();
+    let mark = Rect::new(b.x, b.y, 32.0, 32.0);
+    let p = ui.painter();
+    // The mark follows the accent when it is a colour.
+    let lean = accent_share(t.accent);
+    p.linear(
+        mark,
+        8.0,
+        mix(t.data, t.accent, lean),
+        mix(t.err, mix(t.accent, t.err, 0.35), lean),
+        0.9,
+    );
+    let g = lune_ui::icon::glyph(SceneId::Glass.glyph(), 18.0, t.on_accent);
+    p.text_centered(&g, mark);
+    p.text(
+        &Spec::plain("luneui", Style::ui(t.font_title, t.fg_bright).medium()),
+        b.x + 44.0,
+        b.y - 3.0,
+    );
+    p.text(
+        &Spec::plain("web demo", Style::ui(t.font_s, t.fg_secondary)),
+        b.x + 44.0,
+        b.y + 21.0,
+    );
+    // The footer: a status dot and the backend.
+    let f = l.footer();
+    p.fill(
+        Rect::new(f.x, f.y - 8.0, f.w, 1.0),
+        0.0,
+        t.surface_separator,
+    );
+    p.fill(Rect::new(f.x, f.y + 6.0, 8.0, 8.0), 4.0, t.ok);
+    p.text_in(
+        &Spec::plain(backend, Style::ui(t.font_s, t.fg_tertiary)),
+        Rect::new(f.x + 16.0, f.y, (f.w - 16.0).max(0.0), f.h),
+        0.0,
+    );
+    chose
+}
+
+fn level(on: bool) -> f32 {
+    if on { 1.0 } else { 0.0 }
+}
+
+/// The narrow frame's title bar and tab bar. Returns the scene a tab chose.
+fn draw_bars(ui: &mut Ui<'_>, l: &Layout, pos: f32) -> Option<usize> {
+    let t = *ui.theme();
+    glass(ui, l.title_bar, 0.0);
+    glass(ui, l.tab_bar, 0.0);
+    // The title fades through on the push's clock (opacity only): the old name goes out over the
+    // first half, the new one comes in over the second, so the two never show together.
+    let lo = pos.floor();
+    let f = pos - lo;
+    let (old, new) = title_opacities(f);
+    for (index, alpha) in [(lo as usize, old), (lo as usize + 1, new)] {
+        if alpha > 0.0 {
+            let name = SceneId::from_index(index).name();
+            let colour = with_alpha(t.fg_bright, alpha);
+            let title = Spec::plain(name, Style::ui(t.font_title, colour).medium());
+            ui.painter().text_centered(&title, l.title_row());
+        }
+    }
+    let cells = l.tab_cells();
+    let (chose, responses) = nav_group(
+        ui,
+        "tabs",
+        &cells,
+        pos.round() as usize,
+        RoveAxis::Horizontal,
+    );
+    let reduced = ui.tier() != MotionTier::Full;
+    let shown = if reduced { pos.round() } else { pos };
+    let w = cells[0].w;
+    let marker =
+        Rect::new(l.tab_bar.x + shown * w, l.tab_bar.y, w, TAB_BAR).inset(TAB_INSET.0, TAB_INSET.1);
+    ui.painter().fill(marker, t.item_radius, t.surface_selected);
+    for (i, scene) in SceneId::ALL.iter().enumerate() {
+        let cell = cells[i];
+        let kid = responses[i].id;
+        let press = ui.animate_f32(
+            kid.with("press"),
+            level(responses[i].pressed),
+            &nav_item::HOVER,
+        );
+        let here = if reduced {
+            level(i == shown as usize)
+        } else {
+            nearness(pos, i)
+        };
+        let tint = mix(mix(t.fg_tertiary, t.fg_primary, here), t.fg_bright, press);
+        let p = ui.painter();
+        let g = lune_ui::icon::glyph(scene.glyph(), TAB_GLYPH, tint);
+        let gw = p.measure(&g).0;
+        p.text_centered(
+            &g,
+            Rect::new(
+                cell.x + (cell.w - gw) / 2.0,
+                cell.y + 2.0,
+                gw,
+                TAB_GLYPH * 1.25,
+            ),
+        );
+        let label = p.elide(
+            &Spec::plain(scene.name(), Style::ui(t.font_s, tint)),
+            (cell.w - 4.0).max(0.0),
+        );
+        let lw = p.measure(&label).0;
+        p.text(
+            &label,
+            cell.x + (cell.w - lw) / 2.0,
+            cell.bottom() - 5.0 - 14.0 + 1.0,
+        );
+    }
+    chose
+}
+
+// ---------------------------------------------------------------------------------------------
+// The pages: the header and the scene, pushed in and out of the card.
+
+/// How a page is drawn this frame.
+#[derive(Debug, Clone, Copy)]
+struct Show {
+    layer: LayerId,
+    /// The page's offset and opacity (the push).
+    dx: f32,
+    dy: f32,
+    alpha: f32,
+    /// The scrim over what is below the page (0 for none).
+    scrim: f32,
+}
+
+impl Show {
+    /// A page at rest: on `Page`, in place, opaque, no scrim.
+    const REST: Show = Show {
+        layer: LayerId::Page,
+        dx: 0.0,
+        dy: 0.0,
+        alpha: 1.0,
+        scrim: 0.0,
+    };
+}
+
+/// The old page's opacity at `f` of a Full push (its eased progress): gone by the middle.
+pub fn old_opacity(f: f32) -> f32 {
+    1.0 - Easing::QuadOut.eval(f * 2.0)
+}
+
+/// The narrow title's opacities at `f`: the old name out over the first half (quad-in), the new one in
+/// over the second (quad-out). Neither is above 0.2 while the other is not 0 (a fade-through).
+pub fn title_opacities(f: f32) -> (f32, f32) {
+    (
+        1.0 - Easing::QuadIn.eval(f * 2.0),
+        Easing::QuadOut.eval(f * 2.0 - 1.0),
+    )
+}
+
+/// The push's scrim (a share of the theme's `dialog_backdrop`) at `f`: 0 at both ends, `SCRIM_PEAK` a
+/// third of the way (`27/4 f (1 - f)^2` peaks at 1/3), so the settled frame has none.
+pub fn scrim(f: f32) -> f32 {
+    SCRIM_PEAK * 6.75 * f * (1.0 - f) * (1.0 - f)
+}
+
+/// The most the push's scrim darkens (a share of the theme's `dialog_backdrop`): it rises with the push
+/// and is gone at its end.
+const SCRIM_PEAK: f32 = 1.0;
+
+/// Draws `scene`'s page (its header and body) into the card, clipped to it.
+fn draw_page(
+    ui: &mut Ui<'_>,
+    scenes: &mut Scenes,
+    l: &Layout,
+    scene: SceneId,
+    show: Show,
+    env: &Env,
+) {
+    let t = *ui.theme();
+    let moved = show.dx != 0.0 || show.dy != 0.0;
+    let faded = show.alpha < 1.0;
+    {
+        let p = ui.painter();
+        p.on(show.layer);
+        // Inside the card's hairline: a glyph clipped to a rect edge can bleed a pixel past it.
+        p.push_clip_rounded(l.card.inset(1.0, 1.0), CARD_RADIUS - 1.0);
+        if show.scrim > 0.0 {
+            p.fill(l.card, 0.0, with_alpha(t.dialog_backdrop, show.scrim));
+        }
+        // A translation keeps the card's clip where it is on screen (a plain `push_xform` would move
+        // it with the page, and the page would spill out of the card).
+        if moved {
+            p.push_translate(show.dx, show.dy);
+        }
+        if faded {
+            p.push_xform(Xform {
+                origin: (0.0, 0.0),
+                scale: 1.0,
+                dx: 0.0,
+                dy: 0.0,
+                alpha: show.alpha,
+            });
+        }
+        // The header.
+        let page = l.page();
+        if l.wide {
+            p.text(
+                &Spec::plain(scene.name(), Style::ui(t.font_title, t.fg_bright).medium()),
+                page.x,
+                page.y,
+            );
+            let sub = p.elide(
+                &Spec::plain(scene.subtitle(), Style::ui(t.font_base, t.fg_secondary)),
+                page.w,
+            );
+            p.text(&sub, page.x, page.y + t.line_title + 4.0);
+        } else {
+            let sub = p.elide(
+                &Spec::plain(scene.subtitle(), Style::ui(t.font_base, t.fg_secondary)),
+                page.w,
+            );
+            p.text(&sub, page.x, page.y);
+        }
+    }
+    let body = l.body(&t);
+    ui.scope(scene.slug(), |ui| scenes.draw(scene, ui, body, env));
+    let p = ui.painter();
+    if faded {
+        p.pop_xform();
+    }
+    if moved {
+        p.pop_translate();
+    }
+    p.pop_clip();
+    p.on(LayerId::Page);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The stage.
+
+/// What a frame hands back.
+#[derive(Debug)]
+pub struct Rendered {
+    /// The display list to draw.
+    pub scene: Scene,
+    /// What the frame asks of the app: repaint, cursor, clipboard.
+    pub out: FrameOutput,
+    /// Where the frame laid everything out.
+    pub layout: Layout,
+    /// The scene position: the index of the current scene, between two indices during a push.
+    pub position: f32,
+    /// The marks the tour passed in this frame, each with its check (run on the state the frame
+    /// drew).
+    pub marks: Vec<MarkResult>,
+    /// The tour's cycle ended in this frame: how many of its marks were ok and how many passed.
+    pub ended: Option<(u32, u32)>,
+    /// A repeating tour wrapped in this frame.
+    pub restarted: bool,
+    /// A tour that does not repeat is over.
+    pub finished: bool,
+    /// What the tour did on its own account: a stop by a person's event, a restart.
+    pub notes: Vec<String>,
+}
+
+/// The demo's state and what one frame needs besides the GPU.
+#[derive(Debug)]
+pub struct Stage {
+    /// The theme every widget draws with (the Theme scene changes it).
+    pub theme: Theme,
+    /// The motion tier: Full, Reduced (the page's `prefers-reduced-motion`) or Off.
+    pub tier: MotionTier,
+    /// The background does not move and asks for no frames (`--still`).
+    pub still: bool,
+    /// The scene the user chose: the push runs towards it.
+    pub want: SceneId,
+    /// The line the rail's footer shows: the GPU backend.
+    pub backend: String,
+    /// The scenes' entry motions (a chart growing in) are over at once: a dump at rest.
+    pub arrived: bool,
+    store: UiStore,
+    strings: StringTable,
+    shortcuts: Shortcuts,
+    keymap: Option<Keymap>,
+    /// The run of the theme to the look the Theme scene chose.
+    fx: Fx,
+    /// What each scene keeps between frames.
+    pub scenes: Scenes,
+    /// The frame-time panel (`H`, `?hud`).
+    pub hud: Hud,
+    tour: Option<Tour>,
+    /// A text field had the focus in the last frame: `H` is then a letter, not the panel's key.
+    text_focus: bool,
+}
+
+impl Default for Stage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Stage {
+    /// A stage on the Glass scene with the Lunegit dark theme and full motion.
+    pub fn new() -> Self {
+        Self {
+            theme: lunegit_dark::THEME,
+            tier: MotionTier::Full,
+            still: false,
+            want: SceneId::Glass,
+            backend: String::new(),
+            arrived: false,
+            store: UiStore::default(),
+            strings: StringTable::default(),
+            shortcuts: Shortcuts::default(),
+            keymap: None,
+            fx: Fx::new(Look::DEFAULT),
+            scenes: Scenes::new(),
+            hud: Hud::default(),
+            tour: None,
+            text_focus: false,
+        }
+    }
+
+    /// Plays the attract tour from the next frame on, starting on the scene the stage is on: the
+    /// script is built on that frame from its window. A real event stops it (`tour`).
+    pub fn play(&mut self, play: Play) {
+        self.tour = Some(Tour::new(play, self.want));
+    }
+
+    /// Whether the attract tour is set up and a person has not taken the stage.
+    pub fn touring(&self) -> bool {
+        self.tour.as_ref().is_some_and(|t| !t.is_stopped())
+    }
+
+    /// Stops the tour's clock at app time `now` (the app went to the background).
+    pub fn pause_tour(&mut self, now: Duration) {
+        if let Some(t) = &mut self.tour {
+            t.pause(now);
+        }
+    }
+
+    /// Starts the tour's clock again at app time `now`: the time spent paused is not played.
+    pub fn resume_tour(&mut self, now: Duration) {
+        if let Some(t) = &mut self.tour {
+            t.resume(now);
+        }
+    }
+
+    /// Rests on `look` at once, with no run (a dump, a test).
+    pub fn set_look(&mut self, look: Look) {
+        self.scenes.theme.look = look;
+        self.fx.snap(look);
+        self.theme = look.theme();
+    }
+
+    /// The look the stage is going to or has reached.
+    pub fn look(&self) -> Look {
+        self.fx.look()
+    }
+
+    /// Whether the theme has arrived at its look.
+    pub fn theme_settled(&self) -> bool {
+        self.fx.settled() && self.scenes.theme.look == self.fx.look()
+    }
+
+    /// Uses `keymap` for the shortcuts from now on (a page asks the browser which machine it is).
+    pub fn set_keymap(&mut self, keymap: Keymap) {
+        self.keymap = Some(keymap);
+    }
+
+    /// Chooses `scene`: the next frame starts the push towards it.
+    pub fn go(&mut self, scene: SceneId) {
+        self.want = scene;
+    }
+
+    /// Whether the background moves: full motion and not `--still`.
+    pub fn animating(&self) -> bool {
+        self.tier == MotionTier::Full && !self.still
+    }
+
+    /// The push's duration under the current tier: `moderate` at Full, the Reduced map's token
+    /// under Reduced, none (a cut) under Off.
+    pub fn push_duration(&self) -> Option<Duration> {
+        self.theme
+            .motion
+            .resolve(&PUSH, self.tier)
+            .map(|r| r.duration)
+    }
+
+    /// Runs one frame over `input` and returns what it drew and asked for.
+    pub fn frame(&mut self, mut input: RawInput, text: &mut dyn TextSystem) -> Rendered {
+        // `H` shows or hides the frame-time panel, unless a text field is being typed into.
+        if !self.text_focus {
+            self.take_hud_key(&mut input.events);
+        }
+        self.hud.record(input.time);
+        // A person's event stops the tour, before anything of the app's own joins the input.
+        if let Some(tour) = &mut self.tour {
+            tour.observe(input.time, &mut input.events);
+        }
+        // A scene's own hand (a finger dragging a card) speaks through the input like any other.
+        self.scenes.inject(input.time, &mut input.events);
+        let mut adv = playback::Advance::default();
+        if let Some(tour) = &mut self.tour {
+            let safe = input
+                .events
+                .iter()
+                .rev()
+                .find_map(|e| match e {
+                    Event::SafeArea(i) => Some(*i),
+                    _ => None,
+                })
+                .unwrap_or(Insets::ZERO);
+            // A dialog or a sheet a person left open covers the rail: the tour closes it first.
+            let modal = self.scenes.glass.dialog || self.scenes.motion.real_sheet;
+            adv = tour.advance(
+                input.time,
+                input.size,
+                safe,
+                self.want,
+                modal,
+                &mut input.events,
+            );
+            if adv.restarted {
+                // Each cycle of the loop begins in the same look.
+                self.scenes.theme.look = Look::DEFAULT;
+            }
+        }
+        let animating = self.animating();
+        // The theme follows the look the Theme scene chose, colours only: the push's token and
+        // easing (`moderate`, sine-in-out; `fast` under Reduced; a cut under Off).
+        let want = self.scenes.theme.look;
+        if want != self.fx.look() {
+            let run = self
+                .theme
+                .motion
+                .resolve(&PUSH, self.tier)
+                .map(|r| (r.duration, r.easing));
+            self.fx.retarget(want, input.time, run);
+        }
+        self.theme = self.fx.at(input.time);
+        let config = FrameConfig {
+            theme: self.theme,
+            tier: self.tier,
+            // The background moves on every display frame; a still one asks for none.
+            busy_cadence: Cadence::EveryFrame,
+            strings: &self.strings,
+            arg_format: &DisplayFormat,
+            keymap: self.keymap.unwrap_or_else(keymap),
+            shortcuts: &self.shortcuts,
+        };
+        let input = &input;
+        let mut ui = Ui::begin(&mut self.store, input, config, text);
+        let layout = Layout::new(input.size, ui.safe_area());
+        let win = Rect::new(0.0, 0.0, input.size.0, input.size.1);
+        let t = *ui.theme();
+
+        // Where the push is: the scene position follows the chosen scene.
+        let pos_id = ui.id("stage.position");
+        let pos = ui
+            .animate_f32(pos_id, self.want.index() as f32, &PUSH)
+            .clamp(0.0, (SceneId::ALL.len() - 1) as f32);
+
+        let clock = if animating { input.time } else { STILL_AT };
+        let env = Env {
+            wide: layout.wide,
+            now: clock,
+            animating,
+            entering: false,
+            arrived: self.arrived,
+        };
+        draw_background(&mut ui, win, clock.as_secs_f64());
+        if animating || !(self.fx.settled() && self.scenes.theme.look == self.fx.look()) {
+            ui.request_busy_frame(win);
+        }
+
+        // The glass and the navigation.
+        glass(&mut ui, layout.card, CARD_RADIUS);
+        let chose = if layout.wide {
+            draw_rail(&mut ui, &layout, pos, &self.backend)
+        } else {
+            draw_bars(&mut ui, &layout, pos)
+        };
+        if let Some(i) = chose {
+            self.want = SceneId::from_index(i);
+        }
+
+        // The scenes: one at rest, two while a push runs.
+        let near = pos.round();
+        if (pos - near).abs() < 1e-3 {
+            let at = SceneId::from_index(near as usize);
+            draw_page(&mut ui, &mut self.scenes, &layout, at, Show::REST, &env);
+        } else {
+            let lo = pos.floor();
+            let f = pos - lo;
+            let under = SceneId::from_index(lo as usize);
+            let over = SceneId::from_index(lo as usize + 1);
+            let (reach_x, reach_y) = if layout.wide {
+                (0.0, layout.card.h)
+            } else {
+                (layout.card.w, 0.0)
+            };
+            let (under_show, over_show) = if ui.tier() == MotionTier::Full {
+                (
+                    // The old page moves a quarter of the way and is gone by the middle of the push.
+                    Show {
+                        dx: -f * PARALLAX * reach_x,
+                        dy: -f * PARALLAX * reach_y,
+                        alpha: old_opacity(f),
+                        ..Show::REST
+                    },
+                    // The new page slides in over a scrim that rises and is gone again at the end,
+                    // so the settled frame has none.
+                    Show {
+                        layer: LayerId::Popup,
+                        dx: (1.0 - f) * reach_x,
+                        dy: (1.0 - f) * reach_y,
+                        scrim: scrim(f),
+                        ..Show::REST
+                    },
+                )
+            } else {
+                // Reduced: no movement; the old page fades out over the first half and the new one in
+                // over the second.
+                (
+                    Show {
+                        alpha: 1.0 - Easing::QuadIn.eval(f * 2.0),
+                        ..Show::REST
+                    },
+                    Show {
+                        layer: LayerId::Popup,
+                        alpha: Easing::QuadOut.eval(f * 2.0 - 1.0),
+                        ..Show::REST
+                    },
+                )
+            };
+            draw_page(&mut ui, &mut self.scenes, &layout, under, under_show, &env);
+            let entering = Env {
+                entering: true,
+                ..env
+            };
+            draw_page(
+                &mut ui,
+                &mut self.scenes,
+                &layout,
+                over,
+                over_show,
+                &entering,
+            );
+        }
+        let _ = t;
+        self.hud.draw(&mut ui, &layout, &self.backend);
+        let mut marks = Vec::new();
+        let mut ended = None;
+        let mut notes = Vec::new();
+        if let Some(tour) = &mut self.tour {
+            notes = tour.take_notes();
+            if tour.play().touches
+                && let Some(player) = tour.player()
+            {
+                playback::draw_touches(&mut ui, player);
+            }
+            if let Some(at) = adv.next {
+                ui.request_repaint_at(at);
+            }
+            // A mark's state is what this frame drew, after the events up to the mark.
+            for name in &adv.marks {
+                marks.push(tour.check(name, &self.scenes, self.want, pos));
+                if name == tour::END {
+                    ended = Some(tour.tally());
+                }
+            }
+        }
+        let (scene, out) = ui.finish();
+        self.text_focus = out.ime_area.is_some();
+        Rendered {
+            scene,
+            out,
+            layout,
+            position: pos,
+            marks,
+            ended,
+            restarted: adv.restarted,
+            finished: adv.finished,
+            notes,
+        }
+    }
+
+    /// Takes the `H` key (press, release and the text it types) out of `events` and toggles the
+    /// frame-time panel on its press, so no scene's autopilot reads it as a person's input. A chord
+    /// (Ctrl, Alt or the logo key held) is not it.
+    fn take_hud_key(&mut self, events: &mut Vec<Event>) {
+        let is_h = |e: &Event| {
+            matches!(e, Event::Key { key: Key::Character(c), modifiers, .. }
+                if c.eq_ignore_ascii_case("h") && !modifiers.control && !modifiers.alt && !modifiers.logo)
+        };
+        let mut taken = false;
+        events.retain(|e| {
+            if is_h(e) {
+                if matches!(
+                    e,
+                    Event::Key {
+                        pressed: true,
+                        repeat: false,
+                        ..
+                    }
+                ) {
+                    self.hud.toggle();
+                }
+                taken = true;
+                false
+            } else {
+                true
+            }
+        });
+        if taken {
+            events.retain(|e| !matches!(e, Event::Text(t) if t.eq_ignore_ascii_case("h")));
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Headless.
+
+/// Drives a [`Stage`] in app time with no window and no GPU: the dump and the tests go through it.
+#[derive(Debug)]
+pub struct Headless {
+    /// The app.
+    pub stage: Stage,
+    /// The fonts.
+    pub text: TextCache,
+    /// The window's size in logical points.
+    pub size: (f32, f32),
+    /// Device pixels per logical point.
+    pub scale: f32,
+    /// The safe area pushed with every frame.
+    pub safe: Insets,
+    /// App time: the time of the last frame.
+    pub time: Duration,
+}
+
+impl Headless {
+    /// A stage at time zero in a window of `size` at `scale` with `safe` insets.
+    pub fn new(size: (f32, f32), scale: f32, safe: Insets) -> Self {
+        Self {
+            stage: Stage::new(),
+            text: crate::text_cache(),
+            size,
+            scale,
+            safe,
+            time: Duration::ZERO,
+        }
+    }
+
+    /// The layout of this window.
+    pub fn layout(&self) -> Layout {
+        Layout::new(self.size, self.safe)
+    }
+
+    /// One frame `dt` after the last, with `events` after the safe area.
+    pub fn step(&mut self, dt: Duration, events: Vec<lune_ui::input::Event>) -> Rendered {
+        self.step_to(self.time + dt, events)
+    }
+
+    /// One frame at app time `now` (no earlier than the last), with `events` after the safe area.
+    pub fn step_to(&mut self, now: Duration, mut events: Vec<lune_ui::input::Event>) -> Rendered {
+        self.time = self.time.max(now);
+        events.insert(0, lune_ui::input::Event::SafeArea(self.safe));
+        let input = RawInput {
+            size: self.size,
+            scale: self.scale,
+            time: self.time,
+            focused: true,
+            events,
+        };
+        self.stage.frame(input, &mut self.text)
+    }
+
+    /// `frames` frames `dt` apart with no events; returns the last.
+    pub fn run(&mut self, frames: u32, dt: Duration) -> Option<Rendered> {
+        let mut last = None;
+        for _ in 0..frames {
+            last = Some(self.step(dt, Vec::new()));
+        }
+        last
+    }
+}

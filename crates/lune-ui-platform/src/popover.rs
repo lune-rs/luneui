@@ -13,7 +13,9 @@
 //!
 //! On Windows the window takes focus when shown (a window that does not gets no keys and no focus
 //! loss); elsewhere it is a plain window. On iOS and Android there are no popover windows: a second
-//! window is never shown there, so [`PopoverWindow::wrap`] answers `Err`.
+//! window is never shown there, so [`PopoverWindow::wrap`] answers `Err`. A browser has none either
+//! (winit would add another canvas to the page, not a floating window), and `wrap` answers `Err`
+//! there too.
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -34,8 +36,8 @@ pub struct PopoverWindow {
 impl PopoverWindow {
     /// Makes `window`, still hidden, a popover window. Build it with
     /// `lune_ui_winit::popover_attributes`, on the main thread. A visible window, or any failure
-    /// of the OS step, is an `Err` and leaves the window as it was. On iOS and Android it is always
-    /// an `Err`: a phone has no popover window.
+    /// of the OS step, is an `Err` and leaves the window as it was. On iOS, Android and in a
+    /// browser (wasm) it is always an `Err`: a phone and a page have no popover window.
     pub fn wrap(window: Arc<Window>) -> Result<Self, String> {
         if window.is_visible() == Some(true) {
             return Err("a popover window must be wrapped while hidden".into());

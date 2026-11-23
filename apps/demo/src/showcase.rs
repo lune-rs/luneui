@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use lune_ui::color::with_alpha_byte;
 use lune_ui::icon;
-use lune_ui::input::{Event, FrameOutput, RawInput, keymap};
+use lune_ui::input::{Event, FrameOutput, Keymap, RawInput, keymap};
 use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark::THEME;
 use lune_ui::motion::{Cadence, MotionTier};
@@ -1239,12 +1239,20 @@ pub struct Demo {
     play: Option<Play>,
     /// The tour's player, made on the first frame of a run that plays (it needs the layout).
     player: Option<Player>,
+    /// The keyboard conventions the app chose (`set_keymap`); the adapter's own when none.
+    keymap: Option<Keymap>,
 }
 
 impl Demo {
     /// A demo at its start.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Uses `keymap` for the shortcuts of every frame from now on, instead of the adapter's
+    /// compile-time one (a page asks the browser which machine it runs on).
+    pub fn set_keymap(&mut self, keymap: Keymap) {
+        self.keymap = Some(keymap);
     }
 
     /// Plays the showcase tour from the next frame on: the script is built on that frame from
@@ -1306,7 +1314,7 @@ impl Demo {
             busy_cadence: Cadence::BUSY,
             strings: &self.strings,
             arg_format: &DisplayFormat,
-            keymap: keymap(),
+            keymap: self.keymap.unwrap_or_else(keymap),
             shortcuts: &self.shortcuts,
         };
         let mut ui = Ui::begin(&mut self.store, input, config, text);

@@ -2,6 +2,13 @@
 
 use lune_ui_core::input::ClipboardBackend;
 
+use crate::clipboard::Source;
+
+/// The source `Clipboard::new` starts from.
+pub(crate) fn source() -> Source {
+    Source::Sync(Box::new(Os::default()))
+}
+
 /// `arboard`, opened on first use.
 #[derive(Default)]
 pub(crate) struct Os {

@@ -356,8 +356,8 @@ crate_deps() {
   case "$1" in
     lune-ui-core) echo "" ;;
     lune-ui-wgpu) echo "lune-ui-core wgpu cosmic-text swash etagere lru rustc-hash bytemuck png unicode-segmentation" ;;
-    lune-ui-winit) echo "lune-ui-core winit arboard" ;;
-    lune-ui-platform) echo "lune-ui-core winit window-vibrancy objc2 objc2-app-kit objc2-foundation objc2-core-foundation block2 objc2-ui-kit raw-window-handle tray-icon windows-sys jni ndk-context" ;;
+    lune-ui-winit) echo "lune-ui-core winit arboard web-time js-sys wasm-bindgen wasm-bindgen-futures web-sys" ;;
+    lune-ui-platform) echo "lune-ui-core winit window-vibrancy objc2 objc2-app-kit objc2-foundation objc2-core-foundation block2 objc2-ui-kit raw-window-handle tray-icon windows-sys jni ndk-context wasm-bindgen web-sys" ;;
     lune-ui) echo "lune-ui-core lune-ui-wgpu lune-ui-winit lune-ui-platform" ;;
     *) return 1 ;;
   esac

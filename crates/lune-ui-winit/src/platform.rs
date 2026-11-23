@@ -3,8 +3,10 @@
 
 #[cfg(any(target_os = "ios", target_os = "android"))]
 mod clipboard_none;
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(any(target_os = "ios", target_os = "android", target_family = "wasm")))]
 mod clipboard_os;
+#[cfg(target_family = "wasm")]
+mod clipboard_web;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
@@ -13,9 +15,11 @@ mod other;
 mod windows;
 
 #[cfg(any(target_os = "ios", target_os = "android"))]
-pub(crate) use clipboard_none::Os;
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
-pub(crate) use clipboard_os::Os;
+pub(crate) use clipboard_none::source as clipboard_source;
+#[cfg(not(any(target_os = "ios", target_os = "android", target_family = "wasm")))]
+pub(crate) use clipboard_os::source as clipboard_source;
+#[cfg(target_family = "wasm")]
+pub(crate) use clipboard_web::source as clipboard_source;
 #[cfg(target_os = "macos")]
 pub(crate) use macos::{glass, keymap, panel, popover};
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]

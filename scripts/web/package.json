@@ -1,0 +1,9 @@
+{
+  "name": "luneui-web-run",
+  "private": true,
+  "type": "module",
+  "description": "The browser driver of scripts/web-run.sh (D427): Playwright on the separate Chromium, headless, page.screenshot() only",
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

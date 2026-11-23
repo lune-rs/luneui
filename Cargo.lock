@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "api-docs"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "rustdoc-types",
  "serde_json",
@@ -710,14 +710,18 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "decisions-index"
-version = "0.7.6"
+version = "0.7.7"
 
 [[package]]
 name = "demo"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "lune-ui",
  "pollster",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "wgpu",
  "winit",
 ]
@@ -791,7 +795,7 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 
 [[package]]
 name = "dump-compare"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "png",
 ]
@@ -1046,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "gallery"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "lune-ui",
  "pollster",
@@ -1394,7 +1398,7 @@ checksum = "7f66e8d5d03f609abc3a39e6f08e4164ebf1447a732906d39eb9b99b7919ef39"
 
 [[package]]
 name = "lune-ui"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "lune-ui-core",
  "lune-ui-platform",
@@ -1404,11 +1408,11 @@ dependencies = [
 
 [[package]]
 name = "lune-ui-core"
-version = "0.7.6"
+version = "0.7.7"
 
 [[package]]
 name = "lune-ui-platform"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "block2 0.6.2",
  "jni",
@@ -1421,6 +1425,8 @@ dependencies = [
  "objc2-ui-kit 0.3.2",
  "raw-window-handle",
  "tray-icon",
+ "wasm-bindgen",
+ "web-sys",
  "window-vibrancy",
  "windows-sys 0.61.2",
  "winit",
@@ -1428,7 +1434,7 @@ dependencies = [
 
 [[package]]
 name = "lune-ui-wgpu"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -1445,13 +1451,18 @@ dependencies = [
 
 [[package]]
 name = "lune-ui-winit"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
  "accesskit_winit",
  "arboard",
+ "js-sys",
  "lune-ui-core",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
  "winit",
 ]
 
@@ -1588,7 +1599,7 @@ dependencies = [
 
 [[package]]
 name = "new-component"
-version = "0.7.6"
+version = "0.7.7"
 
 [[package]]
 name = "num-traits"
@@ -2628,7 +2639,7 @@ dependencies = [
 
 [[package]]
 name = "starter"
-version = "0.7.6"
+version = "0.7.7"
 dependencies = [
  "lune-ui",
  "pollster",
@@ -3131,6 +3142,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-demo"
+version = "0.7.7"
+dependencies = [
+ "lune-ui",
+ "pollster",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3208,6 +3233,7 @@ dependencies = [
  "thiserror 2.0.21",
  "wgpu-core-deps-apple",
  "wgpu-core-deps-emscripten",
+ "wgpu-core-deps-wasm",
  "wgpu-core-deps-windows-linux-android",
  "wgpu-hal",
  "wgpu-naga-bridge",
@@ -3228,6 +3254,15 @@ name = "wgpu-core-deps-emscripten"
 version = "30.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98b86cf4abf524a902dd35f18ca6a3f08fc2ae9847c8f10b48e30491b1f0b86"
+dependencies = [
+ "wgpu-hal",
+]
+
+[[package]]
+name = "wgpu-core-deps-wasm"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b20f43aeb9962d05e61e3ccb717e2e27ba1b04e979d4ca7e361384f8ee03db56"
 dependencies = [
  "wgpu-hal",
 ]

@@ -10,6 +10,7 @@
 <p align="center">
   <a href="#-whats-in-it"><b>What's in it</b></a> ·
   <a href="#-phones"><b>Phones</b></a> ·
+  <a href="#-web"><b>Web</b></a> ·
   <a href="#-try-it"><b>Try it</b></a> ·
   <a href="#-crates"><b>Crates</b></a> ·
   <a href="#-using-it-in-an-app"><b>Using it</b></a> ·
@@ -19,12 +20,12 @@
 <p align="center">
   <img alt="Rust" src="https://img.shields.io/badge/100%25-Rust-f0743e?style=flat-square&logo=rust&logoColor=white">
   <img alt="Edition 2024" src="https://img.shields.io/badge/edition-2024-7c9cff?style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.7.6-3c4255?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.7.7-3c4255?style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3c4255?style=flat-square">
   <img alt="Status" src="https://img.shields.io/badge/status-in%20development-c9a227?style=flat-square">
 </p>
 
-**luneui-rs** is a native Rust UI toolkit for glass-style apps on the desktop and on phones: an
+**luneui-rs** is a native Rust UI toolkit for glass-style apps on the desktop, on phones and in a browser: an
 immediate-mode painter on [wgpu](https://wgpu.rs), over 110 catalogued components, OS glass
 materials, touch and gestures, window helpers and theme tokens. **No web engine and no CSS**:
 styles are Rust values.
@@ -97,12 +98,34 @@ public components, and it plays a scripted tour of them by itself.
 `docs/mobile.md` has the readings, `docs/demo-mode.md` how to run and record the tour, and
 `docs/consuming.md` what a phone app adds.
 
+## 🌐 Web
+
+The same toolkit draws in a browser: it compiles to `wasm32-unknown-unknown` and paints one
+`<canvas>` with its own renderer, on WebGPU with a WebGL2 fallback. There is no DOM UI, no CSS styling
+of the UI and no JavaScript UI logic. `apps/web-demo` is a fully animated showcase built only from
+public components: a glass frame over a moving background, six scenes (glass, controls, motion, data,
+text, theme) and an attract tour that plays itself until a real pointer, touch or key takes over. It
+also runs natively, and `H` shows a frame-time panel.
+
+```bash
+rustup target add wasm32-unknown-unknown
+scripts/web-build.sh web-demo                    # target/web/web-demo/, a static directory
+scripts/web-run.sh web-demo --keep-serving       # serve it on 127.0.0.1 and print the URL to open
+scripts/web-run.sh web-demo --demo [--gl|--phone]   # the tour as a check, in headless Chromium
+```
+
+Nothing is hosted: the output is a local static directory. `docs/web.md` has the readings (Chromium
+159 only; Safari, Firefox and a phone's browser are **not yet verified**), what degrades in a browser
+(OS glass, popover windows, the tray, accessibility) and the flags; `docs/consuming.md` says what a web
+app adds.
+
 ## 🚀 Try it
 
 ```bash
 cargo run -p gallery          # the showcase window: every page live, with knobs and settings
 cargo run -p starter          # the smallest app on the toolkit (apps/starter/src/screen.rs)
 cargo run -p demo -- --demo --touches   # the phone app, playing its tour on the desktop
+cargo run -p web-demo                   # the web demo in a native window (it plays its own tour)
 ```
 
 In the gallery, Cmd or Ctrl `]` and `[` walk the pages; Cmd or Ctrl `Q` quits.

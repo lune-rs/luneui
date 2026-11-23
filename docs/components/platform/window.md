@@ -16,6 +16,7 @@ Core (`lune-ui-core`): `EDGE_BORDER`, `ResizeEdge`, `edge_at`, `DoubleClick` and
 ## Needs
 
 - Custom caption, edge resize and double-click handling (R-platform-4).
+- In a browser the window is the page's canvas: no caption, no extra windows, `PopoverWindow::wrap` answers `Err` (R-platform-8, D430; `docs/web.md`).
 - Wane — Variants: none (Windows chrome, D9). Parts: brand (wordmark + version), fill (drag area), caption buttons (minimize, maximize, close). (R-platform-4)
 - Wane — States: active; inactive (`is-inactive`: solid near-black `--glass-inactive` #0b0b0b, page card `--glass-inactive-card` #141414, no blur, caption glyphs quaternary; not ported: an inactive window stays glass, R13, D262; only the caption's glyphs change); caption hover (`--surface-hover`); close hover (`--caption-close-bg` #c42b1c, white glyph). (R-platform-4)
 - Wane — Sizes: Design size 1280 x 800 (`--window-w`, `--window-h`); radius 10 (`--radius-page`); 1 px `--border-subtle`; title strip 32 (`--titlebar-h`) with a 208 wide brand cell (`--sidebar-w`), padding 0 16 0 18, wordmark 14 bold gold, version RznMono 11 tertiary; caption buttons 46 x 32 (`--caption-w`); content grid 208 | 1fr, 10 px gutter (`--gutter`). (R-platform-4)

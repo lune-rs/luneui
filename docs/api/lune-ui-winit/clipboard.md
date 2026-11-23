@@ -16,6 +16,12 @@ so a process that never copies or pastes opens nothing; a backend that cannot op
 Android: there every read answers `ClipboardUnavailable` and every write is dropped. An iOS app
 gives the clipboard its backend with [`Clipboard::with_backend`](clipboard.md#method.Clipboard.with_backend) (`lune_ui_platform::mobile::Pasteboard`).
 
+In a browser [`Clipboard::new`](clipboard.md#method.Clipboard.new) is the page's asynchronous clipboard (`navigator.clipboard`): a
+read settles some time after the frame that asked, so its reply is queued on the translator by
+a later [`Clipboard::service`](clipboard.md#method.Clipboard.service) call and the app is woken through [`Clipboard::with_wake`](clipboard.md#method.Clipboard.with_wake) to
+run one. Every read gets exactly one reply, in request order, whatever order the browser
+settles them in; the cap above applies to the asynchronous text too.
+
 Source: `crates/lune-ui-winit/src/clipboard.rs:1`
 
 ## Structs
@@ -31,7 +37,7 @@ pub struct Clipboard {
 
 The app's clipboard service. See the module note.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:29`
+Source: `crates/lune-ui-winit/src/clipboard.rs:108`
 
 **Methods and associated items**
 
@@ -39,20 +45,32 @@ Source: `crates/lune-ui-winit/src/clipboard.rs:29`
 
 - <a id="method.Clipboard.new"></a>`pub fn new() -> Self`
 
-  The OS clipboard. Never fails and opens nothing yet.
+  The OS clipboard (in a browser, the page's asynchronous one). Never fails and opens
+  nothing yet.
 
 - <a id="method.Clipboard.service"></a>`pub fn service(&mut self, out: &FrameOutput, translator: &mut Translator)`
 
   Executes `out`'s clipboard requests in order. A `Write` goes to the OS (so of two writes in
   a frame the last stays), unless it is over the cap. A `Read` queues exactly one reply on
   `translator`: the text, or `ClipboardUnavailable` when there is none, it cannot be read or
-  it is over the cap. The reply reaches the app in the translator's next `take`.
+  it is over the cap. The replies come in request order. The reply reaches the app in the
+  translator's next `take`.
 
 - <a id="method.Clipboard.with_backend"></a>`pub fn with_backend(backend: Box<dyn ClipboardBackend>) -> Self`
 
   A clipboard over `backend` instead of the OS one: a phone app's
   `lune_ui_platform::mobile::Pasteboard`, or a fake in a test. The cap [`MAX_PASTE_BYTES`](clipboard.md#constant.MAX_PASTE_BYTES) and
   the replies are the same for every backend.
+
+- <a id="method.Clipboard.with_wake"></a>`pub fn with_wake(self, wake: impl Fn() + 'static) -> Self`
+  `#[must_use]`
+
+  Calls `wake` when a reply completes after [`Clipboard::service`](clipboard.md#method.Clipboard.service) returned, and once more
+  when a later `service` has queued it on the translator, so the app runs a frame to take it.
+  The browser's clipboard needs it (a read settles on a later task); a synchronous backend
+  (the OS, a phone's pasteboard, a `with_backend` one) answers inside `service`, so `wake`
+  is never called for it. `wake` runs on the caller's thread and must only ask for a frame
+  (a window's `request_redraw`, an event-loop proxy's `send_event`).
 
 **Trait implementations**
 
@@ -73,7 +91,7 @@ times the 11 MB document the code view measured (D213). It bounds the adapter, n
 text field and the text area refuse any insert over 1 MiB themselves (`text_edit::MAX_SHAPED_INSERT`, D232, D233);
 only the code view, which draws just the lines in view, takes what the adapter lets through.
 
-Source: `crates/lune-ui-winit/src/clipboard.rs:22`
+Source: `crates/lune-ui-winit/src/clipboard.rs:31`
 
 ## Re-exports
 

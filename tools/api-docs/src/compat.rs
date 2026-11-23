@@ -1311,8 +1311,27 @@ fn package<'a>(meta: &'a serde_json::Value, name: &str) -> Option<&'a serde_json
         .find(|p| p.get("name").and_then(serde_json::Value::as_str) == Some(name))
 }
 
-/// The requirement strings of `winit` and `wgpu` in one package, with their kind and target.
-fn pinned_deps(pkg: &serde_json::Value) -> Vec<String> {
+/// One `winit` or `wgpu` dependency entry of a package: name, requirement, kind and target (each
+/// `-` when absent).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PinnedDep {
+    name: String,
+    req: String,
+    kind: String,
+    target: String,
+}
+
+impl PinnedDep {
+    fn show(&self) -> String {
+        format!(
+            "{} {} (kind {}, target {})",
+            self.name, self.req, self.kind, self.target
+        )
+    }
+}
+
+/// The `winit` and `wgpu` entries of one package, sorted.
+fn pinned_deps(pkg: &serde_json::Value) -> Vec<PinnedDep> {
     let mut out = Vec::new();
     if let Some(deps) = pkg
         .get("dependencies")
@@ -1331,16 +1350,33 @@ fn pinned_deps(pkg: &serde_json::Value) -> Vec<String> {
                 Some(serde_json::Value::Null) | None => "-".to_string(),
                 Some(other) => other.to_string(),
             };
-            out.push(format!(
-                "{name} {} (kind {}, target {})",
-                field("req"),
-                field("kind"),
-                field("target")
-            ));
+            out.push(PinnedDep {
+                name: name.to_string(),
+                req: field("req"),
+                kind: field("kind"),
+                target: field("target"),
+            });
         }
     }
     out.sort();
     out
+}
+
+/// Whether the head's `winit` and `wgpu` entries keep every base entry and add nothing that could
+/// narrow what an app resolves. A base entry that is gone or changed is a break. An added entry is
+/// not, when it is target-specific and the head also has an untargeted entry of the same name and
+/// kind with the same requirement (it only adds features on one target, as `lune-ui-wgpu`'s
+/// `webgl` on wasm does); any other added entry is a break.
+fn pinned_deps_hold(base: &[PinnedDep], head: &[PinnedDep]) -> bool {
+    if base.iter().any(|b| !head.contains(b)) {
+        return false;
+    }
+    head.iter().filter(|h| !base.contains(h)).all(|h| {
+        h.target != "-"
+            && head
+                .iter()
+                .any(|u| u.target == "-" && u.name == h.name && u.kind == h.kind && u.req == h.req)
+    })
 }
 
 pub(crate) fn meta_breaks(base: &serde_json::Value, head: &serde_json::Value) -> Res<Vec<String>> {
@@ -1366,11 +1402,13 @@ pub(crate) fn meta_breaks(base: &serde_json::Value, head: &serde_json::Value) ->
             _ => {}
         }
         let (bd, hd) = (pinned_deps(b), pinned_deps(h));
-        if bd != hd {
+        if !pinned_deps_hold(&bd, &hd) {
+            let join =
+                |v: &[PinnedDep]| v.iter().map(PinnedDep::show).collect::<Vec<_>>().join(", ");
             out.push(format!(
                 "break: {name}: winit or wgpu requirement changed: [{}] -> [{}]",
-                bd.join(", "),
-                hd.join(", ")
+                join(&bd),
+                join(&hd)
             ));
         }
     }
@@ -1663,6 +1701,62 @@ mod tests {
             meta_breaks(&meta("1.86", "0.30"), &base)
                 .unwrap_or_default()
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn an_added_target_entry_with_the_same_requirement_passes() {
+        let meta = |deps: serde_json::Value| {
+            let pkgs: Vec<serde_json::Value> = CRATES
+                .iter()
+                .map(|(n, _)| {
+                    serde_json::json!({
+                        "name": n,
+                        "rust_version": "1.85",
+                        "dependencies": deps,
+                    })
+                })
+                .collect();
+            serde_json::json!({ "packages": pkgs })
+        };
+        let plain = serde_json::json!({"name": "wgpu", "req": "^30", "kind": null, "target": null});
+        let on_wasm = |req: &str| serde_json::json!({"name": "wgpu", "req": req, "kind": null, "target": "cfg(target_family = \"wasm\")"});
+        let base = meta(serde_json::json!([plain]));
+        // Same requirement on one target: passes.
+        assert!(
+            meta_breaks(&base, &meta(serde_json::json!([plain, on_wasm("^30")])))
+                .unwrap_or_default()
+                .is_empty()
+        );
+        // A different requirement on a target: a break in every package.
+        assert_eq!(
+            meta_breaks(&base, &meta(serde_json::json!([plain, on_wasm("^31")])))
+                .map(|v| v.len())
+                .ok(),
+            Some(5)
+        );
+        // The untargeted requirement moved: a break even beside a matching target entry.
+        let moved = serde_json::json!({"name": "wgpu", "req": "^31", "kind": null, "target": null});
+        assert_eq!(
+            meta_breaks(&base, &meta(serde_json::json!([moved, on_wasm("^31")])))
+                .map(|v| v.len())
+                .ok(),
+            Some(5)
+        );
+        // A removed entry: a break.
+        assert_eq!(
+            meta_breaks(&meta(serde_json::json!([plain, on_wasm("^30")])), &base)
+                .map(|v| v.len())
+                .ok(),
+            Some(5)
+        );
+        // An added untargeted entry of another requirement: a break.
+        let other = serde_json::json!({"name": "wgpu", "req": "^31", "kind": null, "target": null});
+        assert_eq!(
+            meta_breaks(&base, &meta(serde_json::json!([plain, other])))
+                .map(|v| v.len())
+                .ok(),
+            Some(5)
         );
     }
 }

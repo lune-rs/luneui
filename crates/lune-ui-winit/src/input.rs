@@ -2,7 +2,11 @@
 //! [`OutputState`] applies a [`FrameOutput`] to the window. One of each per window.
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
+#[cfg(target_family = "wasm")]
+use web_time::Instant;
 
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{
