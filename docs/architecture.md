@@ -899,8 +899,8 @@ required trait method. Part 1 compares the public API of the five library crates
 pinned `rustdoc-types` and its walk of the public tree; types are compared through each crate's `paths`, never by an id or an as-written path), plus `rust-version` and the `winit` and `wgpu`
 requirements; an item kind it does not handle fails as "cannot classify", never as a pass. Part 2 builds the base's gallery, `crates/*/tests` and `docs/` (the data files those tests read), unmodified, in a hybrid tree against the tree's
 libraries and runs them. Part 3 dumps the base's gallery against the base's libraries and against the tree's, and `dump-compare` runs with no `--allow`. Part 1 (`--api-only`) is in the gate;
-parts 2 and 3 are not (they build and dump the gallery twice) and run before a merge and in the done-when of a step that changes public API. `--self-test` feeds part 1 eleven known breaks, each of
-which must exit 1, and four known additions, each of which must exit 0. Like the pixel gate it writes only under `target/` and the base source under `$TMPDIR`.
+parts 2 and 3 are not (they build and dump the gallery twice) and run before a merge and in the done-when of a step that changes public API. `--self-test` feeds part 1 fourteen known breaks, each of
+which must exit 1, and five known additions, each of which must exit 0. Like the pixel gate it writes only under `target/` and the base source under `$TMPDIR`.
 
 Re-baselining: a deliberate look change passes the gate with `--allow <id>` for the scenes it
 moves, and records the reason in `docs/DECISIONS.md` in the same commit (hard rule 8). Dumps are not

@@ -18,8 +18,8 @@
 #   --api-only   part 1 only (warm, a few seconds; this is the part that is in the gate).
 #   --only-part  part 2 or part 3 alone, without part 1 (the deliberate-break proofs of D342 use it, as
 #                a full run costs about 40 minutes; with no flag all three parts run, as always).
-#   --self-test  part 1's proof on known breaks: each of 13 edits (B1-B13) must exit 1 and name the
-#                item, each of 4 (A1-A4) must exit 0. Runs nothing else and needs no base. Case ids
+#   --self-test  part 1's proof on known breaks: each of 14 edits (B1-B14) must exit 1 and name the
+#                item, each of 5 (A1-A5) must exit 0. Runs nothing else and needs no base. Case ids
 #                after it limit the run (a debugging aid; the full run is the proof).
 # Exit 0 held; 1 a break (one `break: ...` line per finding, then a count; or a failed self-test);
 # 2 usage or setup (an unknown rev, a failed build of the base, a missing tool, a JSON format the
@@ -364,6 +364,11 @@ pub struct Insets {'
     edit $color 'impl<T: Clone> SelftestPair<T> {' 'impl<T: Clone + Copy> SelftestPair<T> {'
     run_case B13 1 $core 'SelftestPair'
   fi
+  if want_case B14; then
+    # A target-specific entry whose requirement differs from the untargeted one is not additive.
+    edit crates/lune-ui-wgpu/Cargo.toml 'wgpu = { version = "30", features = ["webgl"] }' 'wgpu = { version = "30.0", features = ["webgl"] }'
+    run_case B14 1 '' 'wgpu'
+  fi
   if want_case A1; then
     edit $color '/// `c` with alpha 0:' '/// Self-test: a new public function.
 pub fn selftest_added() {}
@@ -386,6 +391,13 @@ pub fn selftest_added() {}
   fi
   if want_case A4; then
     run_case A4 0 $core ''
+  fi
+  if want_case A5; then
+    # An added target-specific entry with the untargeted entry's requirement (extra features on one
+    # target, as lune-ui-wgpu's webgl on wasm) is not a break (D425).
+    edit crates/lune-ui-winit/Cargo.toml 'web-time = "1"' 'web-time = "1"
+winit = { version = "0.30", features = ["rwh_06"] }'
+    run_case A5 0 '' ''
   fi
 
   if [ "$SELF_FAILED" -gt 0 ]; then
