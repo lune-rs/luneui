@@ -80,9 +80,14 @@ const RAM_GB: f32 = 16.0;
 const DISK_GB: f32 = 500.0;
 const DISK_MAX: f32 = 40.0;
 const NET_MAX: f32 = 12.0;
-/// The time of day at app time 0, in seconds, and the date shown.
+/// The time of day at app time 0, in seconds, and the date it is on: a weekday (0 is Monday), a
+/// year, a month (1 to 12) and a day.
 const CLOCK_START: f64 = 14.0 * 3600.0 + 8.0 * 60.0 + 32.0;
-const DATE: &str = "Tue, 24 Nov 2026";
+const START_DATE: (usize, u32, u32, u32) = (1, 2026, 11, 24);
+const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const MONTHS: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
 
 /// The sensors' rows: the name, then the value (the first is replaced by the CPU's own reading).
 const SENSORS: [(&str, &str); 14] = [
@@ -609,11 +614,43 @@ fn face(ui: &mut Ui<'_>, t: &Theme, c: [f32; 2], radius: f32, secs: f64) {
     p.sector(c, 2.5, 0.0, TAU, t.err);
 }
 
+/// Days in `month` (1 to 12) of `year`.
+fn days_in(year: u32, month: u32) -> u32 {
+    match month {
+        2 if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    }
+}
+
+/// The date `days` after [`START_DATE`], as "Tue, 24 Nov 2026". The count is cut at 100 years of
+/// days, so a time far past the scenes' own never loops long.
+fn date_text(days: u64) -> String {
+    let days = days.min(36_500);
+    let (start_weekday, mut year, mut month, mut day) = START_DATE;
+    for _ in 0..days {
+        day += 1;
+        if day > days_in(year, month) {
+            day = 1;
+            month += 1;
+            if month > 12 {
+                month = 1;
+                year += 1;
+            }
+        }
+    }
+    let weekday = WEEKDAYS[(start_weekday + days as usize) % 7];
+    format!("{weekday}, {day} {} {year}", MONTHS[month as usize - 1])
+}
+
 fn clock(ui: &mut Ui<'_>, x: f32, y: f32, w: f32, r: &Reading) -> f32 {
     let t = *ui.theme();
     let top = y;
     let y = y + header(ui, "clock", x, y, w, "Clock");
-    let secs = (CLOCK_START + r.secs).rem_euclid(86_400.0);
+    let total = CLOCK_START + r.secs;
+    let secs = total.rem_euclid(86_400.0);
+    let date = date_text((total / 86_400.0) as u64);
     let whole = secs as u64;
     let text = format!(
         "{:02}:{:02}:{:02}",
@@ -633,13 +670,13 @@ fn clock(ui: &mut Ui<'_>, x: f32, y: f32, w: f32, r: &Reading) -> f32 {
         let c = [body.x + FACE_R, body.y + body.h / 2.0];
         face(ui, &t, c, FACE_R, secs);
         let tx = body.x + 2.0 * FACE_R + 16.0;
-        let clip = Rect::new(tx, body.y, (body.right() - tx).max(0.0), body.h);
+        let text_box = Rect::new(tx, body.y, (body.right() - tx).max(0.0), body.h);
         let p = ui.painter();
         let time = Spec::plain(&text, Style::mono(t.font_title, t.line_title, t.fg_primary));
-        let date = Spec::plain(DATE, Style::ui(t.font_s, t.fg_tertiary));
+        let date = Spec::plain(&date, Style::ui(t.font_s, t.fg_tertiary));
         let th = p.measure(&time).1;
         let dh = p.measure(&date).1;
-        let y0 = clip.y + (clip.h - th - 4.0 - dh) / 2.0;
+        let y0 = text_box.y + (text_box.h - th - 4.0 - dh) / 2.0;
         p.text(&time, tx, y0);
         p.text(&date, tx, y0 + th + 4.0);
         body.h
@@ -675,3 +712,24 @@ const SCENES: &[UiScene] = &[
     scene("system-monitor", live, &[], 0),
     scene("system-monitor-scrolled", scrolled, &[AT_REVEAL], 1800),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_date_advances_with_the_days_that_pass() {
+        assert_eq!(date_text(0), "Tue, 24 Nov 2026");
+        assert_eq!(date_text(1), "Wed, 25 Nov 2026");
+        assert_eq!(date_text(7), "Tue, 1 Dec 2026");
+        assert_eq!(date_text(38), "Fri, 1 Jan 2027");
+        // 2028 is a leap year: 29 February exists.
+        assert_eq!(days_in(2028, 2), 29);
+        assert_eq!(days_in(2100, 2), 28);
+    }
+
+    #[test]
+    fn a_time_far_past_the_scenes_does_not_loop_long() {
+        assert!(!date_text(u64::MAX).is_empty());
+    }
+}
