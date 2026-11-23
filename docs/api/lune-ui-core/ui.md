@@ -635,6 +635,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.battery"></a>`pub fn battery(&mut self, key: impl Hash, rect: Rect, opts: &BatteryOptions<'_>)`
+
+  A battery under `key` in `rect`. The node is a `Progress` named `opts.label` (or the
+  toolkit's `luneui.battery.name`) with the level as a percentage, described as charging
+  while it charges.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.button"></a>`pub fn button(&mut self, key: impl Hash, rect: Rect, text: &str, kind: ButtonKind) -> Response`
 
   A button under `key` in `rect`. `clicked` on a pointer click, Enter or Space while focused,
@@ -918,6 +926,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   (its height is ignored). Returns the height drawn. Each pair is a `Group` named by its key
   over a `StaticText` key and a selectable `StaticText` value named by the key.
 
+- <a id="method.Ui.kv_rows"></a>`pub fn kv_rows(&mut self, key: impl Hash, rect: Rect, rows: &[KvRow<'_>], opts: &KvOptions) -> f32`
+
+  [`Ui::kv_list`](ui.md#method.Ui.kv_list) over rows, each of which can carry a colour swatch before its key (a legend
+  for a chart): a square of the bar chart's legend size, a gap, then the key. Only rows with
+  a swatch are indented; the key column is as wide as the widest indent plus key. The swatch
+  is drawn only, with no node and no hit region. Rows with no swatch draw, register and
+  return exactly what [`Ui::kv_list`](ui.md#method.Ui.kv_list) does for the same pairs. Returns the height drawn.
+
 `impl Ui<'_>`
 
 - <a id="method.Ui.label"></a>`pub fn label(&mut self, key: impl Hash, at: (f32, f32), text: &str, role: LabelRole) -> (f32, f32)`
@@ -1139,6 +1155,14 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.ring_gauge"></a>`pub fn ring_gauge(&mut self, key: impl Hash, rect: Rect, opts: &RingGaugeOptions<'_>)`
+
+  A ring gauge under `key`: the largest circle in `rect`, centred. The node is a `Progress`
+  named `opts.label` (or the toolkit's `luneui.ring-gauge.name`), its value the covered
+  fraction, its description `opts.text` when that is not empty.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.item_row"></a>
 
   ```rust
@@ -1293,6 +1317,13 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   up, Left and Down down, as do the increment and decrement actions; set-value jumps. Marks
   the response `changed` when it wrote a different value. While the pointer holds the slider
   it alone moves the value: keys and actions are dropped.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.sparkline"></a>`pub fn sparkline(&mut self, key: impl Hash, rect: Rect, opts: &SparklineOptions<'_>)`
+
+  A sparkline under `key` filling `rect`. The node is an `Image` named `opts.label` (or the
+  toolkit's `luneui.sparkline.name`) with the description.
 
 `impl Ui<'_>`
 

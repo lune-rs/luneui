@@ -27,6 +27,7 @@ use lune_ui::popover::PopoverWindow;
 use lune_ui::shortcuts::Shortcuts;
 use lune_ui::strings::{DisplayFormat, StringTable};
 use lune_ui::surface::{Acquired, WindowSurface};
+use lune_ui::text::{GlyphRasterizer, Spec, Style, TextCache, TextRendering, TextSystem};
 use lune_ui::tray::{
     GlyphTone, Tray, TrayAction, TrayButton, TrayError, TrayEvent, TrayImage, TrayPlatform,
     TrayRect, TrayState, TraySurface, TrayToggle, bar_from_tray, icon_bitmap, place_surface,
@@ -451,6 +452,86 @@ fn image(state: TrayState, tone: GlyphTone, scale: u32) -> TrayImage {
     }
 }
 
+/// The text colour for a glyph tone: the bar's own light or dark, from the theme (the picture sits
+/// on the bar, so it follows the tone the item's glyph does).
+pub(crate) fn tone_color(tone: GlyphTone, theme: &lune_ui::theme::Theme) -> lune_ui::color::Rgba {
+    match tone {
+        GlyphTone::Light => theme.fg_bright,
+        GlyphTone::Dark => theme.toast_log_bg,
+    }
+}
+
+/// A `side` by `side` tray picture with `s` drawn in its middle in `color`, on transparent: the
+/// recipe for text in a tray icon where the OS draws no text beside it (the notification area of
+/// Windows; `Tray::shows_title` says). The text is shaped with `prepare`, drawn into pixels with
+/// `TextCache::rasterize` (smoothing off and Medium weight, so a 16 px digit keeps whole pixels),
+/// shaped again at a smaller size when it is wider than the square, and centred by its ink; what
+/// still overhangs is cut at the edge. `None` when there is nothing to draw (no
+/// text, no fonts) or `side` is 0.
+pub(crate) fn text_icon(
+    text: &mut TextCache,
+    glyphs: &mut GlyphRasterizer,
+    s: &str,
+    side: u32,
+    color: lune_ui::color::Rgba,
+) -> Option<TrayImage> {
+    if side == 0 || s.is_empty() {
+        return None;
+    }
+    let mut size = side as f32 * 0.62;
+    let mut raster = None;
+    for _ in 0..3 {
+        let spec = Spec::plain(s, Style::ui(size, color).medium());
+        let (key, _) = text.prepare(&spec, 1.0);
+        let r = text.rasterize(key, glyphs, TextRendering::OFF)?;
+        let wide = r.width.max(r.height);
+        let done = wide <= side;
+        if !done {
+            // Shape again smaller by the overshoot; a text this small is no longer legible, so
+            // three tries are plenty.
+            size = (size * side as f32 / wide as f32).floor().max(6.0);
+        }
+        raster = Some(r);
+        if done {
+            break;
+        }
+    }
+    let r = raster?;
+    // Centre the ink, not the line box: a digit sits in the upper part of its line.
+    let mut ink: Option<(u32, u32, u32, u32)> = None;
+    for y in 0..r.height {
+        for x in 0..r.width {
+            if r.rgba[4 * (y * r.width + x) as usize + 3] > 0 {
+                let (x0, y0, x1, y1) = ink.unwrap_or((x, y, x, y));
+                ink = Some((x0.min(x), y0.min(y), x1.max(x), y1.max(y)));
+            }
+        }
+    }
+    let (x0, y0, x1, y1) = ink?;
+    let (iw, ih) = (x1 - x0 + 1, y1 - y0 + 1);
+    let mut rgba = vec![0u8; 4 * (side * side) as usize];
+    let (ox, oy) = (
+        (i64::from(side) - i64::from(iw)) / 2 - i64::from(x0),
+        (i64::from(side) - i64::from(ih)) / 2 - i64::from(y0),
+    );
+    for y in y0..=y1 {
+        for x in x0..=x1 {
+            let (dx, dy) = (i64::from(x) + ox, i64::from(y) + oy);
+            if dx < 0 || dy < 0 || dx >= i64::from(side) || dy >= i64::from(side) {
+                continue;
+            }
+            let from = 4 * (y * r.width + x) as usize;
+            let to = 4 * (dy as u32 * side + dx as u32) as usize;
+            rgba[to..to + 4].copy_from_slice(&r.rgba[from..from + 4]);
+        }
+    }
+    Some(TrayImage {
+        width: side,
+        height: side,
+        rgba,
+    })
+}
+
 impl TrayHost {
     /// Puts the item in the tray. Call [`route_tray_events`] first.
     pub(crate) fn new(state: TrayState, display_scale: f64) -> Result<Self, TrayError> {
@@ -473,6 +554,24 @@ impl TrayHost {
 
     pub(crate) fn tray(&self) -> &Tray {
         &self.tray
+    }
+
+    /// The picture's side in px for this display: 18 at scale 1, 36 at 2.
+    pub(crate) fn icon_side(&self) -> u32 {
+        18 * self.scale
+    }
+
+    /// The tone the item's picture is drawn in.
+    pub(crate) fn tone(&self) -> GlyphTone {
+        self.shown.1
+    }
+
+    /// Puts back the state's own picture and tooltip, as the smoke does after it has set a text
+    /// of its own.
+    pub(crate) fn restore_image(&self) -> Result<(), TrayError> {
+        self.tray
+            .set_image(image(self.shown.0, self.shown.1, self.scale))?;
+        self.tray.set_tooltip(tooltip(self.shown.0))
     }
 
     pub(crate) fn popover(&self) -> Option<&PopoverHost> {
@@ -635,6 +734,65 @@ mod tests {
     use super::*;
 
     const LOST: WindowEvent = WindowEvent::Focused(false);
+
+    fn icon(text: &str, side: u32, color: lune_ui::color::Rgba) -> Option<TrayImage> {
+        text_icon(
+            &mut crate::text_cache(),
+            &mut GlyphRasterizer::new(),
+            text,
+            side,
+            color,
+        )
+    }
+
+    #[test]
+    fn a_text_icon_is_a_square_of_the_side_with_opaque_pixels_of_the_text() {
+        let white = [255, 255, 255, 255];
+        for side in [18, 36] {
+            let image = icon("36", side, white).expect("a text icon");
+            assert_eq!((image.width, image.height), (side, side));
+            assert_eq!(image.rgba.len(), (side * side * 4) as usize);
+            assert!(
+                image.rgba.chunks(4).any(|p| p[3] == 255),
+                "at least one opaque pixel at side {side}"
+            );
+            assert!(
+                image.rgba.chunks(4).any(|p| p[3] == 0),
+                "a transparent square around the text"
+            );
+            // The result is a picture the tray accepts: bytes match the size.
+            assert_eq!(
+                image.rgba.len() as u64,
+                u64::from(side) * u64::from(side) * 4
+            );
+        }
+    }
+
+    #[test]
+    fn a_text_wider_than_the_square_is_made_smaller_to_fit() {
+        let white = [255, 255, 255, 255];
+        let narrow = icon("3", 18, white).expect("narrow");
+        let wide = icon("100%100%", 18, white).expect("wide");
+        let ink = |i: &TrayImage| i.rgba.chunks(4).filter(|p| p[3] > 0).count();
+        assert!(ink(&wide) > 0);
+        // The wide text keeps ink on every column from near the left edge to near the right.
+        let cols: Vec<bool> = (0..18)
+            .map(|x| (0..18).any(|y| wide.rgba[4 * (y * 18 + x) + 3] > 0))
+            .collect();
+        assert!(cols[1] || cols[2], "starts near the left edge");
+        assert!(cols[15] || cols[16], "reaches near the right edge");
+        assert!(ink(&narrow) > 0);
+    }
+
+    #[test]
+    fn nothing_to_draw_gives_none_and_the_tone_colour_comes_from_the_theme() {
+        let white = [255, 255, 255, 255];
+        assert!(icon("", 18, white).is_none());
+        assert!(icon("36", 0, white).is_none());
+        assert_eq!(tone_color(GlyphTone::Light, &THEME), THEME.fg_bright);
+        assert_eq!(tone_color(GlyphTone::Dark, &THEME), THEME.toast_log_bg);
+        assert!(icon("36", 18, tone_color(GlyphTone::Light, &THEME)).is_some());
+    }
 
     #[test]
     fn a_window_shown_for_the_first_time_has_no_focus_until_it_gets_it() {

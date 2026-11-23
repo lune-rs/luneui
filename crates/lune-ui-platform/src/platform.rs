@@ -17,8 +17,8 @@ mod windows;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 pub(crate) use item::{TrayItem, set_event_handler};
 #[cfg(target_os = "macos")]
-pub(crate) use macos::{Panel, bar_is_dark, frontmost_app};
+pub(crate) use macos::{Panel, SHOWS_TITLE, bar_is_dark, frontmost_app};
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub(crate) use other::{Panel, TrayItem, frontmost_app, set_event_handler};
+pub(crate) use other::{Panel, SHOWS_TITLE, TrayItem, frontmost_app, set_event_handler};
 #[cfg(target_os = "windows")]
-pub(crate) use windows::{Panel, bar_is_dark, frontmost_app};
+pub(crate) use windows::{Panel, SHOWS_TITLE, bar_is_dark, frontmost_app};

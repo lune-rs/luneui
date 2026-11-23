@@ -13,6 +13,7 @@ mod a11y;
 mod badge;
 mod banner;
 mod bar_chart;
+mod battery;
 mod bottom_sheet;
 mod button;
 mod callout;
@@ -60,6 +61,7 @@ mod pull_to_refresh;
 mod radio_group;
 mod recipes;
 pub(crate) mod reference;
+mod ring_gauge;
 mod row;
 mod scroll_area;
 mod scrollbar;
@@ -69,6 +71,7 @@ mod shortcuts;
 mod side_panel;
 mod sidebar;
 mod slider;
+mod sparkline;
 mod spinner;
 mod split_panes;
 mod stack;
@@ -78,6 +81,7 @@ mod status_dot;
 mod stepper;
 mod steps;
 mod swipe_actions;
+mod system_monitor;
 mod tab_bar;
 mod tab_strip;
 mod table;
@@ -202,6 +206,10 @@ pub(crate) static PAGES: &[&Page] = &[
     &pager::PAGE,
     &swipe_actions::PAGE,
     &pull_to_refresh::PAGE,
+    &ring_gauge::PAGE,
+    &sparkline::PAGE,
+    &battery::PAGE,
+    &system_monitor::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

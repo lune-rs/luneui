@@ -1,7 +1,7 @@
 //! The web demo: a fully animated showcase on the toolkit. A glass frame (a side rail of six scenes
 //! and a stage, or on a phone a title bar and a bottom tab bar) floats over a slowly moving
 //! background, and the scenes change with a push. It runs in a browser on a `<canvas>` (WebGPU, or
-//! WebGL2 where there is none: [`web`]) and natively in a window, and `--dump` writes it headless.
+//! WebGL2 where there is none: the wasm-only `web` module) and natively in a window, and `--dump` writes it headless.
 //!
 //! App code only (D9): it uses the facade and changes nothing under `crates/`. The screens and their
 //! state are in [`stage`] and [`scenes`], shared by the window shell ([`shell`]), the headless dump

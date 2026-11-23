@@ -5,8 +5,14 @@
 //! macOS and Windows go through `tray-icon`, with no menu attached and a non-template image (the
 //! coloured dot could not survive a template). Other platforms have no tray: [`Tray::new`] is
 //! [`TrayError::Unsupported`].
+//!
+//! A title ([`Tray::set_title`]) is text beside the image. macOS draws it in the status item, in
+//! the system's menu-bar font and colour. Windows draws none in the notification area, so there
+//! the title becomes the first line of the tooltip ([`Tray::shows_title`] says which); an app that
+//! wants text at a glance there draws it into the image.
 
 use std::marker::PhantomData;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::platform;
 
@@ -69,8 +75,59 @@ impl std::error::Error for TrayError {}
 #[derive(Debug)]
 pub struct Tray {
     item: platform::TrayItem,
+    /// The last title and tooltip, which Windows folds into one tooltip (see [`fold`]). The type's
+    /// auto traits stay what they were on every target, so the cell is a boxed `Mutex`: a
+    /// `RefCell` would lose `RefUnwindSafe` and `Freeze`, an `Rc` would lose `UnwindSafe` and
+    /// `RefUnwindSafe` where the item is the empty one of `platform/other.rs`, and an inline
+    /// `Mutex` would lose `Freeze` (rustdoc's API check sees that one). The lock never contends:
+    /// the type is `!Send` and `!Sync`.
+    texts: Box<Mutex<Texts>>,
     /// Keeps the type `!Send` and `!Sync` on every platform, whatever `item` is.
     main_thread: PhantomData<*const ()>,
+}
+
+/// The title and the tooltip the app last gave.
+#[derive(Debug, Default)]
+struct Texts {
+    title: String,
+    tooltip: String,
+}
+
+impl Texts {
+    /// What the OS gets as its tooltip: the tooltip itself where the title has a place of its own,
+    /// else the title folded into it.
+    fn os_tooltip(&self) -> String {
+        if platform::SHOWS_TITLE {
+            self.tooltip.clone()
+        } else {
+            fold(&self.title, &self.tooltip)
+        }
+    }
+}
+
+/// The most UTF-16 units of a tooltip the OS is given where the title folds into it: Windows' field
+/// holds 128 units with the terminator, and a tip of 128 is stored without one.
+const TOOLTIP_UNITS: usize = 127;
+
+/// The one tooltip text for a `title` and a `tooltip`: both empty gives nothing, one empty gives
+/// the other, both give the title, a line break and the tooltip. The result is cut to at most
+/// [`TOOLTIP_UNITS`] UTF-16 units, always between whole characters (a pair of units is never
+/// split).
+fn fold(title: &str, tooltip: &str) -> String {
+    let joined = match (title.is_empty(), tooltip.is_empty()) {
+        (true, _) => tooltip.to_owned(),
+        (_, true) => title.to_owned(),
+        _ => format!("{title}\n{tooltip}"),
+    };
+    let (mut units, mut end) = (0, 0);
+    for (at, c) in joined.char_indices() {
+        units += c.len_utf16();
+        if units > TOOLTIP_UNITS {
+            break;
+        }
+        end = at + c.len_utf8();
+    }
+    joined[..end].to_owned()
 }
 
 impl Tray {
@@ -78,10 +135,21 @@ impl Tray {
     /// no click reaches the app.
     pub fn new(image: TrayImage, tooltip: &str) -> Result<Tray, TrayError> {
         check_image(&image)?;
+        let texts = Texts {
+            title: String::new(),
+            tooltip: tooltip.to_owned(),
+        };
         Ok(Tray {
-            item: platform::TrayItem::new(image, tooltip)?,
+            item: platform::TrayItem::new(image, &texts.os_tooltip())?,
+            texts: Box::new(Mutex::new(texts)),
             main_thread: PhantomData,
         })
+    }
+
+    /// The kept texts. A lock poisoned by a panic elsewhere is still taken: the guarded code only
+    /// clones strings, so a poisoned value is whole.
+    fn texts(&self) -> MutexGuard<'_, Texts> {
+        self.texts.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// Replaces the picture.
@@ -90,9 +158,44 @@ impl Tray {
         self.item.set_image(image)
     }
 
-    /// Replaces the tooltip. Windows cuts a long one: its field holds 128 UTF-16 units.
+    /// Replaces the tooltip. Where the title has no place of its own (Windows, see
+    /// [`Tray::shows_title`]) the OS gets the title, a line break and this tooltip, cut to 127
+    /// UTF-16 units between whole characters; a tooltip with no title, or a title with no tooltip,
+    /// is that one alone.
     pub fn set_tooltip(&self, tooltip: &str) -> Result<(), TrayError> {
-        self.item.set_tooltip(tooltip)
+        let next = Texts {
+            title: self.texts().title.clone(),
+            tooltip: tooltip.to_owned(),
+        };
+        self.item.set_tooltip(&next.os_tooltip())?;
+        *self.texts() = next;
+        Ok(())
+    }
+
+    /// Shows `title` beside the image; `""` clears it. Where [`Tray::shows_title`] is true (macOS)
+    /// it is the status item's own title, to the right of the image, in the system's menu-bar font
+    /// and colour; the tooltip is untouched. Where it is false (Windows) the notification area has
+    /// no such text, so the title becomes the first line of the tooltip, as [`Tray::set_tooltip`]
+    /// says: draw text into the image to show it at a glance.
+    pub fn set_title(&self, title: &str) -> Result<(), TrayError> {
+        if platform::SHOWS_TITLE {
+            self.item.set_title(title)?;
+            self.texts().title = title.to_owned();
+            return Ok(());
+        }
+        let next = Texts {
+            title: title.to_owned(),
+            tooltip: self.texts().tooltip.clone(),
+        };
+        self.item.set_tooltip(&next.os_tooltip())?;
+        *self.texts() = next;
+        Ok(())
+    }
+
+    /// Whether [`Tray::set_title`] draws text beside the image (macOS) or folds it into the
+    /// tooltip (Windows).
+    pub fn shows_title(&self) -> bool {
+        platform::SHOWS_TITLE
     }
 
     /// The item's rect now, or `None` while the OS has not placed it. On macOS that lasts until the
@@ -154,6 +257,66 @@ mod tests {
         };
         assert_eq!(placed(unplaced), None);
         assert_eq!(placed(TrayRect { w: 0.0, ..RECT }), None);
+    }
+
+    fn units(s: &str) -> usize {
+        s.encode_utf16().count()
+    }
+
+    #[test]
+    fn a_title_and_a_tooltip_fold_into_one_text() {
+        assert_eq!(fold("", ""), "");
+        assert_eq!(fold("Title", ""), "Title");
+        assert_eq!(fold("", "Tooltip"), "Tooltip");
+        assert_eq!(fold("Title", "Tooltip"), "Title\nTooltip");
+    }
+
+    #[test]
+    fn a_long_text_is_cut_to_127_units() {
+        let long = "x".repeat(200);
+        let folded = fold(&long, "");
+        assert_eq!(units(&folded), 127);
+        assert_eq!(folded, "x".repeat(127));
+        // The cut can fall in the tooltip, after the line break.
+        let both = fold(&"a".repeat(100), &"b".repeat(100));
+        assert_eq!(units(&both), 127);
+        assert!(both.starts_with(&"a".repeat(100)) && both[100..].starts_with('\n'));
+        // A text that fits is kept whole.
+        assert_eq!(fold(&"y".repeat(127), ""), "y".repeat(127));
+    }
+
+    #[test]
+    fn a_pair_of_units_is_never_split() {
+        // The pair for U+1F600 would take units 127 and 128: it is left out whole.
+        let straddles = format!("{}\u{1F600}tail", "a".repeat(126));
+        let folded = fold(&straddles, "");
+        assert_eq!(folded, "a".repeat(126));
+        assert_eq!(units(&folded), 126);
+        // The same pair ending exactly at unit 127 stays.
+        let fits = format!("{}\u{1F600}tail", "a".repeat(125));
+        let folded = fold(&fits, "");
+        assert_eq!(folded, format!("{}\u{1F600}", "a".repeat(125)));
+        assert_eq!(units(&folded), 127);
+        // Every cut of a text of pairs is whole characters at most 127 units long.
+        for n in 0..140 {
+            let folded = fold(&"\u{1F600}".repeat(n), "");
+            assert!(units(&folded) <= 127);
+            assert_eq!(units(&folded) % 2, 0);
+        }
+    }
+
+    #[test]
+    fn what_the_os_gets_is_the_tooltip_alone_where_the_title_has_a_place_and_folded_otherwise() {
+        let texts = Texts {
+            title: "Title".into(),
+            tooltip: "Tooltip".into(),
+        };
+        let want = if platform::SHOWS_TITLE {
+            "Tooltip"
+        } else {
+            "Title\nTooltip"
+        };
+        assert_eq!(texts.os_tooltip(), want);
     }
 
     fn image(width: u32, height: u32, bytes: usize) -> TrayImage {

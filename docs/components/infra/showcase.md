@@ -77,6 +77,8 @@ with the live dither step).
 - `showcase-settings`: the settings pane under another theme, a reduced tier, half speed, a wider blur and no noise.
 - `showcase-lab-motion`: the motion lab, chosen by a cue: the seven easings and fifteen kinds at rest.
 - `showcase-table`: a search for the table, then a press on its row, which takes the content pane.
+- `system-monitor`: the page of a menu-bar system-monitor dropdown (D440), built from toolkit parts only: a panel over a scroll area of eight sections (CPU, GPU, RAM, Disk, Sensors, Network, Battery, Clock) of rings, swatched rows, graphs, a battery and a clock card drawn by the page; settled.
+- `system-monitor-scrolled`: the same page with the column scrolled to the sensors list and the list scrolled to its middle rows, captured at 1.8 s, settled.
 - `lab-depth`: the window depth lab alone in a window (1x and 2x): a fade of alpha, a soft shadow, a translucent fill and a dark ramp on the window glass; its live line reads "not a window" in a dump.
 - `lab-banding`: the gradient banding lab alone in a window: a dark ramp dithered and in 8-bit steps, a radial light and a vertical ramp.
 

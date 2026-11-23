@@ -12,6 +12,11 @@ macOS and Windows go through `tray-icon`, with no menu attached and a non-templa
 coloured dot could not survive a template). Other platforms have no tray: [`Tray::new`](tray.md#method.Tray.new) is
 [`TrayError::Unsupported`](tray.md#variant.TrayError.Unsupported).
 
+A title ([`Tray::set_title`](tray.md#method.Tray.set_title)) is text beside the image. macOS draws it in the status item, in
+the system's menu-bar font and colour. Windows draws none in the notification area, so there
+the title becomes the first line of the tooltip ([`Tray::shows_title`](tray.md#method.Tray.shows_title) says which); an app that
+wants text at a glance there draws it into the image.
+
 Source: `crates/lune-ui-platform/src/tray.rs:1`
 
 ## Structs
@@ -27,7 +32,7 @@ pub struct Tray {
 
 The tray item. It lives on the main thread, and the OS item goes when this drops.
 
-Source: `crates/lune-ui-platform/src/tray.rs:70`
+Source: `crates/lune-ui-platform/src/tray.rs:76`
 
 **Methods and associated items**
 
@@ -53,9 +58,25 @@ Source: `crates/lune-ui-platform/src/tray.rs:70`
 
   Replaces the picture.
 
+- <a id="method.Tray.set_title"></a>`pub fn set_title(&self, title: &str) -> Result<(), TrayError>`
+
+  Shows `title` beside the image; `""` clears it. Where [`Tray::shows_title`](tray.md#method.Tray.shows_title) is true (macOS)
+  it is the status item's own title, to the right of the image, in the system's menu-bar font
+  and colour; the tooltip is untouched. Where it is false (Windows) the notification area has
+  no such text, so the title becomes the first line of the tooltip, as [`Tray::set_tooltip`](tray.md#method.Tray.set_tooltip)
+  says: draw text into the image to show it at a glance.
+
 - <a id="method.Tray.set_tooltip"></a>`pub fn set_tooltip(&self, tooltip: &str) -> Result<(), TrayError>`
 
-  Replaces the tooltip. Windows cuts a long one: its field holds 128 UTF-16 units.
+  Replaces the tooltip. Where the title has no place of its own (Windows, see
+  [`Tray::shows_title`](tray.md#method.Tray.shows_title)) the OS gets the title, a line break and this tooltip, cut to 127
+  UTF-16 units between whole characters; a tooltip with no title, or a title with no tooltip,
+  is that one alone.
+
+- <a id="method.Tray.shows_title"></a>`pub fn shows_title(&self) -> bool`
+
+  Whether [`Tray::set_title`](tray.md#method.Tray.set_title) draws text beside the image (macOS) or folds it into the
+  tooltip (Windows).
 
 **Trait implementations**
 
@@ -74,7 +95,7 @@ pub struct TrayImage {
 
 A straight-alpha RGBA picture, `width * height * 4` bytes, row-major from the top left.
 
-Source: `crates/lune-ui-platform/src/tray.rs:15`
+Source: `crates/lune-ui-platform/src/tray.rs:21`
 
 **Fields**
 
@@ -106,7 +127,7 @@ pub struct TrayRect {
 
 The tray item's rect: physical pixels, top-left origin.
 
-Source: `crates/lune-ui-platform/src/tray.rs:23`
+Source: `crates/lune-ui-platform/src/tray.rs:29`
 
 **Fields**
 
@@ -141,7 +162,7 @@ pub enum TrayButton {
 
 The mouse button of a click.
 
-Source: `crates/lune-ui-platform/src/tray.rs:32`
+Source: `crates/lune-ui-platform/src/tray.rs:38`
 
 **Variants**
 
@@ -174,7 +195,7 @@ pub enum TrayError {
 
 Why a tray call failed.
 
-Source: `crates/lune-ui-platform/src/tray.rs:47`
+Source: `crates/lune-ui-platform/src/tray.rs:53`
 
 **Variants**
 
@@ -211,7 +232,7 @@ pub enum TrayEvent {
 
 What the tray item reports.
 
-Source: `crates/lune-ui-platform/src/tray.rs:40`
+Source: `crates/lune-ui-platform/src/tray.rs:46`
 
 **Variants**
 
@@ -240,5 +261,5 @@ Sets the handler of the tray's events. Only the first call takes effect, and it 
 the first [`Tray::new`](tray.md#method.Tray.new): the OS layer fixes its route at the first event. The handler runs on the
 thread the OS reports on, so it should only pass the event to the app's event loop.
 
-Source: `crates/lune-ui-platform/src/tray.rs:116`
+Source: `crates/lune-ui-platform/src/tray.rs:219`
 

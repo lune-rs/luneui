@@ -14,6 +14,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`badge`](widgets/badge.md) - A static tag (`widget.badge`): 18 px high, radius 8, a one px tone border, 11 px Medium text on a 16 px line, an optional leading status dot.
 - [`banner`](widgets/banner.md) - A banner and an empty state that take the caller's own text (`widget.banner-empty-state`).
 - [`bar_chart`](widgets/bar_chart.md) - The stacked bar chart (`data.bar-chart`, D164, D165): painter rectangles with value transitions.
+- [`battery`](widgets/battery.md) - The battery (`data.battery`, D437): a rounded outline with a small nub on its right end, a fill inside it to the level and, while charging, a bolt over the fill.
 - [`bottom_sheet`](widgets/bottom_sheet.md) - The bottom sheet of a phone screen (`overlay.bottom-sheet`, D371): a modal surface that slides up from the window's bottom edge to a detent, follows a finger that drags it, and springs to the detent t...
 - [`button`](widgets/button.md) - Button control and its label width.
 - [`callout`](widgets/callout.md) - A tinted block of text with an icon and a tone (`widget.callout`).
@@ -50,6 +51,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`progress`](widgets/progress.md) - A progress track (`data.progress`): 4 px high, radius 4, `surface_overlay` track, a fill in a tone (neutral is `accent`; square at its leading edge, clipped by the track), an optional head (name left,...
 - [`pull_to_refresh`](widgets/pull_to_refresh.md) - Pull to refresh of a phone list (`layout.pull-to-refresh`, D375): a [`Ui::scroll_area`](ui.md#method.Ui.scroll_area) that reports `refresh` when a finger pulls its content down past the top by 64 px a...
 - [`radio_group`](widgets/radio_group.md) - A group of radio options with one roving stop (`widget.radio-group`, D120).
+- [`ring_gauge`](widgets/ring_gauge.md) - The ring gauge (`data.ring-gauge`, D435): a circular track with coloured arc segments laid end to end, clockwise from the top, and an optional text centred inside.
 - [`row`](widgets/row.md) - A hover-lit row with a leading, a body and a trailing part (`widget.row`).
 - [`scroll_area`](widgets/scroll_area.md) - The scroll area (`layout.scroll-area`): a clipped viewport over taller or wider content, with a per-id offset kept by the `Ui` (persistent state, so it survives a hidden tab under `keep_alive`), smoot...
 - [`scrollbar`](widgets/scrollbar.md) - The overlay scrollbar of a scroll area (`widget.scrollbar`): a 9 px transparent track with a 6 px rounded thumb in the `accent` colour, shown while the pointer is over the area or the thumb is held, t...
@@ -61,6 +63,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`side_panel`](widgets/side_panel.md) - The side panel host (`layout.side-panel`, D149): one column on the app's glass layer that shows one of several panels by key.
 - [`sidebar`](widgets/sidebar.md) - The sidebar (`layout.sidebar`, D149): a column on the window glass holding navigation rows or wizard steps, and a status footer pinned to its bottom.
 - [`slider`](widgets/slider.md) - A horizontal value slider (`widget.slider`): a 4 px track, an accent fill up to the value and a 12 px knob (14 hovered) whose centre sits at the value's position.
+- [`sparkline`](widgets/sparkline.md) - The sparkline (`data.sparkline`, D436): a history graph with no axes, in an inset rounded frame.
 - [`spinner`](widgets/spinner.md) - A turning busy indicator (`widget.spinner`): the sync glyph rotating about its centre, one revolution per 1200 ms while busy (D117).
 - [`split_panes`](widgets/split_panes.md) - Resizable split panes (`layout.split-panes`, D150): two panes in a rect with a draggable, keyboard-operable strip between them.
 - [`star_rating`](widgets/star_rating.md) - A row of stars that sets a whole-number value (`widget.star-rating`, D120): `max` star buttons (default [`MAX`](widgets/star_rating.md#constant.MAX)), the first `value` of them filled in the warning t...

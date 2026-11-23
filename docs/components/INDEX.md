@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 111 |
+| done | 114 |
 | external | 4 |
-| **total** | **117** |
+| **total** | **120** |
 
 ## core
 
@@ -139,11 +139,14 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
 | [data.bar-chart](data/bar-chart.md) | Stacked bar chart | done | wane | Hourly stacked columns, two series, three grid lines |
+| [data.battery](data/battery.md) | Battery | done | any | A battery glyph: a rounded outline with a nub on its right end, a fill to the level coloured by the level, and a bolt while charging |
 | [data.kanban-board](data/kanban-board.md) | Kanban board | done | lunegit | Horizontal board of columns with card lists, card drag between columns by manual pointer capture, and an error state for a corrupt board |
 | [data.kv-list](data/kv-list.md) | Key-value list | done | wane | Aligned key and value pairs: facts, paths, ids, figures |
 | [data.lane-graph](data/lane-graph.md) | Lane graph (row) | done | lunegit | One row of a lane graph: connection curves between lanes, vertical lane lines, and a node dot in its lane; generalised from commits to app data |
 | [data.pie-chart](data/pie-chart.md) | Pie chart | done | lunegit | 160 px pie of slices sized by value, drawn from the top clockwise, with a glass highlight over the top half |
 | [data.progress](data/progress.md) | Progress bar | done | wane | 4 px track with an accent fill; warn and err only for meaning |
+| [data.ring-gauge](data/ring-gauge.md) | Ring gauge | done | any | A circular track with coloured arc segments laid end to end from the top and a centred reading; the gauge of a menu-bar monitor panel |
+| [data.sparkline](data/sparkline.md) | Sparkline | done | any | A history graph with no axes, as a line with a soft fill or a strip of bars, with an optional second series mirrored below the baseline |
 | [data.stat](data/stat.md) | Stat cell | done | wane | A labelled figure in a strip: label, mono value, sub-line, optional meter |
 | [data.table](data/table.md) | Data table | done | wane | 28 px rows with hairlines, numeric columns in mono, sortable header look, selectable rows |
 

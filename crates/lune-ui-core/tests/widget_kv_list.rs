@@ -13,7 +13,7 @@ use lune_ui_core::text::{Spec, Style, TextSystem, elide};
 use lune_ui_core::theme::DARK;
 use lune_ui_core::ui::{Ui, WidgetId};
 use lune_ui_core::widgets::button::ButtonKind;
-use lune_ui_core::widgets::kv_list::{KvMode, KvOptions};
+use lune_ui_core::widgets::kv_list::{KvMode, KvOptions, KvRow};
 use lune_ui_core::widgets::scroll_area::{Extent, ScrollOptions};
 
 const WIN: (f32, f32) = (600.0, 400.0);
@@ -1051,4 +1051,190 @@ fn the_value_gives_up_the_controls_room() {
         },
     );
     assert!(drawn >= plain, "a narrower value wraps at least as much");
+}
+
+// Swatched rows (`Ui::kv_rows`, D438).
+
+/// The legend swatch's side and its gap to the key, and the indent they make.
+const SWATCH: f32 = 8.0;
+const SWATCH_GAP: f32 = 8.0;
+const INDENT: f32 = SWATCH + SWATCH_GAP;
+const BLUE: [u8; 4] = [30, 60, 220, 255];
+const AMBER: [u8; 4] = [230, 170, 20, 255];
+
+fn rows(
+    h: &mut UiHarness,
+    rect: Rect,
+    rows: &[KvRow<'_>],
+    opts: &KvOptions,
+) -> (Scene, FrameOutput, f32) {
+    let mut height = 0.0;
+    let (scene, out) = h.frame(|ui| height = ui.kv_rows("kv", rect, rows, opts));
+    (scene, out, height)
+}
+
+/// The rounded squares of `color` in the scene as `[x, y, w, h]` (scale 1).
+fn swatches(scene: &Scene, color: [u8; 4]) -> Vec<[f32; 4]> {
+    let want = premul(color);
+    scene.layers[0]
+        .geometry
+        .under
+        .iter()
+        .filter(|s| s.color == want)
+        .map(|s| s.rect)
+        .collect()
+}
+
+#[test]
+fn a_swatched_key_starts_after_the_swatch_and_a_plain_one_stays_flush() {
+    let list = [
+        KvRow::new("Usage", "36%"),
+        KvRow::new("E-cores", "12%").with_swatch(BLUE),
+    ];
+    let (scene, _, height) = rows(&mut UiHarness::new(WIN), RECT, &list, &KvOptions::default());
+    assert_eq!(height, 48.0);
+    let t = texts(&scene);
+    assert_eq!(t.len(), 4);
+    assert_eq!(t[0].x, RECT.x, "a plain key is flush");
+    assert_eq!(
+        t[2].x,
+        RECT.x + INDENT,
+        "a swatched key follows the swatch and its gap"
+    );
+    let sw = swatches(&scene, BLUE);
+    assert_eq!(sw.len(), 1);
+    // A square of the legend's size, flush left, centred on the key's 20 px line (row top + 2).
+    assert_eq!(
+        sw[0],
+        [
+            RECT.x,
+            RECT.y + 24.0 + 2.0 + (20.0 - SWATCH) / 2.0,
+            SWATCH,
+            SWATCH
+        ]
+    );
+}
+
+#[test]
+fn the_value_column_moves_right_only_when_an_indented_key_is_the_widest() {
+    let opts = KvOptions::default();
+    // The plain key is the widest: the swatched, shorter one fits inside it.
+    let wide_plain = [
+        KvRow::new("Repository", "x"),
+        KvRow::new("Id", "y").with_swatch(BLUE),
+    ];
+    let (scene, _, _) = rows(&mut UiHarness::new(WIN), RECT, &wide_plain, &opts);
+    let t = texts(&scene);
+    assert_eq!(t[1].x, RECT.x + text_w("Repository") + 16.0, "unmoved");
+    assert_eq!(t[3].x, t[1].x, "one value column");
+    // The swatched key plus its indent is the widest.
+    let wide_swatched = [
+        KvRow::new("Usage", "x"),
+        KvRow::new("E-cores", "y").with_swatch(AMBER),
+    ];
+    let (scene, _, _) = rows(&mut UiHarness::new(WIN), RECT, &wide_swatched, &opts);
+    let t = texts(&scene);
+    let col = INDENT + text_w("E-cores");
+    assert!(col > text_w("Usage"));
+    assert_eq!(t[1].x, RECT.x + col + 16.0, "moved by the indent");
+    assert_eq!(t[3].x, t[1].x);
+}
+
+#[test]
+fn the_swatch_is_decoration_with_no_node_of_its_own() {
+    let plain_rows = [KvRow::new("A", "1"), KvRow::new("B", "2")];
+    let swatched = [
+        KvRow::new("A", "1").with_swatch(BLUE),
+        KvRow::new("B", "2").with_swatch(AMBER),
+    ];
+    let (_, a, _) = rows(
+        &mut UiHarness::new(WIN),
+        RECT,
+        &plain_rows,
+        &KvOptions::default(),
+    );
+    let (_, b, _) = rows(
+        &mut UiHarness::new(WIN),
+        RECT,
+        &swatched,
+        &KvOptions::default(),
+    );
+    assert_eq!(a.tree.nodes.len(), b.tree.nodes.len());
+    for (x, y) in a.tree.nodes.iter().zip(&b.tree.nodes) {
+        assert_eq!((x.id, x.role, &x.name), (y.id, y.role, &y.name));
+    }
+}
+
+#[test]
+fn rows_with_no_swatch_draw_and_register_exactly_what_the_pairs_do_in_every_mode() {
+    let pairs: [(&str, &str); 4] = [
+        ("Id", "alpha-beta-gamma"),
+        (
+            "Repository",
+            "/home/lune/code/luneui and a long path that wraps in a narrow column of text",
+        ),
+        ("Port", "8080"),
+        ("Name", "x"),
+    ];
+    let list: Vec<KvRow<'_>> = pairs.iter().map(|(k, v)| KvRow::new(k, v)).collect();
+    for mode in [KvMode::Default, KvMode::Stacked, KvMode::Wrap] {
+        for (mono, copy) in [(false, false), (true, true)] {
+            let opts = KvOptions { mode, mono, copy };
+            for w in [150.0, 400.0] {
+                let rect = Rect::new(20.0, 30.0, w, 0.0);
+                let (sa, oa, ha) = kv(&mut UiHarness::new(WIN), rect, &pairs, &opts);
+                let (sb, ob, hb) = rows(&mut UiHarness::new(WIN), rect, &list, &opts);
+                assert_eq!(ha, hb, "{mode:?} {w}");
+                assert_eq!(sa, sb, "{mode:?} {w}: the same scene");
+                assert_eq!(oa.tree, ob.tree, "{mode:?} {w}: the same node tree");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_stacked_cell_puts_the_swatch_before_its_key_line() {
+    let list = [
+        KvRow::new("Usage", "36%").with_swatch(BLUE),
+        KvRow::new("Idle", "64%"),
+    ];
+    let opts = KvOptions {
+        mode: KvMode::Stacked,
+        ..KvOptions::default()
+    };
+    let (scene, _, _) = rows(&mut UiHarness::new(WIN), RECT, &list, &opts);
+    let t = texts(&scene);
+    assert_eq!(t[0].x, RECT.x + INDENT, "the key follows the swatch");
+    let col_w = (RECT.w - 16.0) / 2.0;
+    assert_eq!(t[2].x, RECT.x + col_w + 16.0, "a plain cell's key is flush");
+    // The swatch is centred on the key's 16 px line.
+    let sw = swatches(&scene, BLUE);
+    assert_eq!(
+        sw,
+        vec![[RECT.x, RECT.y + (16.0 - SWATCH) / 2.0, SWATCH, SWATCH]]
+    );
+}
+
+#[test]
+fn a_wrap_row_with_a_swatch_keeps_the_swatch_on_its_first_line_and_wraps_at_the_wider_column() {
+    let long = "a value long enough to wrap onto several lines in a narrow column of text";
+    let narrow = Rect::new(20.0, 30.0, 220.0, 0.0);
+    let opts = KvOptions {
+        mode: KvMode::Wrap,
+        ..KvOptions::default()
+    };
+    let plain_rows = [KvRow::new("Usage", long), KvRow::new("E", "1")];
+    let swatched = [
+        KvRow::new("Usage", long),
+        KvRow::new("E-cores", "1").with_swatch(BLUE),
+    ];
+    let (_, _, h_plain) = rows(&mut UiHarness::new(WIN), narrow, &plain_rows, &opts);
+    let (scene, _, h_sw) = rows(&mut UiHarness::new(WIN), narrow, &swatched, &opts);
+    assert!(
+        h_sw >= h_plain,
+        "a wider key column leaves a value no more room"
+    );
+    let sw = swatches(&scene, BLUE);
+    assert_eq!(sw.len(), 1);
+    assert_eq!(sw[0][0], narrow.x);
 }

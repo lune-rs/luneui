@@ -6,12 +6,20 @@
 //! Stacked: two columns of cells, the key (11 on a 16 px line, tertiary) over the value (13 mono on
 //! a 20 px line), 12 px between rows. Values are [selectable](super::selectable): the keys and
 //! the rest of a row take no input, except the optional [copy control](KvOptions::copy).
+//!
+//! A row can carry a colour swatch before its key ([`KvRow`], [`Ui::kv_rows`]): a legend square
+//! the size of the bar chart's, then a gap, then the key. Only rows with a swatch are indented, so
+//! a plain row stays flush; the key column is as wide as the widest indent plus key. The swatch is
+//! decoration: no node and no hit region. A list of plain pairs ([`Ui::kv_list`]) is the same
+//! layout with no swatch.
 
 use std::hash::Hash;
 use std::time::Duration;
 
+use super::bar_chart::{SWATCH, SWATCH_RADIUS};
 use super::code_block::{COPY_GAP, COPY_SIDE, CopyControl};
 use crate::access::{Node, Role, Value};
+use crate::color::Rgba;
 use crate::motion::Time;
 use crate::paint::{Painter, Rect};
 use crate::text::{Spec, Style};
@@ -29,6 +37,8 @@ pub const WRAP_PAD: f32 = 2.0;
 /// The stacked key's line and the gap between its rows.
 pub const STACKED_KEY_LINE: f32 = 16.0;
 pub const STACKED_ROW_GAP: f32 = 12.0;
+/// Between a row's swatch and its key.
+pub const SWATCH_GAP: f32 = 8.0;
 
 /// How the pairs are laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -40,6 +50,51 @@ pub enum KvMode {
     Stacked,
     /// A value wraps instead of eliding.
     Wrap,
+}
+
+/// One row of [`Ui::kv_rows`]: a key, a value and an optional colour swatch before the key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct KvRow<'a> {
+    /// The key text.
+    pub key: &'a str,
+    /// The value text.
+    pub value: &'a str,
+    /// The colour of a legend square before the key; `None` draws none and does not indent the row.
+    pub swatch: Option<Rgba>,
+}
+
+impl<'a> KvRow<'a> {
+    /// A row of `key` and `value` with no swatch.
+    #[must_use]
+    pub const fn new(key: &'a str, value: &'a str) -> Self {
+        Self {
+            key,
+            value,
+            swatch: None,
+        }
+    }
+
+    /// This row with a swatch of `color` before its key.
+    #[must_use]
+    pub const fn with_swatch(mut self, color: Rgba) -> Self {
+        self.swatch = Some(color);
+        self
+    }
+
+    /// How far this row's key is indented: the swatch and its gap, or nothing.
+    fn indent(&self) -> f32 {
+        if self.swatch.is_some() {
+            SWATCH + SWATCH_GAP
+        } else {
+            0.0
+        }
+    }
+}
+
+/// `pairs` as rows with no swatch.
+fn plain<'a>(pairs: &[(&'a str, &'a str)]) -> Vec<KvRow<'a>> {
+    pairs.iter().map(|(k, v)| KvRow::new(k, v)).collect()
 }
 
 /// What [`Ui::kv_list`] is given besides its rect and pairs.
@@ -91,16 +146,16 @@ fn value_style(t: &Theme, mono: bool) -> Style {
     }
 }
 
-/// The key column's width: the longest key measured.
+/// The key column's width: the widest of each row's indent and its key measured.
 fn key_column<H: Copy + PartialEq>(
     p: &mut Painter<'_, H>,
-    pairs: &[(&str, &str)],
+    rows: &[KvRow<'_>],
     key_size: f32,
 ) -> f32 {
     let style = key_style_sized(&p.theme, key_size);
     let mut w = 0.0_f32;
-    for (k, _) in pairs {
-        w = w.max(p.measure(&Spec::plain(*k, style)).0);
+    for row in rows {
+        w = w.max(row.indent() + p.measure(&Spec::plain(row.key, style)).0);
     }
     w
 }
@@ -131,13 +186,24 @@ pub(crate) fn height<H: Copy + PartialEq>(
     w: f32,
 ) -> f32 {
     let key_size = p.theme.font_base;
-    height_keyed(p, pairs, opts, w, key_size)
+    height_rows(p, &plain(pairs), opts, w, key_size)
 }
 
 /// [`height`] for keys set at `key_size` (the flyout's routes use the small size).
 pub(crate) fn height_keyed<H: Copy + PartialEq>(
     p: &mut Painter<'_, H>,
     pairs: &[(&str, &str)],
+    opts: &KvOptions,
+    w: f32,
+    key_size: f32,
+) -> f32 {
+    height_rows(p, &plain(pairs), opts, w, key_size)
+}
+
+/// [`height_keyed`] for rows.
+fn height_rows<H: Copy + PartialEq>(
+    p: &mut Painter<'_, H>,
+    pairs: &[KvRow<'_>],
     opts: &KvOptions,
     w: f32,
     key_size: f32,
@@ -158,7 +224,7 @@ pub(crate) fn height_keyed<H: Copy + PartialEq>(
             let style = value_style(&p.theme, opts.mono);
             pairs
                 .iter()
-                .map(|(_, v)| wrap_row(wrapped_value(p, v, style, value_w).1))
+                .map(|r| wrap_row(wrapped_value(p, r.value, style, value_w).1))
                 .sum()
         }
     }
@@ -179,6 +245,22 @@ impl Ui<'_> {
         self.kv_list_keyed(key, rect, pairs, opts, key_size)
     }
 
+    /// [`Ui::kv_list`] over rows, each of which can carry a colour swatch before its key (a legend
+    /// for a chart): a square of the bar chart's legend size, a gap, then the key. Only rows with
+    /// a swatch are indented; the key column is as wide as the widest indent plus key. The swatch
+    /// is drawn only, with no node and no hit region. Rows with no swatch draw, register and
+    /// return exactly what [`Ui::kv_list`] does for the same pairs. Returns the height drawn.
+    pub fn kv_rows(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        rows: &[KvRow<'_>],
+        opts: &KvOptions,
+    ) -> f32 {
+        let key_size = self.theme().font_base;
+        self.kv_rows_keyed(key, rect, rows, opts, key_size)
+    }
+
     /// [`Ui::kv_list`] with the keys set at `key_size` (the stacked mode's keys are always
     /// `font_s`).
     pub(crate) fn kv_list_keyed(
@@ -186,6 +268,18 @@ impl Ui<'_> {
         key: impl Hash,
         rect: Rect,
         pairs: &[(&str, &str)],
+        opts: &KvOptions,
+        key_size: f32,
+    ) -> f32 {
+        self.kv_rows_keyed(key, rect, &plain(pairs), opts, key_size)
+    }
+
+    /// [`Ui::kv_rows`] with the keys set at `key_size`.
+    fn kv_rows_keyed(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        pairs: &[KvRow<'_>],
         opts: &KvOptions,
         key_size: f32,
     ) -> f32 {
@@ -207,24 +301,32 @@ impl Ui<'_> {
         self.scope(key, |ui| {
             let mut y = rect.y;
             let mut bottom = rect.y;
-            for (i, (k, v)) in pairs.iter().enumerate() {
+            for (i, row) in pairs.iter().enumerate() {
+                let (k, v) = (&row.key, &row.value);
+                let indent = row.indent();
                 ui.scope(i.to_string(), |ui| {
                     let gid = ui.id("pair");
                     if stacked {
-                        let (col, row) = (i % 2, i / 2);
+                        let (col, grid_row) = (i % 2, i / 2);
                         let x = rect.x + col as f32 * (col_w + GAP);
-                        let top = rect.y + row as f32 * (STACKED_KEY_LINE + LINE + STACKED_ROW_GAP);
+                        let top =
+                            rect.y + grid_row as f32 * (STACKED_KEY_LINE + LINE + STACKED_ROW_GAP);
                         let ks = Style {
                             line: STACKED_KEY_LINE,
                             ..Style::ui(t.font_s, t.fg_tertiary)
                         };
-                        let key_spec = ui.painter().elide(&Spec::plain(*k, ks), col_w);
+                        let key_spec = ui
+                            .painter()
+                            .elide(&Spec::plain(*k, ks), (col_w - indent).max(0.0));
                         let vs = value_style(&t, true);
                         let val_spec = ui.painter().elide(&Spec::plain(*v, vs), cell_value_w);
                         let cell = Rect::new(x, top, col_w, STACKED_KEY_LINE + LINE);
                         ui.node_container(Node::new(gid, Role::Group, k, cell), |ui| {
-                            let kr = ui.painter().text(&key_spec, x, top);
-                            key_node(ui, gid, k, Rect::new(x, top, kr.0, kr.1));
+                            if let Some(color) = row.swatch {
+                                swatch(ui, color, x, top, STACKED_KEY_LINE);
+                            }
+                            let kr = ui.painter().text(&key_spec, x + indent, top);
+                            key_node(ui, gid, k, Rect::new(x + indent, top, kr.0, kr.1));
                             let vr = Rect::new(x, top + STACKED_KEY_LINE, cell_value_w, LINE);
                             ui.selectable_named("value", vr, &val_spec, v, k);
                             let at = Rect::new(
@@ -248,8 +350,12 @@ impl Ui<'_> {
                         let top = y + WRAP_PAD;
                         let cell = Rect::new(rect.x, y, rect.w, row_h);
                         ui.node_container(Node::new(gid, Role::Group, k, cell), |ui| {
-                            let kr = ui.painter().text(&Spec::plain(*k, key_style), rect.x, top);
-                            key_node(ui, gid, k, Rect::new(rect.x, top, kr.0, kr.1));
+                            if let Some(color) = row.swatch {
+                                swatch(ui, color, rect.x, top, LINE);
+                            }
+                            let kx = rect.x + indent;
+                            let kr = ui.painter().text(&Spec::plain(*k, key_style), kx, top);
+                            key_node(ui, gid, k, Rect::new(kx, top, kr.0, kr.1));
                             let vr = Rect::new(value_x, top, value_w, text_h);
                             ui.selectable_named("value", vr, &val_spec, v, k);
                             let at = Rect::new(
@@ -304,6 +410,12 @@ impl Ui<'_> {
     }
 }
 
+/// A row's swatch at (`x`, `top`), centred on a key line `line` high.
+fn swatch(ui: &mut Ui<'_>, color: Rgba, x: f32, top: f32, line: f32) {
+    let at = Rect::new(x, top + (line - SWATCH) / 2.0, SWATCH, SWATCH);
+    ui.painter().fill(at, SWATCH_RADIUS, color);
+}
+
 /// The key's `StaticText` node.
 fn key_node(ui: &mut Ui<'_>, group: crate::ui::WidgetId, key: &str, at: Rect) {
     let mut node = Node::new(group.with("key"), Role::StaticText, key, at);
@@ -348,6 +460,44 @@ mod tests {
                                 measured, drawn,
                                 "{mode:?} mono {mono} copy {copy} width {w} pairs {n}"
                             );
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// The measure is the height the draw returns for rows with swatches too: the key column
+    /// takes the indent, which narrows a wrapped value.
+    #[test]
+    fn height_is_what_swatched_rows_draw() {
+        let rows = [
+            KvRow::new("Usage", LONG),
+            KvRow::new("E-cores", "12%").with_swatch([1, 2, 3, 255]),
+            KvRow::new("A much longer key", LONG).with_swatch([4, 5, 6, 255]),
+            KvRow::new("P-cores", "x"),
+        ];
+        let mut h = UiHarness::new((600.0, 400.0));
+        h.at_ms(0).frame(|ui| {
+            for mode in [KvMode::Default, KvMode::Stacked, KvMode::Wrap] {
+                for copy in [false, true] {
+                    let opts = KvOptions {
+                        mode,
+                        mono: false,
+                        copy,
+                    };
+                    for w in [120.0, 200.0, 312.0, 480.0] {
+                        for n in [0, 1, 2, 4] {
+                            let rows = &rows[..n];
+                            let key_size = ui.theme().font_base;
+                            let measured = height_rows(ui.painter(), rows, &opts, w, key_size);
+                            let drawn = ui.kv_rows(
+                                format!("{mode:?}-{copy}-{w}-{n}"),
+                                Rect::new(10.0, 10.0, w, 0.0),
+                                rows,
+                                &opts,
+                            );
+                            assert_eq!(measured, drawn, "{mode:?} copy {copy} width {w} rows {n}");
                         }
                     }
                 }

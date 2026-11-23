@@ -55,6 +55,9 @@ pub(crate) fn frontmost_app() -> Option<String> {
     None
 }
 
+/// No item can exist here, so no title is shown.
+pub(crate) const SHOWS_TITLE: bool = false;
+
 /// Never built: [`TrayItem::new`] refuses, so the methods have no value to run on.
 #[derive(Debug)]
 pub(crate) enum TrayItem {}
@@ -69,6 +72,10 @@ impl TrayItem {
     }
 
     pub(crate) fn set_tooltip(&self, _tooltip: &str) -> Result<(), TrayError> {
+        match *self {}
+    }
+
+    pub(crate) fn set_title(&self, _title: &str) -> Result<(), TrayError> {
         match *self {}
     }
 
@@ -108,5 +115,15 @@ mod tests {
             rgba: vec![],
         };
         assert!(matches!(Tray::new(image, "tip"), Err(TrayError::BadImage)));
+    }
+
+    /// The auto traits of `Tray` where the item is the empty one: the same as before the title was
+    /// added (an app may bound a type holding a tray by them). This fails to compile when a field
+    /// takes one away.
+    #[test]
+    fn a_tray_keeps_its_unwind_traits() {
+        fn holds<T: std::panic::UnwindSafe + std::panic::RefUnwindSafe>() {}
+        holds::<Tray>();
+        holds::<Option<Tray>>();
     }
 }
