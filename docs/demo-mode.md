@@ -74,6 +74,10 @@ What an app adds to play its own tour (`apps/demo/src/showcase.rs` is the refere
 5. Touch must be on for the script's touches to reach the widgets: `translator.set_touch_enabled(true)` (D16), as `apps/demo` does in `setup`.
 6. A repeating tour (`with_repeat(true)`) reports `Advance.restarted`; the app decides what a restart resets. The demo starts again from a fresh `Showcase`, keeping its toolkit store.
 
+## The web demo's tour
+
+`apps/web-demo` plays a tour of its own the same way (`apps/web-demo/src/tour.rs`, D433; `docs/web.md`, "The web demo"): one script from its layout, the hand taps the rail or the tab of each scene and the scenes' autopilots do the rest, 13 marks (`glass`, `glass-live`, ... `theme-live`, `end`) and `demo end 13/13`. It differs from the phone demo's in what a person does to it: it plays on a plain load and loops, a real pointer, touch, wheel or key event stops it, 10 s without one starts it again from the scene the stage is on, and a resize rebuilds it from the new layout. `cargo test -p web-demo --test tour` runs it headless at 60 and 120 Hz and with jittered frames; `scripts/web-run.sh web-demo --demo` (+ `--gl`, `--phone`) runs it in a browser.
+
 ## Unverified here
 
 - A real device: the tour's feel and frame rate on a 120 Hz panel, the GPU's cost, and a real finger. The simulator's frame rate was 60000 mHz, and the tour presented about 23 frames a second on average (`docs/mobile.md`, M7 reading).
