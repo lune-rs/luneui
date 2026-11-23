@@ -3975,7 +3975,7 @@ mod m10 {
     use lune_ui_core::widgets::sparkline::{SparkStyle, SparklineOptions};
     use lune_ui_core::widgets::spinner::SpinnerOptions;
     use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripExtras, TabStripOptions};
-    use lune_ui_core::widgets::toast::{ToastKind, ToastSpec, Toasts};
+    use lune_ui_core::widgets::toast::{ToastExtras, ToastKind, ToastSpec, Toasts};
     use lune_ui_core::widgets::tone::Tone;
     use lune_ui_core::widgets::tree_view::{
         ChevronStyle, GuideStub, GuideStyle, TreeOptions, TreeRow,
@@ -5003,6 +5003,17 @@ mod m10 {
             Duration::ZERO,
         );
         loud.set_expanded(id, true);
+        // A notice: header, title and the drain line, all in the theme's toast colours.
+        loud.push_with(
+            ToastSpec::new(ToastKind::Warning, "Check the output"),
+            ToastExtras::new()
+                .with_source("build")
+                .with_age("now")
+                .with_title("Finished")
+                .with_timeout(Duration::from_secs(30))
+                .with_drain(true),
+            Duration::ZERO,
+        );
         for (ms, last) in [(0_u64, false), (300, false), (700, false), (1500, true)] {
             h.at_ms(ms);
             if ms == 300 {

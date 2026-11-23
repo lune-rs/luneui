@@ -2256,6 +2256,22 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   the model themselves. A toast is a `Status` node (`Alert` for an error) named by its
   message and described by its detail; its default action toggles the log, `Dismiss`
   dismisses it. Buttons are tab stops of the scope below; nothing takes focus on its own.
+  [`Self::toasts_with`](ui.md#method.Ui.toasts_with) with the default options.
+
+- <a id="method.Ui.toasts_with"></a>
+
+  ```rust
+  pub fn toasts_with(
+      &mut self,
+      key: impl Hash,
+      toasts: &mut Toasts,
+      opts: &ToastStackOptions,
+  ) -> ToastResponse
+  ```
+
+  [`Self::toasts`](ui.md#method.Ui.toasts) with `opts`: the stack sits at the bottom right of `opts.area` (else the
+  window), inset by `opts.margin`. A notice (see the module docs) takes its hold, its drain
+  line and its body action here, and the call refills [`Toasts::live`](widgets/toast.md#method.Toasts.live).
 
 `impl<'a> Ui<'a>`
 

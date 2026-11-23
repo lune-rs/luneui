@@ -25,7 +25,7 @@ Lunegit (the Lunegit repo, HEAD 33a1dd4), paths relative to the repo root:
 - `src/Lunegit.Desktop/Services/NotificationService.cs`
 - `src/Lunegit.Desktop/Views/SidePanels/NotificationHistoryPanelView.axaml`
 
-`crates/lune-ui-core/src/widgets/toast.rs` (`Toasts`, `ToastSpec`, `ToastKind`, `ToastAction`, `ToastId`, `Ui::toasts`, `Ui::toast_history`, `toast_size`) [D146]; tests in `crates/lune-ui-core/tests/widget_toast.rs`. Moved code: none (before M7 this repo had no toast or notification code).
+`crates/lune-ui-core/src/widgets/toast.rs` (`Toasts`, `ToastSpec`, `ToastKind`, `ToastAction`, `ToastId`, `Ui::toasts`, `Ui::toast_history`, `toast_size`; `ToastExtras`, `Toasts::push_with`, `update_with`, `live`, `contains`, `is_live`, `ToastStackOptions`, `Ui::toasts_with`, `DRAIN`, [D443]) [D146]; tests in `crates/lune-ui-core/tests/widget_toast.rs`. Moved code: none (before M7 this repo had no toast or notification code).
 
 ## Spec
 
@@ -66,6 +66,9 @@ Conflicts: none between sources (Wane has no toast entry). The layer order: Lune
 | expanded | width from the converter, log block shown; not auto-dismissed while open | [L src/Lunegit.Desktop/MainWindow.axaml:291,399], [L src/Lunegit.Desktop/Services/NotificationService.cs:166-167] |
 | focus-visible on an action, Cancel or Dismiss | the button's own ring (the toolkit's `Ui::button` and `Ui::icon_button` look) | [D146] |
 | leaving | fading out in place, no input, no node | [D146] |
+| notice (pushed with `ToastExtras`, [D443]) | a header row when `source` is set (the glyph in the accent, the source in `font_base` medium `fg_primary`, the age in `font_s` `fg_muted` right-aligned, Cancel and Dismiss), a bold `fg_bright` title line over the message (also without a header, in the glyph row's message column), a glyph and an accent of the app's, a timeout of the app's that applies with actions too, and a body press that reports an action. Plain toasts are untouched | [derived: Luneterm R2, D443] |
+| held (a notice) | the mouse pointer over the card (a button included) pauses the timer; leaving resumes it with the time that was left, never a restart; a finger holds nothing. The drain line stands still while held | [derived: D443] |
+| drain line (a notice with `drain`) | a 2 px line in the accent along the card's bottom edge inside its rounded clip, left-anchored, the remaining fraction wide; Full only (Reduced and Off draw none, the timeout still runs); none for an untimed toast | [derived: D443] |
 
 ### Transitions
 
@@ -100,6 +103,7 @@ Off snaps all four. A toast's y is one transition retargeted from where it is: w
 
 ### Accessibility
 
+- A notice with a title is named by the title and described by the message (then the detail on a new line); a notice with no body action and no log has no Default, Expand or Collapse action, only Dismiss [D443].
 - Each toast: role `status`, live region polite (plan contract for toasts, [infra.accessibility]); an error toast is `alert`, assertive; name = the message; description = the detail. Actions: Default toggles the log, Expand or Collapse by state, Dismiss dismisses.
 - Action and cancel buttons: `button` nodes named by their label [infra.accessibility].
 - Loading toast: a `progress` node named by the message; a null progress value is indeterminate (no value) [L src/Lunegit.Desktop/Services/NotificationService.cs:231]. The turning glyph is a busy `progress` node with no name.
@@ -113,6 +117,14 @@ Off snaps all four. A toast's y is one transition retargeted from where it is: w
 - `luneui.toast-notifications.dismiss`: "Dismiss", the name of the Dismiss button. Cancel reuses `luneui.dialog.cancel`.
 - Toast titles, messages, details and action labels: None: the app passes them (`NotificationAction`, [L src/Lunegit.Desktop/Services/NotificationService.cs:92]).
 
+### Notice rules ([D443])
+
+- A press on the body of a notice: with `body_action: Some(n)` it reports `ToastResponse::action = Some((id, n))` and the toast leaves (archived), the log does not toggle; with a log and no body action it toggles as a plain toast does; with neither the body is inert (nothing toggles, the timer runs).
+- `update_with` keeps a timed toast's deadline and drain total (a fresh timeout is `dismiss` and a new push), a held toast stays held with its time left, a toast that becomes timed starts at the next frame; `update` keeps a notice's extras.
+- Eviction is unchanged: a toast with actions is never evicted, so toasts with actions stack without bound unless the app caps them.
+- `Toasts::live()` lists each toast drawn by the last `toasts`/`toasts_with` call that had not started leaving, top to bottom, with the rect its body takes input in; `contains(pos)` reads it, `is_live(id)` reads the model (true from the push until the toast starts leaving).
+- `Ui::toasts_with` sits the stack at the bottom right of `ToastStackOptions::area` (else the window) inset by `margin` (default 16); `Ui::toasts` is it with the defaults.
+
 ### Gallery scenes
 
 - `toast-notifications-stack` (new): an info toast with a detail, a warning and an error toast stacked, settled (the stack holds three, so a fourth kind would evict the first; timed toasts keep a frame due, so the capture reports `Repaint::At`).
@@ -122,6 +134,8 @@ Off snaps all four. A toast's y is one transition retargeted from where it is: w
 - `toast-notifications-history` (new): the history panel with three items and the clear-all control, settled.
 - `toast-notifications-appearing` (new): a success toast half way through its arrival, the toast below it moving up.
 - `toast-notifications-leaving` (new): a warning toast half way through its fade.
+- `toast-notifications-notice` ([D443]): a notice in the card (margin 22): header "build" with the age "now", the title, the message and the Dismiss and Open actions, the drain line half way (800 ms of 1600), waiting on a busy frame.
+- `toast-notifications-notice-title` ([D443]): a notice with a title and no header or actions, placed the same way.
 
 ### Painter primitives
 
@@ -135,6 +149,8 @@ Off snaps all four. A toast's y is one transition retargeted from where it is: w
 - Conformance: the four motions above in the three tiers (`tests/widget_toast.rs`).
 - Semantic node: each toast `status` with polite live region (`alert` for an error); history `list`; actions named. Over a dialog and over a raised popover a toast's buttons work, and neither Tab nor Escape behaves differently for the dialog with a prompt toast up. In a disabled scope every node is disabled and no key reaches a binding.
 - Tests, bullet by bullet. `crates/lune-ui-core/tests/widget_toast.rs`: behaviour `timed_toasts_leave_at_their_deadline_and_are_archived_once` (4 s, 3 s, 6 s), `error_loading_and_prompt_toasts_never_time_out`, `an_expanded_toast_waits_for_the_collapse`, `a_fourth_toast_evicts_the_oldest_that_may_go_without_archiving_it`, `the_history_keeps_fifty_newest_first_and_counts_unread`; pixel probes `scale_two_probes_width_radius_padding_gap_and_margin`, `width_is_320_collapsed_and_720_expanded_and_the_height_follows_the_text`; conformance `appearing_conforms_in_three_tiers`, `leaving_conforms_in_three_tiers`, `a_neighbour_moves_in_one_retargeted_transition`, `expanding_animates_the_height_and_collapsing_retargets_it`; node `the_nodes_are_a_status_an_alert_buttons_and_a_progress`, `access_default_toggles_and_dismiss_dismisses`, `the_toast_is_called_in_a_disabled_scope_and_every_node_says_so`; over a dialog `a_toast_button_works_over_a_dialog_and_over_a_raised_popover`, `tab_does_not_reach_a_toast_under_a_dialog`, `escape_closes_the_dialog_with_or_without_a_prompt_toast_up`; history `the_history_lists_newest_first_and_clear_all_empties_it`, `a_long_log_shapes_only_the_lines_in_view`.
+
+- Notices ([D443]): `a_notice_with_actions_times_out_on_its_own_timeout_and_a_plain_one_stays`, `the_pointer_over_a_notice_holds_its_timer_and_leaving_resumes_it`, `the_pointer_over_a_button_of_a_notice_holds_it_too`, `a_finger_on_a_notice_does_not_hold_it`, `the_drain_line_is_the_fraction_left_under_full_and_absent_otherwise`, `a_running_drain_line_asks_for_frames_and_a_held_one_does_not`, `a_body_action_reports_and_the_toast_leaves_without_toggling_the_log`, `toasts_with_places_the_stack_in_an_area_inset_by_the_margin`, `the_header_shows_the_source_and_the_age_and_its_dismiss_button_dismisses`, `a_notice_with_a_title_names_its_node_by_the_title`, `a_title_and_no_header_keeps_the_glyph_row_and_grows_it`, `update_with_keeps_a_held_toast_held_with_its_remaining_time`, `update_with_keeps_the_deadline_of_a_timed_notice`, `update_keeps_a_notice_s_extras`, `live_holds_each_drawn_toast_with_the_rect_its_body_takes_input_in`, `live_and_is_live_follow_a_toast_out_by_a_timeout_its_x_or_an_action`, `a_notice_body_with_no_action_and_no_log_is_inert_and_a_plain_one_toggles`.
 
 ### Build
 
