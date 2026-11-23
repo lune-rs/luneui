@@ -122,7 +122,11 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     };
     let block = CAPTION + fh;
     let used = rows as f32 * block + (rows as f32 - 1.0) * GAP;
-    let margin = if n == 1 { 0.0 } else { ((body.h - used) / 2.0).max(0.0) };
+    let margin = if n == 1 {
+        0.0
+    } else {
+        ((body.h - used) / 2.0).max(0.0)
+    };
     let x0 = body.x + (body.w - (n as f32 * cw + (n as f32 - 1.0) * GAP)) / 2.0;
     let frames = Demo::ALL
         .iter()
@@ -157,10 +161,22 @@ const BEZEL: f32 = 7.0;
 
 /// The pager's pages: a glyph, a title, a line and the two hues of its gradient.
 const PAGES: [(&str, &str, &str); 4] = [
-    (glyph::LAYERS, "Frosted", "Every surface blurs what is behind it"),
-    (glyph::PULSE, "Moving", "Springs and tweens, one clock for all"),
+    (
+        glyph::LAYERS,
+        "Frosted",
+        "Every surface blurs what is behind it",
+    ),
+    (
+        glyph::PULSE,
+        "Moving",
+        "Springs and tweens, one clock for all",
+    ),
     (glyph::GRAPH, "Charted", "Numbers that count to their value"),
-    (glyph::PALETTE, "Themed", "One token set, every widget follows"),
+    (
+        glyph::PALETTE,
+        "Themed",
+        "One token set, every widget follows",
+    ),
 ];
 const ROWS: [(&str, &str); 4] = [
     ("Aurora Borealis", "Lune Ensemble, 4:05"),
@@ -262,13 +278,17 @@ impl Motions {
                 caps(ui, demo.title(), frame.x + 4.0, frame.y - CAPTION + 5.0);
                 if *demo == Demo::Sheet {
                     // The toolkit's own sheet is a modal over the whole window: a button opens it.
-                    let open = Rect::new(frame.right() - 112.0, frame.y - CAPTION - 1.0, 112.0, 24.0);
+                    let open =
+                        Rect::new(frame.right() - 112.0, frame.y - CAPTION - 1.0, 112.0, 24.0);
                     let small = ButtonOptions {
                         small: true,
                         ..ButtonOptions::default()
                     };
                     self.targets.note("real-open", open);
-                    if ui.button_with("real-open", open, "Open real sheet", &small).clicked {
+                    if ui
+                        .button_with("real-open", open, "Open real sheet", &small)
+                        .clicked
+                    {
                         self.real_sheet = true;
                     }
                 } else {
@@ -305,7 +325,13 @@ impl Motions {
         p.ring(frame, radius, 1.0, t.menu_popup_border, false);
         let r = radius - BEZEL;
         p.fill(screen, r, screen_bg(&t));
-        p.linear(screen, r, t.surface_hover, clear(t.surface_hover), FRAC_PI_2);
+        p.linear(
+            screen,
+            r,
+            t.surface_hover,
+            clear(t.surface_hover),
+            FRAC_PI_2,
+        );
         (screen, r)
     }
 
@@ -334,28 +360,46 @@ impl Motions {
         self.targets.note("pager", area);
         let opts = PagerOptions::new("Features").with_dots(true);
         let mut page = self.page;
-        ui.pager("pager", area, PAGES.len(), &mut page, &opts, |ui, i, rect| {
-            let card = Rect::new(rect.x + 12.0, rect.y + 8.0, rect.w - 24.0, rect.h - 8.0 - 38.0);
-            let (glyph_, title, text) = PAGES[i];
-            let (a, b) = hues[i];
-            let p = ui.painter();
-            p.linear(card, 18.0, with_alpha(a, 0.92), with_alpha(b, 0.92), 0.9);
-            p.linear(card, 18.0, t.surface_hover, clear(t.surface_hover), FRAC_PI_2);
-            p.ring(card, 18.0, 1.0, t.menu_popup_border, false);
-            let cx = card.x + card.w / 2.0;
-            let disc = Rect::new(cx - 28.0, card.y + card.h * 0.22, 56.0, 56.0);
-            p.fill(disc, 28.0, with_alpha(t.on_accent, 0.22));
-            p.text_centered(&icon::glyph(glyph_, 26.0, t.on_accent), disc);
-            let spec = Spec::plain(title, Style::ui(t.font_title, t.on_accent).medium());
-            let tw = p.measure(&spec).0;
-            p.text(&spec, cx - tw / 2.0, disc.bottom() + 18.0);
-            let spec = Spec::plain(text, Style::ui(t.font_base, with_alpha(t.on_accent, 0.9)))
-                .wrapped(card.w - 40.0);
-            p.text_centered(
-                &spec,
-                Rect::new(card.x + 20.0, disc.bottom() + 44.0, card.w - 40.0, 44.0),
-            );
-        });
+        ui.pager(
+            "pager",
+            area,
+            PAGES.len(),
+            &mut page,
+            &opts,
+            |ui, i, rect| {
+                let card = Rect::new(
+                    rect.x + 12.0,
+                    rect.y + 8.0,
+                    rect.w - 24.0,
+                    rect.h - 8.0 - 38.0,
+                );
+                let (glyph_, title, text) = PAGES[i];
+                let (a, b) = hues[i];
+                let p = ui.painter();
+                p.linear(card, 18.0, with_alpha(a, 0.92), with_alpha(b, 0.92), 0.9);
+                p.linear(
+                    card,
+                    18.0,
+                    t.surface_hover,
+                    clear(t.surface_hover),
+                    FRAC_PI_2,
+                );
+                p.ring(card, 18.0, 1.0, t.menu_popup_border, false);
+                let cx = card.x + card.w / 2.0;
+                let disc = Rect::new(cx - 28.0, card.y + card.h * 0.22, 56.0, 56.0);
+                p.fill(disc, 28.0, with_alpha(t.on_accent, 0.22));
+                p.text_centered(&icon::glyph(glyph_, 26.0, t.on_accent), disc);
+                let spec = Spec::plain(title, Style::ui(t.font_title, t.on_accent).medium());
+                let tw = p.measure(&spec).0;
+                p.text(&spec, cx - tw / 2.0, disc.bottom() + 18.0);
+                let spec = Spec::plain(text, Style::ui(t.font_base, with_alpha(t.on_accent, 0.9)))
+                    .wrapped(card.w - 40.0);
+                p.text_centered(
+                    &spec,
+                    Rect::new(card.x + 20.0, disc.bottom() + 44.0, card.w - 40.0, 44.0),
+                );
+            },
+        );
         // A page the person swiped to is the page now (the autopilot's changes are not echoed).
         self.page = page;
         self.island(ui, screen);
@@ -375,7 +419,12 @@ impl Motions {
             let disc = Rect::new(screen.x + 14.0, y + 6.0, 32.0, 32.0);
             p.fill(disc, 16.0, with_alpha(t.surface_active, 0.9));
             p.fill(
-                Rect::new(disc.right() + 12.0, y + 10.0, (screen.w - 90.0) * (0.55 + 0.12 * (i % 3) as f32), 8.0),
+                Rect::new(
+                    disc.right() + 12.0,
+                    y + 10.0,
+                    (screen.w - 90.0) * (0.55 + 0.12 * (i % 3) as f32),
+                    8.0,
+                ),
                 4.0,
                 with_alpha(t.fg_faint, 0.8),
             );
@@ -397,8 +446,17 @@ impl Motions {
         let p = ui.painter();
         p.fill(screen, 0.0, with_alpha(t.dialog_backdrop, 0.55 * frac));
         let sheet = Rect::new(screen.x, top, screen.w, screen.bottom() - top + 14.0);
-        p.fill_radii(sheet, [14.0, 14.0, 0.0, 0.0], mix(screen_bg(&t), t.fg_bright, 0.10));
-        p.frost_radii(sheet, [14.0, 14.0, 0.0, 0.0], premul(with_alpha(t.menu_glass, 0.5)), true);
+        p.fill_radii(
+            sheet,
+            [14.0, 14.0, 0.0, 0.0],
+            mix(screen_bg(&t), t.fg_bright, 0.10),
+        );
+        p.frost_radii(
+            sheet,
+            [14.0, 14.0, 0.0, 0.0],
+            premul(with_alpha(t.menu_glass, 0.5)),
+            true,
+        );
         p.ring(sheet, 14.0, 1.0, t.menu_popup_border, false);
         // The grabber: a pill in a band that takes a click (the next detent) and a drag.
         let band = Rect::new(screen.x, top, screen.w, 28.0);
@@ -420,7 +478,11 @@ impl Motions {
         if g.drag_stopped {
             let at = self.sheet_drag.take().unwrap_or(frac);
             self.detent = (0..DETENTS.len())
-                .min_by(|a, b| (DETENTS[*a] - at).abs().total_cmp(&(DETENTS[*b] - at).abs()))
+                .min_by(|a, b| {
+                    (DETENTS[*a] - at)
+                        .abs()
+                        .total_cmp(&(DETENTS[*b] - at).abs())
+                })
                 .unwrap_or(0);
         } else if g.clicked && !g.dragged {
             self.detent = (self.detent + 1) % DETENTS.len();
@@ -429,13 +491,37 @@ impl Motions {
             self.detent = (self.detent + 1) % DETENTS.len();
         }
         // Its content, clipped to the sheet.
-        let content = Rect::new(screen.x, top + 28.0, screen.w, (screen.bottom() - top - 28.0).max(0.0));
+        let content = Rect::new(
+            screen.x,
+            top + 28.0,
+            screen.w,
+            (screen.bottom() - top - 28.0).max(0.0),
+        );
         let p = ui.painter();
         p.push_clip(content);
-        line(ui, "Options", screen.x + 16.0, top + 46.0, screen.w - 32.0, t.font_m, t.fg_bright);
-        for (i, item) in ["Share", "Duplicate", "Move to folder", "Delete"].iter().enumerate() {
+        line(
+            ui,
+            "Options",
+            screen.x + 16.0,
+            top + 46.0,
+            screen.w - 32.0,
+            t.font_m,
+            t.fg_bright,
+        );
+        for (i, item) in ["Share", "Duplicate", "Move to folder", "Delete"]
+            .iter()
+            .enumerate()
+        {
             let y = top + 70.0 + i as f32 * 36.0;
-            line(ui, item, screen.x + 16.0, y + 18.0, screen.w - 32.0, t.font_base, t.fg_primary);
+            line(
+                ui,
+                item,
+                screen.x + 16.0,
+                y + 18.0,
+                screen.w - 32.0,
+                t.font_base,
+                t.fg_primary,
+            );
             ui.painter().fill(
                 Rect::new(screen.x + 16.0, y + 35.0, screen.w - 32.0, 1.0),
                 0.0,
@@ -477,10 +563,27 @@ impl Motions {
                     let disc = Rect::new(row.x + 14.0, row.y + 12.0, 32.0, 32.0);
                     p.linear(disc, 8.0, t.data, t.err, 0.9);
                     p.text_centered(&icon::glyph(icon::NOTE, 14.0, t.on_accent), disc);
-                    line(ui, title, disc.right() + 12.0, row.y + 20.0, rect.w - 100.0, t.font_base, t.fg_primary);
-                    line(ui, sub, disc.right() + 12.0, row.y + 38.0, rect.w - 100.0, t.font_s, t.fg_secondary);
+                    line(
+                        ui,
+                        title,
+                        disc.right() + 12.0,
+                        row.y + 20.0,
+                        rect.w - 100.0,
+                        t.font_base,
+                        t.fg_primary,
+                    );
+                    line(
+                        ui,
+                        sub,
+                        disc.right() + 12.0,
+                        row.y + 38.0,
+                        rect.w - 100.0,
+                        t.font_s,
+                        t.fg_secondary,
+                    );
                     let chev = icon::glyph(icon::CHEVRON_RIGHT, 14.0, t.fg_tertiary);
-                    ui.painter().text_centered(&chev, Rect::new(row.right() - 30.0, row.y, 16.0, row.h));
+                    ui.painter()
+                        .text_centered(&chev, Rect::new(row.right() - 30.0, row.y, 16.0, row.h));
                     if resp.clicked {
                         push = true;
                     }
@@ -490,12 +593,39 @@ impl Motions {
                 if b.back {
                     back = true;
                 }
-                let art = Rect::new(rect.x + 16.0, bar.bottom() + 12.0, rect.w - 32.0, (rect.w * 0.5).min(150.0));
+                let art = Rect::new(
+                    rect.x + 16.0,
+                    bar.bottom() + 12.0,
+                    rect.w - 32.0,
+                    (rect.w * 0.5).min(150.0),
+                );
                 let p = ui.painter();
-                p.linear(art, 14.0, with_alpha(t.data, 0.9), with_alpha(t.err, 0.9), 0.9);
+                p.linear(
+                    art,
+                    14.0,
+                    with_alpha(t.data, 0.9),
+                    with_alpha(t.err, 0.9),
+                    0.9,
+                );
                 p.text_centered(&icon::glyph(icon::NOTE, 34.0, t.on_accent), art);
-                line(ui, "Aurora Borealis", art.x, art.bottom() + 26.0, art.w, t.font_m, t.fg_bright);
-                line(ui, "Lune Ensemble, 4:05", art.x, art.bottom() + 48.0, art.w, t.font_base, t.fg_secondary);
+                line(
+                    ui,
+                    "Aurora Borealis",
+                    art.x,
+                    art.bottom() + 26.0,
+                    art.w,
+                    t.font_m,
+                    t.fg_bright,
+                );
+                line(
+                    ui,
+                    "Lune Ensemble, 4:05",
+                    art.x,
+                    art.bottom() + 48.0,
+                    art.w,
+                    t.font_base,
+                    t.fg_secondary,
+                );
                 for j in 0..3 {
                     let y = art.bottom() + 72.0 + j as f32 * 16.0;
                     ui.painter().fill(
@@ -533,7 +663,9 @@ impl Motions {
         let mut open = self.real_sheet;
         let mut done = false;
         let detents = [Detent::Fraction(0.5), Detent::Fraction(1.0)];
-        let sheet = BottomSheet::new("Options").with_detents(&detents).with_grabber(true);
+        let sheet = BottomSheet::new("Options")
+            .with_detents(&detents)
+            .with_grabber(true);
         ui.bottom_sheet("real-sheet", &mut open, &sheet, |ui, rect| {
             let t = *ui.theme();
             let x = rect.x + 16.0;
@@ -541,11 +673,17 @@ impl Motions {
             let mut y = rect.y;
             for item in ["Share", "Duplicate", "Move to folder", "Delete"] {
                 line(ui, item, x, y + 22.0, w, t.font_m, t.fg_primary);
-                ui.painter().fill(Rect::new(x, y + 43.0, w, 1.0), 0.0, t.surface_separator);
+                ui.painter()
+                    .fill(Rect::new(x, y + 43.0, w, 1.0), 0.0, t.surface_separator);
                 y += 44.0;
             }
             done = ui
-                .button("done", Rect::new(x, y + 12.0, w, 44.0), "Done", ButtonKind::Primary)
+                .button(
+                    "done",
+                    Rect::new(x, y + 12.0, w, 44.0),
+                    "Done",
+                    ButtonKind::Primary,
+                )
                 .clicked;
         });
         if done {
@@ -553,6 +691,15 @@ impl Motions {
         }
         self.real_sheet = open;
     }
+}
+
+/// One curve of the physics card.
+struct Plot<'a> {
+    name: &'a str,
+    params: String,
+    dur: f32,
+    curve: &'a dyn Fn(f32) -> f32,
+    colour: Rgba,
 }
 
 /// The physics card: a spring and a fling drawn as curves, a dot riding each, and a ball on a rail
@@ -566,27 +713,40 @@ fn physics(ui: &mut Ui<'_>, frame: Rect, env: &Env) {
     let half = (inner.h - GAP) / 2.0;
     let spring_dur = SPRING.duration(0.0, SPRING_SPAN, 0.0).as_secs_f32();
     let fling_dur = FLING.duration(FLING_V0).as_secs_f32();
-    let fling_total = FLING.offset(FLING_V0, Duration::from_secs_f32(fling_dur)).max(1.0);
-    let spring_curve =
-        |s: f32| SPRING.sample(0.0, SPRING_SPAN, 0.0, Duration::from_secs_f32(s)).0 / SPRING_SPAN;
+    let fling_total = FLING
+        .offset(FLING_V0, Duration::from_secs_f32(fling_dur))
+        .max(1.0);
+    let spring_curve = |s: f32| {
+        SPRING
+            .sample(0.0, SPRING_SPAN, 0.0, Duration::from_secs_f32(s))
+            .0
+            / SPRING_SPAN
+    };
     let fling_curve = |s: f32| FLING.offset(FLING_V0, Duration::from_secs_f32(s)) / fling_total;
-    let plots: [(&str, String, f32, &dyn Fn(f32) -> f32, Rgba); 2] = [
-        (
-            "Spring",
-            "response 0.45 s, damping 0.55".to_owned(),
-            spring_dur,
-            &spring_curve,
-            t.data_hi,
-        ),
-        (
-            "Fling",
-            format!("speed {FLING_V0:.0} px/s, decay 0.998 per ms"),
-            fling_dur,
-            &fling_curve,
-            t.ok,
-        ),
+    let plots = [
+        Plot {
+            name: "Spring",
+            params: "response 0.45 s, damping 0.55".to_owned(),
+            dur: spring_dur,
+            curve: &spring_curve,
+            colour: t.data_hi,
+        },
+        Plot {
+            name: "Fling",
+            params: format!("speed {FLING_V0:.0} px/s, decay 0.998 per ms"),
+            dur: fling_dur,
+            curve: &fling_curve,
+            colour: t.ok,
+        },
     ];
-    for (k, (name, params, dur, curve, colour)) in plots.iter().enumerate() {
+    for (k, plot) in plots.iter().enumerate() {
+        let Plot {
+            name,
+            params,
+            dur,
+            curve,
+            colour,
+        } = plot;
         let area = Rect::new(inner.x, inner.y + k as f32 * (half + GAP), inner.w, half);
         caps(ui, name, area.x, area.y);
         let at = phase.min(*dur);
@@ -595,10 +755,23 @@ fn physics(ui: &mut Ui<'_>, frame: Rect, env: &Env) {
         let mono = Spec::plain(live, Style::mono(t.font_s, t.font_s * 1.3, t.fg_secondary));
         let w = ui.painter().measure(&mono).0;
         ui.painter().text(&mono, area.right() - w, area.y);
-        line(ui, params, area.x, area.y + 26.0, area.w, t.font_s, t.fg_secondary);
+        line(
+            ui,
+            params,
+            area.x,
+            area.y + 26.0,
+            area.w,
+            t.font_s,
+            t.fg_secondary,
+        );
         // The plot, then the rail under it.
         let rail_h = 18.0;
-        let plot = Rect::new(area.x, area.y + 40.0, area.w, (area.h - 40.0 - rail_h - 8.0).max(24.0));
+        let plot = Rect::new(
+            area.x,
+            area.y + 40.0,
+            area.w,
+            (area.h - 40.0 - rail_h - 8.0).max(24.0),
+        );
         let ymax = 1.2;
         let to_px = |s: f32, v: f32| {
             [
@@ -616,20 +789,55 @@ fn physics(ui: &mut Ui<'_>, frame: Rect, env: &Env) {
         let done = ((at / dur) * n as f32).round() as usize;
         let p = ui.painter();
         // The axes: the baseline and the target line.
-        p.fill(Rect::new(plot.x, plot.bottom(), plot.w, 1.0), 0.0, t.surface_separator);
+        p.fill(
+            Rect::new(plot.x, plot.bottom(), plot.w, 1.0),
+            0.0,
+            t.surface_separator,
+        );
         let target = to_px(0.0, 1.0)[1];
-        p.fill(Rect::new(plot.x, target, plot.w, 1.0), 0.0, with_alpha(t.fg_faint, 0.5));
-        p.stroke(&pts, false, StrokeStyle::solid(with_alpha(*colour, 0.28), 2.0));
+        p.fill(
+            Rect::new(plot.x, target, plot.w, 1.0),
+            0.0,
+            with_alpha(t.fg_faint, 0.5),
+        );
+        p.stroke(
+            &pts,
+            false,
+            StrokeStyle::solid(with_alpha(*colour, 0.28), 2.0),
+        );
         if done >= 1 {
-            p.stroke(&pts[..=done.min(n)], false, StrokeStyle::solid(*colour, 2.5));
+            p.stroke(
+                &pts[..=done.min(n)],
+                false,
+                StrokeStyle::solid(*colour, 2.5),
+            );
         }
-        let fade = (phase / 0.15).min(1.0).min(((CYCLE as f32 - phase) / 0.4).clamp(0.0, 1.0));
+        let fade = (phase / 0.15)
+            .min(1.0)
+            .min(((CYCLE as f32 - phase) / 0.4).clamp(0.0, 1.0));
         let dot = to_px(at, value);
-        p.fill(Rect::new(dot[0] - 9.0, dot[1] - 9.0, 18.0, 18.0), 9.0, with_alpha(*colour, 0.22 * fade));
-        p.fill(Rect::new(dot[0] - 4.5, dot[1] - 4.5, 9.0, 9.0), 4.5, with_alpha(t.fg_bright, fade));
+        p.fill(
+            Rect::new(dot[0] - 9.0, dot[1] - 9.0, 18.0, 18.0),
+            9.0,
+            with_alpha(*colour, 0.22 * fade),
+        );
+        p.fill(
+            Rect::new(dot[0] - 4.5, dot[1] - 4.5, 9.0, 9.0),
+            4.5,
+            with_alpha(t.fg_bright, fade),
+        );
         // The rail: the ball goes where the value says.
         let rail = Rect::new(area.x, plot.bottom() + 12.0, area.w, rail_h);
-        p.fill(Rect::new(rail.x + 6.0, rail.y + rail.h / 2.0 - 1.0, rail.w - 12.0, 2.0), 1.0, t.surface_active);
+        p.fill(
+            Rect::new(
+                rail.x + 6.0,
+                rail.y + rail.h / 2.0 - 1.0,
+                rail.w - 12.0,
+                2.0,
+            ),
+            1.0,
+            t.surface_active,
+        );
         let bx = rail.x + 9.0 + (rail.w - 18.0) / ymax * value.clamp(0.0, ymax);
         p.fill(Rect::new(bx - 8.0, rail.y + 1.0, 16.0, 16.0), 8.0, *colour);
     }

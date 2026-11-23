@@ -13,15 +13,19 @@ use std::time::Duration;
 use lune_ui::dump;
 use lune_ui::frame::FrameRenderer;
 use lune_ui::gpu::{self, Gpu};
+use lune_ui::input::{
+    Event, Key, Modifiers, NamedKey, ScrollDelta, TouchEvent, TouchId, TouchPhase,
+};
 use lune_ui::layout::Insets;
 use lune_ui::motion::MotionTier;
+use lune_ui::paint::Rect;
 use lune_ui::scene::Scene;
 use lune_ui::text::TextCache;
 
 use crate::frame_params;
-use crate::scenes::SceneId;
+use crate::scenes::{SceneId, controls, glass, motion};
 use crate::shell::tier_from_word;
-use crate::stage::{Headless, NARROW_BELOW, STILL_AT};
+use crate::stage::{Headless, NARROW_BELOW, Rendered, STILL_AT};
 
 /// The wide frame's window and scale.
 pub const WIDE: ((f32, f32), f32) = ((1440.0, 900.0), 2.0);
@@ -50,8 +54,82 @@ pub struct Request {
     pub tier: MotionTier,
     /// The background rests (`--still`): the strips of a push then differ only by the push.
     pub still: bool,
+    /// What a person does after the first frame, in order (`--do`).
+    pub acts: Vec<Act>,
+    /// Print the rects of the scene's cards (`--rects`).
+    pub rects: bool,
     /// The file name without `.png`.
     pub name: String,
+}
+
+/// Where an action lands: a point, or a control the scene drew (`name`, or `name@fx,fy` for a
+/// point at that share of its rect).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Spot {
+    /// A point in logical px.
+    Xy(f32, f32),
+    /// A control by name, and the share of its rect.
+    Target(String, f32, f32),
+}
+
+/// One thing a person does in a dump: a pointer move, a touch, a wheel turn, keys, or time passing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Act {
+    /// The mouse pointer moves to a spot.
+    Move(Spot),
+    /// A touch taps a spot.
+    Click(Spot),
+    /// A touch goes down at a spot and stays.
+    Down(Spot),
+    /// The held touch moves to a spot.
+    MoveTo(Spot),
+    /// The held touch lifts at a spot.
+    Up(Spot),
+    /// The wheel scrolls the page down by this many px, over the stage card.
+    Scroll(f32),
+    /// Tab pressed this many times.
+    Tab(u32),
+    /// The Escape key.
+    Escape,
+    /// This many milliseconds pass in 60 Hz frames.
+    Wait(f32),
+    /// This many seconds pass in 100 ms frames (the autopilot runs).
+    Run(f32),
+}
+
+fn parse_spot(s: &str) -> Option<Spot> {
+    if let Some((x, y)) = s.split_once(',') {
+        if let (Ok(x), Ok(y)) = (x.parse::<f32>(), y.parse::<f32>()) {
+            return Some(Spot::Xy(x, y));
+        }
+    }
+    let (name, share) = match s.split_once('@') {
+        Some((n, f)) => {
+            let (fx, fy) = f.split_once(',')?;
+            (n, (fx.parse().ok()?, fy.parse().ok()?))
+        }
+        None => (s, (0.5, 0.5)),
+    };
+    (!name.is_empty()).then(|| Spot::Target(name.to_owned(), share.0, share.1))
+}
+
+/// Reads `--do` text: `move:<spot>`, `click:<spot>`, `down:<spot>`, `moveto:<spot>`, `up:<spot>`,
+/// `scroll:<px>`, `tab:<n>`, `escape`, `wait:<ms>`, `run:<secs>`.
+pub fn parse_act(s: &str) -> Option<Act> {
+    let (verb, arg) = s.split_once(':').unwrap_or((s, ""));
+    Some(match verb {
+        "move" => Act::Move(parse_spot(arg)?),
+        "click" => Act::Click(parse_spot(arg)?),
+        "down" => Act::Down(parse_spot(arg)?),
+        "moveto" => Act::MoveTo(parse_spot(arg)?),
+        "up" => Act::Up(parse_spot(arg)?),
+        "scroll" => Act::Scroll(arg.parse().ok()?),
+        "tab" => Act::Tab(arg.parse().ok()?),
+        "escape" => Act::Escape,
+        "wait" => Act::Wait(arg.parse().ok()?),
+        "run" => Act::Run(arg.parse().ok()?),
+        _ => return None,
+    })
 }
 
 /// The safe area a window of `size` gets: a phone's on a tall narrow one.
@@ -73,6 +151,8 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
         to: None,
         tier: MotionTier::Full,
         still: false,
+        acts: Vec::new(),
+        rects: false,
         name: String::new(),
     };
     let (mut any, mut only, mut to, mut progress, mut scale_given) =
@@ -82,6 +162,10 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
         any = true;
         if arg == "--still" {
             req.still = true;
+            continue;
+        }
+        if arg == "--rects" {
+            req.rects = true;
             continue;
         }
         let value = args.next()?;
@@ -107,6 +191,7 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
             "--progress" => progress = Some(value.parse::<f32>().ok()?.clamp(0.0, 100.0) / 100.0),
             "--motion" => req.tier = tier_from_word(&value)?,
             "--name" => req.name = value,
+            "--do" => req.acts.push(parse_act(&value)?),
             _ => return None,
         }
     }
@@ -148,7 +233,154 @@ fn render(
             run.step_to(req.at + duration.mul_f32(share), Vec::new())
         }
     };
+    let rendered = perform(run, req, rendered);
+    if req.rects {
+        for (name, r) in rects(run, req) {
+            println!("card {name} {:.1} {:.1} {:.1} {:.1}", r.x, r.y, r.w, r.h);
+        }
+    }
     draw(gpu, &mut run.text, &rendered.scene, req.size, req.scale)
+}
+
+/// The rect of `spot` in the scene the request shows.
+fn resolve(run: &Headless, req: &Request, spot: &Spot) -> (f32, f32) {
+    match spot {
+        Spot::Xy(x, y) => (*x, *y),
+        Spot::Target(name, fx, fy) => {
+            let r = run
+                .stage
+                .scenes
+                .targets(req.scene)
+                .and_then(|t| t.get(name))
+                .unwrap_or_default();
+            (r.x + r.w * fx, r.y + r.h * fy)
+        }
+    }
+}
+
+fn touch(phase: TouchPhase, at: (f32, f32)) -> Event {
+    Event::Touch(TouchEvent::new(TouchId::new(1), phase, at))
+}
+
+const SIXTY: Duration = Duration::from_micros(16_667);
+
+/// Plays the request's actions after its first frame; returns the last frame.
+fn perform(run: &mut Headless, req: &Request, first: Rendered) -> Rendered {
+    let mut last = first;
+    let frame = |run: &mut Headless, dt: Duration, events: Vec<Event>| run.step(dt, events);
+    for act in &req.acts {
+        match act {
+            Act::Move(s) => {
+                let at = resolve(run, req, s);
+                last = frame(run, SIXTY, vec![Event::PointerMoved { pos: at }]);
+            }
+            Act::Click(s) => {
+                let at = resolve(run, req, s);
+                frame(run, SIXTY, vec![touch(TouchPhase::Started, at)]);
+                for _ in 0..3 {
+                    frame(run, SIXTY, Vec::new());
+                }
+                frame(run, SIXTY, vec![touch(TouchPhase::Ended, at)]);
+                last = frame(run, SIXTY, Vec::new());
+            }
+            Act::Down(s) => {
+                let at = resolve(run, req, s);
+                last = frame(run, SIXTY, vec![touch(TouchPhase::Started, at)]);
+            }
+            Act::MoveTo(s) => {
+                let at = resolve(run, req, s);
+                last = frame(run, SIXTY, vec![touch(TouchPhase::Moved, at)]);
+            }
+            Act::Up(s) => {
+                let at = resolve(run, req, s);
+                last = frame(run, SIXTY, vec![touch(TouchPhase::Ended, at)]);
+            }
+            Act::Scroll(px) => {
+                let c = run.layout().card;
+                let pos = (c.x + c.w / 2.0, c.y + c.h / 2.0);
+                last = frame(
+                    run,
+                    SIXTY,
+                    vec![Event::Scroll {
+                        pos,
+                        delta: ScrollDelta::Pixels { x: 0.0, y: -px },
+                        modifiers: Modifiers::default(),
+                    }],
+                );
+            }
+            Act::Tab(n) => {
+                for _ in 0..*n {
+                    for pressed in [true, false] {
+                        last = frame(
+                            run,
+                            SIXTY,
+                            vec![Event::Key {
+                                key: Key::Named(NamedKey::Tab),
+                                pressed,
+                                repeat: false,
+                                modifiers: Modifiers::default(),
+                            }],
+                        );
+                    }
+                }
+            }
+            Act::Escape => {
+                for pressed in [true, false] {
+                    last = frame(
+                        run,
+                        SIXTY,
+                        vec![Event::Key {
+                            key: Key::Named(NamedKey::Escape),
+                            pressed,
+                            repeat: false,
+                            modifiers: Modifiers::default(),
+                        }],
+                    );
+                }
+            }
+            Act::Wait(ms) => {
+                let end = run.time + Duration::from_secs_f32(ms / 1000.0);
+                while run.time < end {
+                    last = frame(run, SIXTY, Vec::new());
+                }
+            }
+            Act::Run(secs) => {
+                let end = run.time + Duration::from_secs_f32(*secs);
+                while run.time < end {
+                    last = frame(run, Duration::from_millis(100), Vec::new());
+                }
+            }
+        }
+    }
+    last
+}
+
+/// The cards of the scene at the frame's clock: what `--rects` prints.
+fn rects(run: &Headless, req: &Request) -> Vec<(String, Rect)> {
+    let l = run.layout();
+    let body = l.body(&run.stage.theme);
+    let t = if req.still { STILL_AT } else { run.time }.as_secs_f64();
+    match req.scene {
+        SceneId::Glass => glass::plan(body, l.wide)
+            .cards
+            .into_iter()
+            .map(|(c, r)| {
+                let (bx, by) = c.bob_at(t);
+                (format!("{c:?}"), Rect::new(r.x + bx, r.y + by, r.w, r.h))
+            })
+            .collect(),
+        SceneId::Controls => controls::plan(body, l.wide)
+            .cards
+            .into_iter()
+            .map(|(c, r)| (format!("{c:?}"), r))
+            .collect(),
+        SceneId::Motion => motion::plan(body, l.wide)
+            .frames
+            .into_iter()
+            .map(|(d, r)| (format!("{d:?}"), r))
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Writes `<name>.png` of `req` into `dir` (made if it is missing).
@@ -174,6 +406,8 @@ pub fn write_all(dir: &Path) -> Result<(), String> {
                 to: None,
                 tier: MotionTier::Full,
                 still: false,
+                acts: Vec::new(),
+                rects: false,
                 name: format!("{prefix}-{}", scene.slug()),
             };
             let mut run = Headless::new(size, scale, safe_for(size));

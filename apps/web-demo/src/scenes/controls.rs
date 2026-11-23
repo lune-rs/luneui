@@ -101,7 +101,11 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     let stacked = n == 1 || cw * 2.0 + GAP < 420.0;
     let mins: Vec<f32> = rows
         .iter()
-        .map(|r| r.iter().map(|(c, _)| min_h(*c, stacked)).fold(0.0, f32::max))
+        .map(|r| {
+            r.iter()
+                .map(|(c, _)| min_h(*c, stacked))
+                .fold(0.0, f32::max)
+        })
         .collect();
     let gaps = GAP * (rows.len() as f32 - 1.0);
     let need: f32 = mins.iter().sum::<f32>() + gaps;
@@ -116,10 +120,20 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     let heights: Vec<f32> = mins
         .iter()
         .enumerate()
-        .map(|(i, h)| if n > 1 && i + 1 < mins.len() { h * scale } else { *h })
+        .map(|(i, h)| {
+            if n > 1 && i + 1 < mins.len() {
+                h * scale
+            } else {
+                *h
+            }
+        })
         .collect();
     let used = heights.iter().sum::<f32>() + gaps;
-    let margin = if n > 1 { ((body.h - used) / 2.0).max(0.0) } else { 0.0 };
+    let margin = if n > 1 {
+        ((body.h - used) / 2.0).max(0.0)
+    } else {
+        0.0
+    };
     let mut y = body.y + margin;
     let mut cards = Vec::new();
     for (row, h) in rows.iter().zip(&heights) {
@@ -206,7 +220,12 @@ pub fn geometry(body: Rect, wide: bool) -> Geometry {
         let top = view.y + 28.0;
         (
             Rect::new(view.x, top, view.w, 3.0 * 28.0),
-            Rect::new(view.x, top + 3.0 * 28.0 + 10.0, view.w, (view.bottom() - top - 94.0).max(0.0)),
+            Rect::new(
+                view.x,
+                top + 3.0 * 28.0 + 10.0,
+                view.w,
+                (view.bottom() - top - 94.0).max(0.0),
+            ),
         )
     };
     let button_y = opts.bottom() - 32.0;
@@ -241,7 +260,12 @@ pub fn geometry(body: Rect, wide: bool) -> Geometry {
         radios,
         preview,
         checks: std::array::from_fn(|i| {
-            Rect::new(opts.x, opts.y + 26.0 + check_pitch * i as f32 + (check_pitch - 24.0) / 2.0, opts.w, 24.0)
+            Rect::new(
+                opts.x,
+                opts.y + 26.0 + check_pitch * i as f32 + (check_pitch - 24.0) / 2.0,
+                opts.w,
+                24.0,
+            )
         }),
         buttons: [
             Rect::new(opts.x, button_y, half, 32.0),
@@ -266,7 +290,13 @@ const SLIDERS: [&str; 3] = ["Brightness", "Volume", "Warmth"];
 const VIEWS: [(&str, &str, &str, Tone, usize); 3] = [
     ("Today", "8,420", "+12.0% on yesterday", Tone::Ok, 12),
     ("This week", "52,310", "+4.1% on last week", Tone::Ok, 7),
-    ("This month", "214,900", "-1.8% on last month", Tone::Warn, 10),
+    (
+        "This month",
+        "214,900",
+        "-1.8% on last month",
+        Tone::Warn,
+        10,
+    ),
 ];
 const CHECKS: [&str; 3] = ["Reduce transparency", "Show previews", "Sync on Wi-Fi only"];
 
@@ -349,10 +379,14 @@ impl Controls {
         for i in 0..3 {
             self.targets.note(format!("toggle{i}"), g.toggles[i]);
             self.targets.note(format!("slider{i}"), g.sliders[i]);
-            self.targets.note(format!("radio{i}"), Rect::new(g.radios.x, g.radios.y + 28.0 * i as f32, g.radios.w, 28.0));
+            self.targets.note(
+                format!("radio{i}"),
+                Rect::new(g.radios.x, g.radios.y + 28.0 * i as f32, g.radios.w, 28.0),
+            );
             // The box and the start of the label: a click on the empty part of the row misses.
             let c = g.checks[i];
-            self.targets.note(format!("check{i}"), Rect::new(c.x, c.y, 24.0, c.h));
+            self.targets
+                .note(format!("check{i}"), Rect::new(c.x, c.y, 24.0, c.h));
         }
         self.targets.note("minus", stepper::minus_rect(g.stepper));
         self.targets.note("plus", stepper::plus_rect(g.stepper));
@@ -432,7 +466,15 @@ impl Controls {
         let w = inner.w - 140.0 - 8.0;
         let cy = g.stepper.y + g.stepper.h / 2.0;
         line(ui, "Quantity", inner.x, cy - 8.0, w, t.font_m, t.fg_primary);
-        line(ui, "Units per order", inner.x, cy + 10.0, w, t.font_s, t.fg_secondary);
+        line(
+            ui,
+            "Units per order",
+            inner.x,
+            cy + 10.0,
+            w,
+            t.font_s,
+            t.fg_secondary,
+        );
         let range = StepRange {
             min: 1.0,
             max: 20.0,
@@ -447,8 +489,22 @@ impl Controls {
         let cy = g.stars.y + g.stars.h / 2.0;
         let w = inner.w - star_rating::row_width(5) - 8.0;
         line(ui, "Rating", inner.x, cy - 8.0, w, t.font_m, t.fg_primary);
-        line(ui, &format!("{} of 5 stars", self.stars), inner.x, cy + 10.0, w, t.font_s, t.fg_secondary);
-        ui.star_rating("stars", (g.stars.x, g.stars.y), &mut self.stars, 5, "Rating");
+        line(
+            ui,
+            &format!("{} of 5 stars", self.stars),
+            inner.x,
+            cy + 10.0,
+            w,
+            t.font_s,
+            t.fg_secondary,
+        );
+        ui.star_rating(
+            "stars",
+            (g.stars.x, g.stars.y),
+            &mut self.stars,
+            5,
+            "Rating",
+        );
     }
 
     fn view_card(&mut self, ui: &mut Ui<'_>, inner: Rect, g: &Geometry) {
@@ -511,7 +567,11 @@ impl Controls {
                 for j in 0..*bars {
                     let k = 0.25 + 0.75 * noise((i * 40 + j + 3) as u64 * 7);
                     let bh = (room * k).max(3.0);
-                    let col = if j + 1 == *bars { t.data_hi } else { with_alpha(t.data, 0.45) };
+                    let col = if j + 1 == *bars {
+                        t.data_hi
+                    } else {
+                        with_alpha(t.data, 0.45)
+                    };
                     ui.painter().fill(
                         Rect::new(page.x + j as f32 * (bw + gap), page.bottom() - bh, bw, bh),
                         (bw / 2.0).min(2.5),
@@ -529,17 +589,33 @@ impl Controls {
     fn options_card(&mut self, ui: &mut Ui<'_>, inner: Rect, g: &Geometry) {
         caps(ui, "Options", inner.x, inner.y);
         let text = format!("{} applied", self.applied);
-        let tone = if self.applied > 0 { Tone::Ok } else { Tone::Neutral };
+        let tone = if self.applied > 0 {
+            Tone::Ok
+        } else {
+            Tone::Neutral
+        };
         let bw = badge::width(ui.painter(), &text, false);
-        ui.badge("applied", (inner.right() - bw, inner.y - 2.0), &text, tone, false);
+        ui.badge(
+            "applied",
+            (inner.right() - bw, inner.y - 2.0),
+            &text,
+            tone,
+            false,
+        );
         for (i, name) in CHECKS.iter().enumerate() {
             ui.checkbox(("check", i), g.checks[i], &mut self.checks[i], name);
         }
-        if ui.button("reset", g.buttons[0], "Reset", ButtonKind::Secondary).clicked {
+        if ui
+            .button("reset", g.buttons[0], "Reset", ButtonKind::Secondary)
+            .clicked
+        {
             self.checks = [false, true, true];
             self.applied = 0;
         }
-        if ui.button("apply", g.buttons[1], "Apply", ButtonKind::Primary).clicked {
+        if ui
+            .button("apply", g.buttons[1], "Apply", ButtonKind::Primary)
+            .clicked
+        {
             self.applied += 1;
         }
     }
@@ -617,7 +693,12 @@ impl Controls {
         let inner = r.inset(0.0, 0.0);
         let h = ui.stat_strip(
             "figures",
-            Rect::new(inner.x, inner.y + ((inner.h - 84.0) / 2.0).max(0.0), inner.w, 0.0),
+            Rect::new(
+                inner.x,
+                inner.y + ((inner.h - 84.0) / 2.0).max(0.0),
+                inner.w,
+                0.0,
+            ),
             &shown,
         );
         let _ = h;

@@ -15,7 +15,7 @@ use web_demo::shell::WINDOW_USAGE;
 use winit::event_loop::EventLoop;
 
 #[cfg(not(target_family = "wasm"))]
-const USAGE_DUMP: &str = "       web-demo --dump <dir>                      every scene at 1440x900 @2 and 390x844 @3\n       web-demo --dump <dir> --only <scene> [--window <W>x<H>] [--scale <S>] [--at <secs>] [--to <scene> --progress <0-100>] [--motion full|reduced|off] [--still] [--name <file>]";
+const USAGE_DUMP: &str = "       web-demo --dump <dir>                      every scene at 1440x900 @2 and 390x844 @3\n       web-demo --dump <dir> --only <scene> [--window <W>x<H>] [--scale <S>] [--at <secs>] [--to <scene> --progress <0-100>] [--motion full|reduced|off] [--still] [--name <file>] [--do <action>]... [--rects]";
 
 /// What the command line asks for.
 #[cfg(not(target_family = "wasm"))]
@@ -38,7 +38,8 @@ fn parse(args: impl Iterator<Item = String>) -> Option<Mode> {
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--dump" => dir = Some(PathBuf::from(args.next()?)),
-            "--only" | "--window" | "--scale" | "--at" | "--to" | "--progress" | "--name" => {
+            "--only" | "--window" | "--scale" | "--at" | "--to" | "--progress" | "--name"
+            | "--do" => {
                 dump_args.push(arg);
                 dump_args.push(args.next()?);
             }
@@ -47,6 +48,7 @@ fn parse(args: impl Iterator<Item = String>) -> Option<Mode> {
                 dump_args.push(arg.clone());
                 rest.push(arg);
             }
+            "--rects" => dump_args.push(arg),
             "--motion" => {
                 let word = args.next()?;
                 dump_args.push(arg.clone());

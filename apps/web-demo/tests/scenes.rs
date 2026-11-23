@@ -73,8 +73,16 @@ fn every_scene_lays_out_inside_the_body_at_the_four_sizes() {
                 PARALLAX_MAX * card.depth() + b.amp.0,
                 PARALLAX_MAX * card.depth() + b.amp.1,
             );
-            let moved = Rect::new(r.x - reach.0, r.y - reach.1, r.w + 2.0 * reach.0, r.h + 2.0 * reach.1);
-            assert!(inside(tall, moved), "{size:?}: glass {card:?} leaves the view: {moved:?} in {tall:?}");
+            let moved = Rect::new(
+                r.x - reach.0,
+                r.y - reach.1,
+                r.w + 2.0 * reach.0,
+                r.h + 2.0 * reach.1,
+            );
+            assert!(
+                inside(tall, moved),
+                "{size:?}: glass {card:?} leaves the view: {moved:?} in {tall:?}"
+            );
             assert!(r.w > 200.0 && r.h > 120.0, "{size:?}: {card:?} is {r:?}");
         }
         for (i, (ka, a)) in plan.cards.iter().enumerate() {
@@ -88,44 +96,88 @@ fn every_scene_lays_out_inside_the_body_at_the_four_sizes() {
         let g = controls::geometry(body, wide);
         let full = Rect::new(body.x, body.y, body.w, plan.height);
         for (card, r) in &plan.cards {
-            assert!(inside(full, *r), "{size:?}: controls {card:?} outside: {r:?} in {full:?}");
+            assert!(
+                inside(full, *r),
+                "{size:?}: controls {card:?} outside: {r:?} in {full:?}"
+            );
         }
         for (i, (ka, a)) in plan.cards.iter().enumerate() {
             for (kb, b) in &plan.cards[i + 1..] {
-                assert!(apart(*a, *b), "{size:?}: controls {ka:?} and {kb:?} overlap");
+                assert!(
+                    apart(*a, *b),
+                    "{size:?}: controls {ka:?} and {kb:?} overlap"
+                );
             }
         }
-        let inner = |c: CCard| g.inner.iter().find(|(k, _)| *k == c).map(|(_, r)| *r).expect("a card");
+        let inner = |c: CCard| {
+            g.inner
+                .iter()
+                .find(|(k, _)| *k == c)
+                .map(|(_, r)| *r)
+                .expect("a card")
+        };
         for r in g.toggles {
             assert!(inside(inner(CCard::Toggles), r), "{size:?}: toggle {r:?}");
         }
         for r in g.sliders {
             assert!(inside(inner(CCard::Sliders), r), "{size:?}: slider {r:?}");
         }
-        assert!(inside(inner(CCard::Stepper), g.stepper), "{size:?}: stepper");
+        assert!(
+            inside(inner(CCard::Stepper), g.stepper),
+            "{size:?}: stepper"
+        );
         let stars = Rect::new(g.stars.x, g.stars.y, 128.0, 24.0);
-        assert!(inside(inner(CCard::Stepper), stars), "{size:?}: stars {stars:?}");
-        assert!(apart(g.stepper, stars), "{size:?}: stepper and stars overlap");
+        assert!(
+            inside(inner(CCard::Stepper), stars),
+            "{size:?}: stars {stars:?}"
+        );
+        assert!(
+            apart(g.stepper, stars),
+            "{size:?}: stepper and stars overlap"
+        );
         let radios = g.radios;
         assert!(inside(inner(CCard::View), radios), "{size:?}: radios");
         assert!(inside(inner(CCard::View), g.preview), "{size:?}: preview");
-        assert!(apart(radios, g.preview), "{size:?}: radios over the preview");
-        assert!(g.preview.w > 100.0 && g.preview.h > 60.0, "{size:?}: preview {:?}", g.preview);
+        assert!(
+            apart(radios, g.preview),
+            "{size:?}: radios over the preview"
+        );
+        assert!(
+            g.preview.w > 100.0 && g.preview.h > 60.0,
+            "{size:?}: preview {:?}",
+            g.preview
+        );
         for r in g.checks.into_iter().chain(g.buttons) {
             assert!(inside(inner(CCard::Options), r), "{size:?}: option {r:?}");
         }
-        assert!(apart(g.checks[2], g.buttons[0]), "{size:?}: a check over the buttons");
+        assert!(
+            apart(g.checks[2], g.buttons[0]),
+            "{size:?}: a check over the buttons"
+        );
 
         // Motion: four frames of one size, each with its caption row above it, all in the body.
         let plan = motion::plan(body, wide);
         let full = Rect::new(body.x, body.y, body.w, plan.height);
         let first = plan.frames[0].1;
         for (demo, r) in &plan.frames {
-            assert!(inside(full, *r), "{size:?}: motion {demo:?} outside: {r:?} in {full:?}");
-            assert_eq!((r.w, r.h), (first.w, first.h), "{size:?}: {demo:?} is not the frames' size");
-            assert!(r.y - body.y >= 26.0 - 0.01, "{size:?}: no room for {demo:?}'s caption");
+            assert!(
+                inside(full, *r),
+                "{size:?}: motion {demo:?} outside: {r:?} in {full:?}"
+            );
+            assert_eq!(
+                (r.w, r.h),
+                (first.w, first.h),
+                "{size:?}: {demo:?} is not the frames' size"
+            );
+            assert!(
+                r.y - body.y >= 26.0 - 0.01,
+                "{size:?}: no room for {demo:?}'s caption"
+            );
             let screen = motion::screen_of(*r);
-            assert!(screen.w > 150.0 && screen.h > 180.0, "{size:?}: {demo:?} screen {screen:?}");
+            assert!(
+                screen.w > 150.0 && screen.h > 180.0,
+                "{size:?}: {demo:?} screen {screen:?}"
+            );
         }
         for (i, (ka, a)) in plan.frames.iter().enumerate() {
             for (kb, b) in &plan.frames[i + 1..] {
@@ -140,7 +192,11 @@ fn every_scene_lays_out_inside_the_body_at_the_four_sizes() {
                 ("controls", controls::plan(body, wide).height),
                 ("motion", motion::plan(body, wide).height),
             ] {
-                assert!(h <= body.h + 0.5, "{name} scrolls at {size:?}: {h} in {}", body.h);
+                assert!(
+                    h <= body.h + 0.5,
+                    "{name} scrolls at {size:?}: {h} in {}",
+                    body.h
+                );
             }
         }
     }
@@ -153,10 +209,16 @@ fn every_scene_draws_at_every_size_and_the_scenes_differ() {
         for scene in SCENES {
             let mut run = still(size, safe, scene);
             let r = run.run(1, FRAME).expect("a frame");
-            assert!(r.scene != lune_ui::scene::Scene::default(), "{size:?} {scene:?}: nothing drawn");
+            assert!(
+                r.scene != lune_ui::scene::Scene::default(),
+                "{size:?} {scene:?}: nothing drawn"
+            );
             seen.push(r.scene);
         }
-        assert!(seen[0] != seen[1] && seen[1] != seen[2] && seen[0] != seen[2], "{size:?}");
+        assert!(
+            seen[0] != seen[1] && seen[1] != seen[2] && seen[0] != seen[2],
+            "{size:?}"
+        );
     }
 }
 
@@ -239,7 +301,13 @@ fn a_tap_on_each_glass_control_changes_its_state() {
 #[test]
 fn a_pointer_click_works_as_well_as_a_touch() {
     let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Glass);
-    let at = run.stage.scenes.glass.targets.centre("wifi").expect("a toggle");
+    let at = run
+        .stage
+        .scenes
+        .glass
+        .targets
+        .centre("wifi")
+        .expect("a toggle");
     let was = run.stage.scenes.glass.wifi;
     let button = |pressed| Event::PointerButton {
         pos: at,
@@ -265,13 +333,24 @@ fn a_tap_on_each_control_changes_its_state() {
     }
     for i in 0..3 {
         let was = run.stage.scenes.controls.sliders[i];
-        let r = run.stage.scenes.controls.targets.get(&format!("slider{i}")).expect("a slider");
+        let r = run
+            .stage
+            .scenes
+            .controls
+            .targets
+            .get(&format!("slider{i}"))
+            .expect("a slider");
         let right = (r.x + r.w * 0.95, r.y + r.h / 2.0);
         let left = (r.x + r.w * 0.05, r.y + r.h / 2.0);
         // A touch in a scroll area drags a slider (a tap there is a scroll's start).
-        let (from, to) = if was < 0.5 { (left, right) } else { (right, left) };
+        let (from, to) = if was < 0.5 {
+            (left, right)
+        } else {
+            (right, left)
+        };
         let mut s = Script::new();
-        s.wait(Duration::from_millis(60)).drag(from, to, Duration::from_millis(300));
+        s.wait(Duration::from_millis(60))
+            .drag(from, to, Duration::from_millis(300));
         play(&mut run, s, 50);
         let now = run.stage.scenes.controls.sliders[i];
         assert!((now - was).abs() > 0.2, "slider {i}: {was} -> {now}");
@@ -295,7 +374,11 @@ fn a_tap_on_each_control_changes_its_state() {
     assert_eq!(run.stage.scenes.controls.applied, 1, "apply");
     tap(&mut run, c, "reset");
     assert_eq!(run.stage.scenes.controls.applied, 0, "reset");
-    assert_eq!(run.stage.scenes.controls.checks, [false, true, true], "reset");
+    assert_eq!(
+        run.stage.scenes.controls.checks,
+        [false, true, true],
+        "reset"
+    );
 }
 
 #[test]
@@ -303,29 +386,55 @@ fn a_tap_or_a_swipe_on_each_motion_demo_changes_its_state() {
     let mut run = still((1440.0, 900.0), Insets::ZERO, SceneId::Motion);
     let m = SceneId::Motion;
     // The pager: a swipe across it moves a page.
-    let r = run.stage.scenes.motion.targets.get("pager").expect("a pager");
+    let r = run
+        .stage
+        .scenes
+        .motion
+        .targets
+        .get("pager")
+        .expect("a pager");
     let y = r.y + r.h * 0.4;
     let mut s = Script::new();
-    s.wait(Duration::from_millis(60))
-        .swipe((r.x + r.w * 0.85, y), (r.x + r.w * 0.15, y), Duration::from_millis(180));
+    s.wait(Duration::from_millis(60)).swipe(
+        (r.x + r.w * 0.85, y),
+        (r.x + r.w * 0.15, y),
+        Duration::from_millis(180),
+    );
     play(&mut run, s, 60);
     assert_eq!(run.stage.scenes.motion.page, 1, "swiped to the second page");
     // The sheet: a tap on the grabber steps to the next detent, and a drag follows the hand.
     let was = run.stage.scenes.motion.detent;
     tap(&mut run, m, "grabber");
-    assert_eq!(run.stage.scenes.motion.detent, (was + 1) % 3, "grabber step");
-    let g = run.stage.scenes.motion.targets.centre("grabber").expect("a grabber");
+    assert_eq!(
+        run.stage.scenes.motion.detent,
+        (was + 1) % 3,
+        "grabber step"
+    );
+    let g = run
+        .stage
+        .scenes
+        .motion
+        .targets
+        .centre("grabber")
+        .expect("a grabber");
     let mut s = Script::new();
-    s.wait(Duration::from_millis(60)).drag(g, (g.0, g.1 + 420.0), Duration::from_millis(300));
+    s.wait(Duration::from_millis(60))
+        .drag(g, (g.0, g.1 + 420.0), Duration::from_millis(300));
     play(&mut run, s, 80);
-    assert_eq!(run.stage.scenes.motion.detent, 0, "dragged down to the peek");
+    assert_eq!(
+        run.stage.scenes.motion.detent, 0,
+        "dragged down to the peek"
+    );
     // The stack: a tap on a row pushes the detail; its back button pops it.
     tap(&mut run, m, "row0");
     assert_eq!(run.stage.scenes.motion.depth, 2, "pushed");
     assert_eq!(run.stage.scenes.motion.opened, 1);
     // The real sheet opens from its button.
     tap(&mut run, m, "real-open");
-    assert!(run.stage.scenes.motion.real_sheet, "the toolkit's sheet opened");
+    assert!(
+        run.stage.scenes.motion.real_sheet,
+        "the toolkit's sheet opened"
+    );
 }
 
 #[test]
@@ -340,7 +449,12 @@ fn tab_reaches_the_controls_in_reading_order() {
         key(&mut run, NamedKey::Space);
         let now = run.stage.scenes.controls.toggles;
         let changed: Vec<usize> = (0..3).filter(|i| now[*i] != before[*i]).collect();
-        assert_eq!(changed.len(), n + 1, "after {} tabs the toggles are {now:?}", n + 1);
+        assert_eq!(
+            changed.len(),
+            n + 1,
+            "after {} tabs the toggles are {now:?}",
+            n + 1
+        );
     }
 }
 
@@ -367,7 +481,11 @@ fn idle_motion_asks_for_frames_and_still_asks_for_none() {
         let mut run = still((1440.0, 900.0), Insets::ZERO, scene);
         for _ in 0..60 {
             let r = run.step(FRAME, Vec::new());
-            assert_eq!(r.out.repaint, Repaint::Idle, "{scene:?}: a still scene asks for a frame");
+            assert_eq!(
+                r.out.repaint,
+                Repaint::Idle,
+                "{scene:?}: a still scene asks for a frame"
+            );
         }
         for tier in [MotionTier::Reduced, MotionTier::Off] {
             let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
@@ -375,10 +493,17 @@ fn idle_motion_asks_for_frames_and_still_asks_for_none() {
             run.stage.want = scene;
             run.run(8, FRAME);
             let r = run.step(FRAME, Vec::new());
-            assert_eq!(r.out.repaint, Repaint::Idle, "{scene:?} {tier:?}: nothing moves");
+            assert_eq!(
+                r.out.repaint,
+                Repaint::Idle,
+                "{scene:?} {tier:?}: nothing moves"
+            );
             let a = run.step_to(Duration::from_secs(5), Vec::new()).scene;
             let b = run.step_to(Duration::from_secs(50), Vec::new()).scene;
-            assert!(a == b, "{scene:?} {tier:?}: the picture depends on the clock");
+            assert!(
+                a == b,
+                "{scene:?} {tier:?}: the picture depends on the clock"
+            );
         }
     }
 }
@@ -388,7 +513,10 @@ fn the_autopilot_changes_the_scene_and_a_still_scene_does_not_change() {
     for scene in SCENES {
         let (run, _) = run_for(scene, 20);
         let acted = run.stage.scenes.pilot(scene).expect("a pilot").acted;
-        assert!(acted >= 6, "{scene:?}: the autopilot ran {acted} times in 20 s");
+        assert!(
+            acted >= 6,
+            "{scene:?}: the autopilot ran {acted} times in 20 s"
+        );
         let mut run = still((1440.0, 900.0), Insets::ZERO, scene);
         let a = run.step_to(Duration::from_secs(3), Vec::new()).scene;
         let b = run.step_to(Duration::from_secs(300), Vec::new()).scene;
@@ -417,11 +545,18 @@ fn a_real_input_pauses_the_autopilot_and_it_resumes_after_the_timeout() {
         while run.time < t0 + RESUME - Duration::from_millis(600) {
             run.step(dt, Vec::new());
         }
-        assert_eq!(acted(&run), held, "{scene:?}: the autopilot ran while the pointer was recent");
+        assert_eq!(
+            acted(&run),
+            held,
+            "{scene:?}: the autopilot ran while the pointer was recent"
+        );
         while run.time < t0 + RESUME + Duration::from_millis(2600) {
             run.step(dt, Vec::new());
         }
-        assert!(acted(&run) > held, "{scene:?}: it did not resume after {RESUME:?}");
+        assert!(
+            acted(&run) > held,
+            "{scene:?}: it did not resume after {RESUME:?}"
+        );
     }
 }
 
@@ -452,7 +587,11 @@ fn the_glass_cards_bob_slowly_and_the_pull_is_bounded() {
             b.period,
             b.phase
         );
-        assert!(b.amp.0 <= 8.0 && b.amp.1 <= 8.0, "{card:?}: amplitude {:?}", b.amp);
+        assert!(
+            b.amp.0 <= 8.0 && b.amp.1 <= 8.0,
+            "{card:?}: amplitude {:?}",
+            b.amp
+        );
         for p in [b.period.0, b.period.1] {
             assert!((6.0..=12.0).contains(&p), "{card:?}: period {p}");
             periods.push(p);

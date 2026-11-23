@@ -104,11 +104,7 @@ impl Card {
             Card::Sync => ((7.0, 8.0), (10.0, 6.5), (0.50, 0.85)),
             Card::Storage => ((6.0, 7.0), (7.0, 11.5), (0.90, 0.30)),
         };
-        Bob {
-            amp,
-            period,
-            phase,
-        }
+        Bob { amp, period, phase }
     }
 
     /// The card's offset at app time `t` seconds.
@@ -162,7 +158,12 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     };
     // Room for the bob and the pointer's pull (at most 24 px) between a card and the edge.
     let side = if n == 1 { 16.0 } else { 8.0 };
-    let body = Rect::new(body.x + side, body.y + TOP, body.w - 2.0 * side, body.h - TOP);
+    let body = Rect::new(
+        body.x + side,
+        body.y + TOP,
+        body.w - 2.0 * side,
+        body.h - TOP,
+    );
     let raw = (body.w - (n as f32 - 1.0) * GAP) / n as f32;
     let cw = raw.min(400.0);
     let gap_x = if n > 1 {
@@ -370,7 +371,11 @@ impl Glass {
             let k = card.depth();
             Rect::new(r.x + bx - pull.0 * k, r.y + by - pull.1 * k, r.w, r.h)
         };
-        let placed: Vec<(Card, Rect)> = plan.cards.iter().map(|(c, r)| (*c, place(*c, *r))).collect();
+        let placed: Vec<(Card, Rect)> = plan
+            .cards
+            .iter()
+            .map(|(c, r)| (*c, place(*c, *r)))
+            .collect();
         scrolled(ui, body, env.pad(), plan.height, |ui| {
             // The glass first, furthest to nearest, so a near card's shadow falls on a far one; then
             // the contents in reading order, so Tab walks the page the way it reads.
@@ -381,7 +386,10 @@ impl Glass {
             }
             let mut reading = placed;
             reading.sort_by(|a, b| {
-                (a.1.y / 60.0).round().total_cmp(&(b.1.y / 60.0).round()).then(a.1.x.total_cmp(&b.1.x))
+                (a.1.y / 60.0)
+                    .round()
+                    .total_cmp(&(b.1.y / 60.0).round())
+                    .then(a.1.x.total_cmp(&b.1.x))
             });
             for (card, r) in reading {
                 let inner = r.inset(CARD_PAD, CARD_PAD);
@@ -444,9 +452,20 @@ impl Glass {
         let tx = r.x + side + 12.0;
         let w = r.w - side - 12.0;
         let p = ui.painter();
-        let spec = p.elide(&Spec::plain(title, Style::ui(t.font_m, t.fg_bright).medium()), w);
+        let spec = p.elide(
+            &Spec::plain(title, Style::ui(t.font_m, t.fg_bright).medium()),
+            w,
+        );
         p.text(&spec, tx, art.y + side / 2.0 - 20.0);
-        line(ui, artist, tx, art.y + side / 2.0 + 14.0, w, t.font_base, t.fg_secondary);
+        line(
+            ui,
+            artist,
+            tx,
+            art.y + side / 2.0 + 14.0,
+            w,
+            t.font_base,
+            t.fg_secondary,
+        );
 
         let bar_y = art.bottom() + 14.0 + (spare - (side - 48.0)) * 0.45;
         let opts = ProgressOptions {
@@ -457,16 +476,22 @@ impl Glass {
         ui.progress("track", Rect::new(r.x, bar_y, r.w, 0.0), &opts);
         let elapsed = (self.track * SONG_LEN) as u32;
         let left = SONG_LEN as u32 - elapsed;
-        let mono = |s: String| Spec::plain(s, Style::mono(t.font_s, t.font_s * 1.3, t.fg_secondary));
+        let mono =
+            |s: String| Spec::plain(s, Style::mono(t.font_s, t.font_s * 1.3, t.fg_secondary));
         let p = ui.painter();
-        p.text(&mono(format!("{}:{:02}", elapsed / 60, elapsed % 60)), r.x, bar_y + 8.0);
+        p.text(
+            &mono(format!("{}:{:02}", elapsed / 60, elapsed % 60)),
+            r.x,
+            bar_y + 8.0,
+        );
         let rt = mono(format!("-{}:{:02}", left / 60, left % 60));
         let rw = p.measure(&rt).0;
         p.text(&rt, r.right() - rw, bar_y + 8.0);
 
         let cy = r.bottom() - 16.0;
         let cx = r.x + r.w / 2.0;
-        let slot = |dx: f32, size: f32| Rect::new(cx + dx - size / 2.0, cy - size / 2.0, size, size);
+        let slot =
+            |dx: f32, size: f32| Rect::new(cx + dx - size / 2.0, cy - size / 2.0, size, size);
         self.targets.note("back", slot(-52.0, 32.0));
         self.targets.note("play", slot(0.0, 40.0));
         self.targets.note("next", slot(52.0, 32.0));
@@ -481,7 +506,11 @@ impl Glass {
                 name: "Previous",
             },
         );
-        let play_glyph = if self.playing { glyph::PAUSE } else { glyph::PLAY };
+        let play_glyph = if self.playing {
+            glyph::PAUSE
+        } else {
+            glyph::PLAY
+        };
         let play = ui.icon_button(
             "play",
             slot(0.0, 40.0),
@@ -523,10 +552,21 @@ impl Glass {
         let y0 = r.y + 22.0;
         let pitch = (button.y - 6.0 - y0) / 2.0;
         let rows = [
-            ("Wi-Fi", if self.wifi { "Connected to Lune" } else { "Off" }),
+            (
+                "Wi-Fi",
+                if self.wifi {
+                    "Connected to Lune"
+                } else {
+                    "Off"
+                },
+            ),
             (
                 "Focus",
-                if self.focus { "Notifications paused" } else { "Notifications on" },
+                if self.focus {
+                    "Notifications paused"
+                } else {
+                    "Notifications on"
+                },
             ),
         ];
         for (i, (name, sub)) in rows.iter().enumerate() {
@@ -536,11 +576,18 @@ impl Glass {
             line(ui, sub, r.x, cy + 9.0, w, t.font_s, t.fg_secondary);
             let sw = Rect::new(r.right() - 40.0, cy - 12.0, 40.0, 24.0);
             self.targets.note(["wifi", "focus"][i], sw);
-            let on = if i == 0 { &mut self.wifi } else { &mut self.focus };
+            let on = if i == 0 {
+                &mut self.wifi
+            } else {
+                &mut self.focus
+            };
             ui.toggle(("quick", i), sw, on, name);
         }
         self.targets.note("open", button);
-        if ui.button("open", button, "Review glass settings", ButtonKind::Primary).clicked {
+        if ui
+            .button("open", button, "Review glass settings", ButtonKind::Primary)
+            .clicked
+        {
             self.dialog = true;
         }
     }
@@ -572,7 +619,11 @@ impl Glass {
                 let id = ui.id(("bar", j));
                 let k = ui.animate_f32(id, want, &Motion::of(Kind::Expand));
                 let bh = (room * k).max(3.0);
-                let col = if j + 1 == n { t.data_hi } else { with_alpha(t.data, 0.45) };
+                let col = if j + 1 == n {
+                    t.data_hi
+                } else {
+                    with_alpha(t.data, 0.45)
+                };
                 ui.painter().fill(
                     Rect::new(r.x + j as f32 * (bw + gap), r.bottom() - bh, bw, bh),
                     (bw / 2.0).min(3.0),
@@ -592,19 +643,38 @@ impl Glass {
         let id = ui.id("ring");
         let frac = ui.animate_f32(id, SYNC[self.sync], &Motion::of(Kind::Expand));
         let p = ui.painter();
-        p.arc(c, radius, -FRAC_PI_2, 2.0 * PI, StrokeStyle::solid(t.surface_active, 8.0));
+        p.arc(
+            c,
+            radius,
+            -FRAC_PI_2,
+            2.0 * PI,
+            StrokeStyle::solid(t.surface_active, 8.0),
+        );
         if frac > 0.004 {
-            p.arc(c, radius, -FRAC_PI_2, 2.0 * PI * frac, StrokeStyle::solid(t.data, 8.0));
+            p.arc(
+                c,
+                radius,
+                -FRAC_PI_2,
+                2.0 * PI * frac,
+                StrokeStyle::solid(t.data, 8.0),
+            );
         }
         let pct = Spec::plain(
             format!("{}%", (frac * 100.0).round() as u32),
             Style::ui(t.font_m, t.fg_bright).medium(),
         );
-        p.text_centered(&pct, Rect::new(c[0] - radius, c[1] - 12.0, radius * 2.0, 24.0));
+        p.text_centered(
+            &pct,
+            Rect::new(c[0] - radius, c[1] - 12.0, radius * 2.0, 24.0),
+        );
         let x = area.x + d + 16.0;
         let w = (area.right() - x).max(0.0);
         let done = SYNC[self.sync] >= 0.9;
-        let (tone, word) = if done { (Tone::Ok, "Up to date") } else { (Tone::Data, "Syncing") };
+        let (tone, word) = if done {
+            (Tone::Ok, "Up to date")
+        } else {
+            (Tone::Data, "Syncing")
+        };
         ui.status_dot("state", (x, area.y + 6.0), tone, word);
         let files = format!("{} of 18 files", (SYNC[self.sync] * 18.0).round() as u32);
         line(ui, &files, x, area.y + 40.0, w, t.font_base, t.fg_secondary);
@@ -656,7 +726,15 @@ impl Glass {
             cancel: Cancel::Default,
         };
         let r = ui.dialog("dialog", &spec, &DialogGlass::of(&t), |ui, x, y, w| {
-            line(ui, "6 surfaces, 3 of them blurred", x, y + 14.0, w, t.font_base, t.fg_secondary);
+            line(
+                ui,
+                "6 surfaces, 3 of them blurred",
+                x,
+                y + 14.0,
+                w,
+                t.font_base,
+                t.fg_secondary,
+            );
         });
         if r.confirmed {
             self.applied += 1;
