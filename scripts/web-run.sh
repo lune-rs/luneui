@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds a web app and checks it in a browser: the web counterpart of ios-sim.sh (D427). Usage:
-#   scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--no-build] [--keep-serving]
+#   scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--no-build] [--keep-serving]
 #   scripts/web-run.sh --self-test
 #   (default)       scripts/web-build.sh <package>, serve target/web/<package>/ on 127.0.0.1 (an ephemeral port,
 #                   loopback only, only files under that directory), open it in the separate Chromium (headless,
@@ -22,6 +22,11 @@
 #                   (exactly `hello`), Backspace gives `hell`, a CDP composition then commit gives `hell日本`,
 #                   Ctrl+A and Backspace empty it, then typing after Tab and after a click outside the canvas
 #                   changes nothing; a second bridge attached and dropped leaves one element (`1 2 1`).
+#   --phone         for an app that fills the window (not `demo`): a phone viewport, 390x844 at device scale 3 with
+#                   touch, instead of the desktop's 1440x900 at 2; the run requires `probe layout narrow` (the
+#                   desktop run requires `probe layout wide`); files are prefixed `phone-`. Such an app also
+#                   gets shot-2.png four seconds after shot-1.png, to show its motion.
+#   --query <q>     appended to the page's query (`scene=data`, `still`, `motion=reduced`).
 #   --no-build      serve what target/web/<package>/ holds.
 #   --keep-serving  print the URL and wait for Ctrl-C, for a person; no browser is launched.
 #   --self-test     the server's path rules (`..`, encoded and absolute paths answer 404) and the blank-shot check
@@ -40,7 +45,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 usage() {
-  echo "usage: scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--no-build] [--keep-serving] | --self-test" >&2
+  echo "usage: scripts/web-run.sh <package> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--no-build] [--keep-serving] | --self-test" >&2
   exit 2
 }
 fail() {
@@ -52,9 +57,17 @@ PKG=""
 build=1
 self_test=0
 driver_flags=()
-for arg in "$@"; do
+while [ "$#" -gt 0 ]; do
+  arg="$1"
+  shift
   case "$arg" in
-    --demo | --gl | --smoke | --keep-serving) driver_flags+=("$arg") ;;
+    --demo | --gl | --smoke | --phone | --keep-serving) driver_flags+=("$arg") ;;
+    --query)
+      [ "$#" -gt 0 ] || usage
+      case "$1" in *[!A-Za-z0-9_=\&.-]*) fail "bad --query \`$1\`" ;; esac
+      driver_flags+=("$arg" "$1")
+      shift
+      ;;
     --no-build) build=0 ;;
     --self-test) self_test=1 ;;
     -*) usage ;;

@@ -3,7 +3,7 @@
 // console lines and judges them. Exit codes: 0 passed, 1 a check failed (the line is quoted), 2 usage
 // or setup. The browser is killed on every exit path.
 //
-//   node run.mjs --package <name> --build-dir <dir> --out <dir> [--demo] [--gl] [--smoke] [--keep-serving]
+//   node run.mjs --package <name> --build-dir <dir> --out <dir> [--demo] [--gl] [--smoke] [--phone] [--query <q>] [--keep-serving]
 //   node run.mjs --self-test       (the server's path rules and the blank-shot check; no browser)
 import fs from "node:fs";
 import http from "node:http";
@@ -18,11 +18,14 @@ const TOUR_MS = 60_000 + 60_000; // the tour's own length plus a minute of slack
 const HARD_CAP_MS = 240_000; // the whole run
 const MAX_SHOTS = 5;
 const MIN_COLOURS = 32; // a shot needs more distinct colours than this
-// The browser itself runs at device scale 2 (`--force-device-scale-factor`, so winit's
-// `devicePixelContentBoxSize` is the real 2x; an emulated scale leaves it at 1x) in a window bigger
-// than the demo's 402x874 canvas, which the shots clip to.
-const WINDOW = { width: 600, height: 1100 };
-const SCALE = 2;
+// The browser itself runs at a device scale (`--force-device-scale-factor`, so winit's
+// `devicePixelContentBoxSize` is the real one; an emulated scale leaves it at 1x). `demo` runs in a
+// window bigger than its 402x874 canvas, which the shots clip to; every other app fills the window:
+// a desktop (1440x900 at 2) or, with `--phone`, a phone (390x844 at 3, with touch).
+const DEMO_VIEW = { width: 600, height: 1100, scale: 2, touch: false };
+const DESKTOP_VIEW = { width: 1440, height: 900, scale: 2, touch: false };
+const PHONE_VIEW = { width: 390, height: 844, scale: 3, touch: true };
+let VIEW = DEMO_VIEW;
 const MARKS = 16;
 
 const TYPES = {
@@ -316,7 +319,7 @@ async function selfTest(scratchRoot) {
 // The browser run.
 
 function parseArgs(argv) {
-  const opts = { demo: false, gl: false, smoke: false, keepServing: false, selfTest: false };
+  const opts = { demo: false, gl: false, smoke: false, phone: false, query: "", keepServing: false, selfTest: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const val = () => {
@@ -330,6 +333,8 @@ function parseArgs(argv) {
     else if (a === "--demo") opts.demo = true;
     else if (a === "--gl") opts.gl = true;
     else if (a === "--smoke") opts.smoke = true;
+    else if (a === "--phone") opts.phone = true;
+    else if (a === "--query") opts.query = val();
     else if (a === "--keep-serving") opts.keepServing = true;
     else if (a === "--self-test") opts.selfTest = true;
     else usage(`unknown argument ${a}`);
@@ -395,7 +400,7 @@ async function smokeTextInput(page, context, lines, waitLine) {
   const target = (await waitLine(/^probe search -?\d+,-?\d+$/, 5_000, "`probe search`")).slice("probe search ".length).split(",").map(Number);
   const box = await page.locator("#luneui").boundingBox();
   if (!box) throw new Error("the page has no canvas to click");
-  const at = { x: box.x + target[0] / SCALE, y: box.y + target[1] / SCALE };
+  const at = { x: box.x + target[0] / VIEW.scale, y: box.y + target[1] / VIEW.scale };
 
   const focusedBefore = count(/^probe focused /);
   await page.mouse.click(at.x, at.y);
@@ -505,7 +510,7 @@ async function smokeMacKeymap(context, origin, params) {
   const box = await page.locator("#luneui").boundingBox();
   if (!box) throw new Error("mac keymap page: no canvas to click");
   await page.bringToFront();
-  await page.mouse.click(box.x + target[0] / SCALE, box.y + target[1] / SCALE);
+  await page.mouse.click(box.x + target[0] / VIEW.scale, box.y + target[1] / VIEW.scale);
   await until(/^probe ime Enabled$/, 5_000, "`probe ime Enabled`");
   await sleep(500);
   await page.keyboard.type("hello");
@@ -527,7 +532,10 @@ async function main() {
   if (!opts.package || !opts.buildDir || !opts.out) usage("--package, --build-dir and --out are required");
   if (!fs.existsSync(path.join(opts.buildDir, "index.html"))) usage(`no ${opts.buildDir}/index.html (run scripts/web-build.sh ${opts.package})`);
   fs.mkdirSync(opts.out, { recursive: true });
-  const prefix = opts.gl ? "gl-" : "";
+  const prefix = (opts.gl ? "gl-" : "") + (opts.phone ? "phone-" : "");
+  VIEW = opts.phone ? PHONE_VIEW : opts.package === "demo" ? DEMO_VIEW : DESKTOP_VIEW;
+  // An app other than `demo` is the web demo: it says which layout it drew, and shows its motion.
+  const fullPage = opts.package !== "demo";
 
   const { port, close } = await serve(opts.buildDir);
   const origin = `http://${SERVER_HOST}:${port}`;
@@ -535,6 +543,7 @@ async function main() {
   if (opts.demo) params.push("demo", "touches");
   if (opts.smoke) params.push("probe", "probe-clipboard", "probe-text-input");
   if (opts.gl) params.push("backend=gl");
+  if (opts.query) params.push(opts.query.replace(/^\?/, ""));
   const url = `${origin}/index.html${params.length ? "?" + params.join("&") : ""}`;
 
   if (opts.keepServing) {
@@ -653,9 +662,10 @@ async function main() {
         "--enable-unsafe-webgpu",
         "--enable-features=WebGPU",
         "--ignore-gpu-blocklist",
-        `--force-device-scale-factor=${SCALE}`,
-        `--window-size=${WINDOW.width},${WINDOW.height}`,
+        `--force-device-scale-factor=${VIEW.scale}`,
+        `--window-size=${VIEW.width},${VIEW.height}`,
       ],
+      ...(VIEW.touch ? { viewport: { width: VIEW.width, height: VIEW.height }, deviceScaleFactor: VIEW.scale, isMobile: true, hasTouch: true } : {}),
     });
     // Nothing but this server is reachable: the page's one external request (the font stylesheet)
     // fails at once instead of making a run depend on the network.
@@ -678,6 +688,15 @@ async function main() {
       record("pageerror", `pageerror: ${e.message}`);
       fail(`pageerror: ${e.message}`);
     });
+    if (fullPage && !VIEW.touch) {
+      // The window size includes the browser's own chrome: ask for the outer size that leaves the
+      // page exactly the viewport's.
+      const cdp = await context.newCDPSession(page);
+      const { windowId } = await cdp.send("Browser.getWindowForTarget");
+      const chrome = await page.evaluate(() => [window.outerWidth - window.innerWidth, window.outerHeight - window.innerHeight]);
+      await cdp.send("Browser.setWindowBounds", { windowId, bounds: { width: VIEW.width + chrome[0], height: VIEW.height + chrome[1] } });
+      await cdp.detach();
+    }
     await page.goto(url, { waitUntil: "load", timeout: 30_000 });
 
     await waitLine(/^presented 1 \d+x\d+$/, PRESENTED_MS, "`presented 1`");
@@ -685,7 +704,17 @@ async function main() {
     const backend = await waitLine(/^probe adapter_backend /, 5_000, "`probe adapter_backend`");
     if (backend !== `probe adapter_backend ${want}`) throw new Error(`${backend} (wanted ${want})`);
     await new Promise((r) => setTimeout(r, 500)); // a few frames over the first one
+    if (fullPage) {
+      const layout = await waitLine(/^probe layout /, 5_000, "`probe layout`");
+      const wantLayout = opts.phone ? "narrow" : "wide";
+      if (!layout.startsWith(`probe layout ${wantLayout} `)) throw new Error(`${layout} (wanted the ${wantLayout} layout)`);
+    }
     if (!opts.demo) await shoot(page, "shot-1");
+    if (fullPage) {
+      // A second look a few seconds on: the background has moved.
+      await new Promise((r) => setTimeout(r, 4_000));
+      await shoot(page, "shot-2");
+    }
 
     if (opts.smoke) {
       const keymap = await waitLine(/^probe keymap /, 5_000, "`probe keymap`");
@@ -736,7 +765,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 300));
     if (failure !== null) throw new Error(failure);
     exitCode = 0;
-    process.stdout.write(`web-run: passed (${opts.demo ? "demo " : ""}${opts.gl ? "WebGL2" : "WebGPU"}${opts.smoke ? ", smoke" : ""})\n`);
+    process.stdout.write(`web-run: passed (${opts.demo ? "demo " : ""}${opts.phone ? "phone " : ""}${opts.gl ? "WebGL2" : "WebGPU"}${opts.smoke ? ", smoke" : ""})\n`);
   } catch (e) {
     process.stderr.write(`web-run: FAILED: ${failure ?? e.message}\n`);
     exitCode = 1;

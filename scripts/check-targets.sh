@@ -19,9 +19,9 @@
 #            crates and the demo, never a library crate alone, never the host tools or test targets; the
 #            same rustup hint when a target is not installed)
 #   web      cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui
-#            -p demo --lib --bins --locked --target wasm32-unknown-unknown -- -D warnings (compile check
-#            only, no run; the five library crates and the demo; the same rustup hint when the target is
-#            not installed; D425, D426)
+#            -p demo -p web-demo --lib --bins --locked --target wasm32-unknown-unknown -- -D warnings (compile
+#            check only, no run; the five library crates and the two web apps; the same rustup hint when the
+#            target is not installed; D425, D426, D431)
 # Prints `windows: passed|FAILED`, `macos: passed|FAILED`, `ios: passed|FAILED`, `ios-sim: passed|FAILED`,
 # `android: passed|FAILED`, `web: passed|FAILED` and `linux: passed|FAILED|skipped (<reason>)`.
 # Exit codes: 0 every half that ran passed; 1 a check failed; 2 usage error.
@@ -89,11 +89,11 @@ mobile_half ios aarch64-apple-ios
 mobile_half ios-sim aarch64-apple-ios-sim
 mobile_half android aarch64-linux-android
 
-# Web half: the five library crates and the demo for the browser target (D425, D426). The other apps join as they gain a web build.
+# Web half: the five library crates and the two web apps (demo, web-demo) for the browser target (D425, D426, D431). The other apps join as they gain a web build.
 WEB_TARGET=wasm32-unknown-unknown
 if grep -qx "$WEB_TARGET" <<< "$installed"; then
   if cargo clippy -p lune-ui-core -p lune-ui-wgpu -p lune-ui-winit -p lune-ui-platform -p lune-ui \
-    -p demo --lib --bins --locked --target "$WEB_TARGET" -- -D warnings; then
+    -p demo -p web-demo --lib --bins --locked --target "$WEB_TARGET" -- -D warnings; then
     echo "web: passed"
   else
     echo "web: FAILED"

@@ -3142,6 +3142,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-demo"
+version = "0.7.6"
+dependencies = [
+ "lune-ui",
+ "pollster",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "web-time",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
