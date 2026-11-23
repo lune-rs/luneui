@@ -9,7 +9,11 @@
 #                   one screenshot (target/web-run/<package>/shot-1.png).
 #   --demo          the page's query is `?demo&touches`: the showcase tour plays hands-free. A `demo mark <name>
 #                   FAIL` line fails at once (the line quoted); shot-1.png, shot-2.png and shot-3.png are taken at
-#                   `sheet-half`, `page-2` and `settings`; it requires `demo end 16/16` and 16 marks `ok`.
+#                   `sheet-half`, `page-2` and `settings`; it requires `demo end 16/16` and 16 marks `ok`. For
+#                   `web-demo` it is the attract tour, played once through its six scenes (13 marks, `demo end
+#                   13/13`); the shots are at `glass-live`, `data-live` and `theme-live` (one, at `motion-live`,
+#                   with `--phone`), and the run prints the app's `web-demo frames` readings summarised (report
+#                   only, no check waits on them). Every other `web-demo` run asks for no tour (`?interactive`).
 #   --gl            the query gains `backend=gl` (WebGL2 only) and the run requires `probe adapter_backend Gl`;
 #                   its files are prefixed `gl-`.
 #   --smoke         the query gains `probe` (the demo prints its probe lines): the run also requires the frame

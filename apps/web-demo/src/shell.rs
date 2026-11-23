@@ -10,6 +10,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 use web_time::Instant;
 
 use winit::application::ApplicationHandler;
@@ -35,6 +36,7 @@ use crate::frame_params;
 use crate::scenes::SceneId;
 use crate::scenes::theme::{Accent, Look, Preset};
 use crate::stage::{Layout, Stage};
+use crate::tour::{MarkResult, Play};
 
 /// Prints one line of the demo's report (`presented`, `probe`): to stdout, or to the browser's
 /// console where there is no stdout.
@@ -51,6 +53,24 @@ macro_rules! say {
         $crate::shell::say(&format!($($arg)*))
     };
 }
+
+/// Prints a mark's line and the cycle's end in the demo's format: `demo mark <name> ok`, `demo mark
+/// <name> FAIL <why>`, `demo end <ok>/<total>`.
+fn print_marks(marks: &[MarkResult], ended: Option<(u32, u32)>) {
+    for m in marks {
+        match &m.result {
+            Ok(()) => say!("demo mark {} ok", m.name),
+            Err(why) => say!("demo mark {} FAIL {why}", m.name),
+        }
+    }
+    if let Some((ok, total)) = ended {
+        say!("demo end {ok}/{total}");
+    }
+}
+
+/// How often the frame readings go to the console (`web-demo frames <n> p50 <ms> p99 <ms> backend
+/// <b>`): report only, no check waits on them.
+const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 /// The window's title.
 const TITLE: &str = "luneui web demo";
@@ -86,6 +106,16 @@ pub struct Options {
     pub scene: SceneId,
     /// The look the theme starts on (`--preset`, `--accent`).
     pub look: Look,
+    /// No attract tour: the page is the person's from the first frame (`--interactive`). The
+    /// tour also stays off under `--still` and under reduced motion, where nothing moves by itself.
+    pub interactive: bool,
+    /// Play the tour once, as a check: every mark is printed and `demo end <ok>/<total>` closes it
+    /// (`--demo`); without it the tour loops.
+    pub demo: bool,
+    /// Draw a disc under each scripted touch (`--touches`).
+    pub touches: bool,
+    /// Show the frame-time panel from the first frame (`--hud`; `H` toggles it).
+    pub hud: bool,
 }
 
 impl Default for Options {
@@ -100,12 +130,16 @@ impl Default for Options {
             force_gl: false,
             scene: SceneId::Glass,
             look: Look::DEFAULT,
+            interactive: false,
+            demo: false,
+            touches: false,
+            hud: false,
         }
     }
 }
 
 /// The window flags' usage line.
-pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--probe-text] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky] [--backend gl|auto]";
+pub const WINDOW_USAGE: &str = "usage: web-demo [--probe] [--probe-text] [--frames <n>] [--still] [--motion full|reduced|off] [--scene glass|controls|motion|data|text|theme] [--preset dark|near-black] [--accent own|blue|green|gold|rose|sky] [--backend gl|auto] [--interactive] [--demo] [--touches] [--hud]";
 
 /// The motion tier a word names.
 pub fn tier_from_word(word: &str) -> Option<MotionTier> {
@@ -132,6 +166,10 @@ pub fn parse_args(args: impl Iterator<Item = String>) -> Option<Options> {
             "--scene" => options.scene = SceneId::from_slug(&args.next()?)?,
             "--preset" => options.look.preset = Preset::from_word(&args.next()?)?,
             "--accent" => options.look.accent = Accent::from_word(&args.next()?)?,
+            "--interactive" => options.interactive = true,
+            "--demo" => options.demo = true,
+            "--touches" => options.touches = true,
+            "--hud" => options.hud = true,
             "--backend" => match args.next()?.as_str() {
                 "gl" => options.force_gl = true,
                 "auto" => options.force_gl = false,
@@ -215,6 +253,8 @@ pub(crate) struct App {
     /// What `--probe-text` last said: the field's place and its text.
     seen_field_at: String,
     seen_field: Option<String>,
+    /// App time of the next `web-demo frames` console line.
+    next_report: Duration,
     error: Option<String>,
 }
 
@@ -361,9 +401,14 @@ impl App {
         input
             .events
             .push(Event::SafeArea(mobile::safe_area(window)));
+        let now = input.time;
         let rendered = self.stage.frame(input, text);
         let rendered_position = rendered.position;
         let (display, out, layout) = (rendered.scene, rendered.out, rendered.layout);
+        for note in &rendered.notes {
+            say!("web-demo {note}");
+        }
+        print_marks(&rendered.marks, rendered.ended);
         // What the output will set on the window, for the text bridge first (a browser's winit
         // window has no input method of its own).
         match output.plan_output(&out).ime {
@@ -392,6 +437,10 @@ impl App {
         surface.present(gpu, target);
         gpu.end_frame(text);
         self.presented += 1;
+        if now >= self.next_report {
+            self.next_report = now + REPORT_EVERY;
+            self.report_frames();
+        }
         if self.options.probe || self.presented <= self.options.log_frames {
             say!("presented {} {}x{}", self.presented, size.0, size.1);
         }
@@ -415,6 +464,19 @@ impl App {
             self.want_frame = true;
         }
         Ok(())
+    }
+
+    /// Prints `web-demo frames <n> p50 <ms> p99 <ms> backend <b>`: what the last 120 frames read.
+    fn report_frames(&self) {
+        if let Some(s) = self.stage.hud.stats() {
+            say!(
+                "web-demo frames {} p50 {:.1} p99 {:.1} backend {}",
+                s.frames,
+                s.p50,
+                s.p99,
+                self.stage.backend
+            );
+        }
     }
 
     /// Prints `probe field_at` and `probe field` (`--probe-text`) when they change.
@@ -459,6 +521,7 @@ impl App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         self.paused = false;
+        self.stage.resume_tour(self.start.elapsed());
         if let Some(shown) = &self.shown {
             shown.window.request_redraw();
             return;
@@ -493,6 +556,7 @@ impl ApplicationHandler for App {
 
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         self.paused = true;
+        self.stage.pause_tour(self.start.elapsed());
     }
 
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
@@ -572,6 +636,15 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
     stage.tier = options.motion.unwrap_or_else(host_motion);
     stage.want = options.scene;
     stage.set_look(options.look);
+    stage.hud.shown = options.hud;
+    // The attract tour plays from the first frame, unless the page asks for none, nothing moves by
+    // itself (`--still`, reduced motion) or the person is to have it (`--interactive`).
+    if stage.animating() && !options.interactive {
+        stage.play(Play {
+            repeat: !options.demo,
+            touches: options.touches,
+        });
+    }
     // A browser reports the machine it runs on (a Mac's chords are Cmd-based); elsewhere this is
     // the adapter's own keymap.
     stage.set_keymap(lune_ui::web::keymap());
@@ -597,6 +670,7 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         last_layout: None,
         seen_field_at: String::new(),
         seen_field: None,
+        next_report: REPORT_EVERY,
         error: None,
     };
     // A browser owns its loop: the app goes to the page and `run` returns at once, so a failure

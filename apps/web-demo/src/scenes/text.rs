@@ -69,6 +69,11 @@ const DOCS: [&str; 3] = [
     "# Fast on purpose\nText is shaped once and **drawn from an atlas**.\n\n- Only the lines in view\n- Selection, caret and *IME*\n\n> Typing never animates.",
 ];
 
+/// The phrase the field is typed to in round `k`.
+pub fn phrase(k: u64) -> &'static str {
+    PHRASES[(k as usize) % PHRASES.len()]
+}
+
 /// What the field and the source hold at rest.
 const FIELD_AT_REST: &str = "Hello from the canvas";
 
@@ -126,7 +131,7 @@ pub fn round(k: u64) -> (Vec<(Duration, Act)>, Duration) {
     t += ms(500);
     push(t, Act::SelectAll(Part::Field));
     t += ms(900);
-    let phrase = PHRASES[(k as usize) % PHRASES.len()];
+    let phrase = phrase(k);
     for (i, ch) in phrase.chars().enumerate() {
         push(t, Act::Type(Part::Field, ch));
         t += pace(k * 97 + i as u64, ch);

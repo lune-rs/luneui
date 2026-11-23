@@ -397,6 +397,23 @@ impl Default for Data {
     }
 }
 
+/// The pie's values as they are drawn `grow` into the scene's entry: each slice grows over 520 ms,
+/// 140 ms after the one before, so while it runs the first slices are larger shares of the disc than
+/// they are at rest (the Search slice alone is the whole disc for a moment); once it is over (or
+/// `None`, a scene at rest) they are `pie` itself.
+pub fn pie_shown(pie: &[f64; 4], grow: Option<Duration>) -> Vec<f64> {
+    pie.iter()
+        .enumerate()
+        .map(|(i, v)| {
+            v * f64::from(grown(
+                grow,
+                Duration::from_millis(140 * i as u64),
+                Duration::from_millis(520),
+            ))
+        })
+        .collect()
+}
+
 impl Data {
     /// Orders the table by `sort` (a stable order: ties by index).
     pub fn resort(&mut self, sort: SortKey) {
@@ -819,18 +836,7 @@ impl Data {
             Rect::new(inner.x + (inner.w - dia) / 2.0, top, dia, dia)
         };
         let growing = grow.is_some_and(|e| e < GROW + Duration::from_millis(300));
-        let shown: Vec<f64> = self
-            .pie
-            .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                v * f64::from(grown(
-                    grow,
-                    Duration::from_millis(140 * i as u64),
-                    Duration::from_millis(520),
-                ))
-            })
-            .collect();
+        let shown = pie_shown(&self.pie, grow);
         let slices: Vec<PieSlice> = SOURCES
             .iter()
             .enumerate()

@@ -8,6 +8,7 @@ use lune_ui::layout::Insets;
 use lune_ui::motion::MotionTier;
 use lune_ui::paint::Rect;
 use lune_ui::playback::{Player, Script};
+use lune_ui::widgets::pie_chart;
 use web_demo::scenes::controls::{self, Card as CCard};
 use web_demo::scenes::data::{self, GROW};
 use web_demo::scenes::glass::{self, Card as GCard, PARALLAX_MAX};
@@ -1283,4 +1284,50 @@ fn the_theme_autopilot_alternates_the_preset_and_the_accent() {
             .len()
             >= 5
     );
+}
+
+/// The degrees each pie slice sweeps for `values`, as the widget works them out.
+fn pie_degrees(values: &[f64]) -> Vec<f32> {
+    let values: Vec<f32> = values.iter().map(|v| *v as f32).collect();
+    pie_chart::sweeps(&values)
+        .into_iter()
+        .map(f32::to_degrees)
+        .collect()
+}
+
+#[test]
+fn a_pie_slice_sweeps_its_labelled_share_once_the_entry_is_over() {
+    // The legend says Search 38, Direct 27, Social 19, Email 16 per cent; the widget turns the same
+    // values into sweeps, and they are those shares of a whole turn to within a degree.
+    let d = data::Data::default();
+    assert_eq!(d.pie, [38.0, 27.0, 19.0, 16.0]);
+    let labelled = [38.0_f32, 27.0, 19.0, 16.0];
+    for (what, grow) in [
+        ("at rest", None),
+        ("after the entry", Some(GROW + Duration::from_millis(300))),
+    ] {
+        let shown = data::pie_shown(&d.pie, grow);
+        let degrees = pie_degrees(&shown);
+        assert_eq!(degrees.len(), 4, "{what}");
+        for (i, deg) in degrees.iter().enumerate() {
+            let want = labelled[i] / 100.0 * 360.0;
+            assert!(
+                (deg - want).abs() < 1.0,
+                "{what}: slice {i} sweeps {deg:.2} degrees, its label says {want:.2}"
+            );
+        }
+        assert!((degrees.iter().sum::<f32>() - 360.0).abs() < 0.01, "{what}");
+    }
+}
+
+#[test]
+fn while_the_pie_grows_in_the_leading_slice_is_the_larger_share_by_design() {
+    // The first frames of the entry show the Search slice alone, then Search and Direct: the slices
+    // grow one after another, so the early ones read as more than their share (the entry dump's
+    // first frames). It is the app's stagger, not the widget's sweep.
+    let d = data::Data::default();
+    let early = pie_degrees(&data::pie_shown(&d.pie, Some(Duration::from_millis(200))));
+    assert!(early[0] > 38.0 / 100.0 * 360.0 + 20.0, "{early:?}");
+    let first_frame = data::pie_shown(&d.pie, Some(Duration::ZERO));
+    assert!(first_frame.iter().all(|v| *v < 1e-3), "{first_frame:?}");
 }

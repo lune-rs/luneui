@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use lune_ui::color::{Rgba, clear, premul, with_alpha};
-use lune_ui::input::Event;
+use lune_ui::input::{Event, ImeEvent};
 use lune_ui::motion::Easing;
 use lune_ui::paint::Rect;
 use lune_ui::text::{Spec, Style};
@@ -182,6 +182,12 @@ impl Env {
     }
 }
 
+/// Whether `e` is text being composed or committed, as opposed to the input method being switched
+/// on or off (which the app's own focus changes cause).
+pub fn is_composition(e: &ImeEvent) -> bool {
+    matches!(e, ImeEvent::Preedit { .. } | ImeEvent::Commit(_))
+}
+
 /// How long a scene's autopilot stays out of the way after a real input in it.
 pub const RESUME: Duration = Duration::from_secs(5);
 
@@ -204,7 +210,10 @@ impl Pilot {
             | Event::PointerButton { pos, .. }
             | Event::Scroll { pos, .. } => area.contains(*pos),
             Event::Touch(t) => area.contains(t.pos),
-            Event::Key { .. } | Event::Text(_) | Event::Ime(_) => true,
+            Event::Key { .. } | Event::Text(_) => true,
+            // A composition is a person's; an input method switching on or off is the app's own
+            // focus (the Text scene's autopilot focuses its field), not a hand on the scene.
+            Event::Ime(e) => is_composition(e),
             _ => false,
         });
         if hit {

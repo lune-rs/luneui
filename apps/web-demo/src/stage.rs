@@ -12,11 +12,12 @@ use std::f64::consts::TAU;
 use std::time::Duration;
 
 use lune_ui::color::{Rgba, clear, mix, premul, with_alpha, with_alpha_byte};
-use lune_ui::input::{CursorIcon, FrameOutput, Keymap, NamedKey, RawInput, keymap};
+use lune_ui::input::{CursorIcon, Event, FrameOutput, Key, Keymap, NamedKey, RawInput, keymap};
 use lune_ui::layout::Insets;
 use lune_ui::lunegit_dark;
 use lune_ui::motion::{Cadence, Easing, Kind, Motion, MotionTier};
 use lune_ui::paint::{Falloff, Rect, Xform};
+use lune_ui::playback;
 use lune_ui::scene::{LayerId, Scene};
 use lune_ui::shortcuts::Shortcuts;
 use lune_ui::strings::{DisplayFormat, StringTable};
@@ -26,8 +27,10 @@ use lune_ui::ui::{FrameConfig, Response, RoveAxis, Sense, Ui, UiStore, WidgetId}
 use lune_ui::widgets::nav_item::{self, NavLook};
 use lune_ui::widgets::{nav_bar, page, tab_bar};
 
+use crate::hud::Hud;
 use crate::scenes::theme::{Fx, Look, Preset, accent_share};
 use crate::scenes::{Env, SceneId, Scenes};
+use crate::tour::{self, MarkResult, Play, Tour};
 
 /// Below this window width, in logical px, the frame is the phone's: a title bar, the stage card and
 /// a tab bar.
@@ -783,6 +786,17 @@ pub struct Rendered {
     pub layout: Layout,
     /// The scene position: the index of the current scene, between two indices during a push.
     pub position: f32,
+    /// The marks the tour passed in this frame, each with its check (run on the state the frame
+    /// drew).
+    pub marks: Vec<MarkResult>,
+    /// The tour's cycle ended in this frame: how many of its marks were ok and how many passed.
+    pub ended: Option<(u32, u32)>,
+    /// A repeating tour wrapped in this frame.
+    pub restarted: bool,
+    /// A tour that does not repeat is over.
+    pub finished: bool,
+    /// What the tour did on its own account: a stop by a person's event, a restart.
+    pub notes: Vec<String>,
 }
 
 /// The demo's state and what one frame needs besides the GPU.
@@ -808,6 +822,11 @@ pub struct Stage {
     fx: Fx,
     /// What each scene keeps between frames.
     pub scenes: Scenes,
+    /// The frame-time panel (`H`, `?hud`).
+    pub hud: Hud,
+    tour: Option<Tour>,
+    /// A text field had the focus in the last frame: `H` is then a letter, not the panel's key.
+    text_focus: bool,
 }
 
 impl Default for Stage {
@@ -832,6 +851,34 @@ impl Stage {
             keymap: None,
             fx: Fx::new(Look::DEFAULT),
             scenes: Scenes::new(),
+            hud: Hud::default(),
+            tour: None,
+            text_focus: false,
+        }
+    }
+
+    /// Plays the attract tour from the next frame on, starting on the scene the stage is on: the
+    /// script is built on that frame from its window. A real event stops it (`tour`).
+    pub fn play(&mut self, play: Play) {
+        self.tour = Some(Tour::new(play, self.want));
+    }
+
+    /// Whether the attract tour is set up and a person has not taken the stage.
+    pub fn touring(&self) -> bool {
+        self.tour.as_ref().is_some_and(|t| !t.is_stopped())
+    }
+
+    /// Stops the tour's clock at app time `now` (the app went to the background).
+    pub fn pause_tour(&mut self, now: Duration) {
+        if let Some(t) = &mut self.tour {
+            t.pause(now);
+        }
+    }
+
+    /// Starts the tour's clock again at app time `now`: the time spent paused is not played.
+    pub fn resume_tour(&mut self, now: Duration) {
+        if let Some(t) = &mut self.tour {
+            t.resume(now);
         }
     }
 
@@ -878,8 +925,43 @@ impl Stage {
 
     /// Runs one frame over `input` and returns what it drew and asked for.
     pub fn frame(&mut self, mut input: RawInput, text: &mut dyn TextSystem) -> Rendered {
+        // `H` shows or hides the frame-time panel, unless a text field is being typed into.
+        if !self.text_focus {
+            self.take_hud_key(&mut input.events);
+        }
+        self.hud.record(input.time);
+        // A person's event stops the tour, before anything of the app's own joins the input.
+        if let Some(tour) = &mut self.tour {
+            tour.observe(input.time, &mut input.events);
+        }
         // A scene's own hand (a finger dragging a card) speaks through the input like any other.
         self.scenes.inject(input.time, &mut input.events);
+        let mut adv = playback::Advance::default();
+        if let Some(tour) = &mut self.tour {
+            let safe = input
+                .events
+                .iter()
+                .rev()
+                .find_map(|e| match e {
+                    Event::SafeArea(i) => Some(*i),
+                    _ => None,
+                })
+                .unwrap_or(Insets::ZERO);
+            // A dialog or a sheet a person left open covers the rail: the tour closes it first.
+            let modal = self.scenes.glass.dialog || self.scenes.motion.real_sheet;
+            adv = tour.advance(
+                input.time,
+                input.size,
+                safe,
+                self.want,
+                modal,
+                &mut input.events,
+            );
+            if adv.restarted {
+                // Each cycle of the loop begins in the same look.
+                self.scenes.theme.look = Look::DEFAULT;
+            }
+        }
         let animating = self.animating();
         // The theme follows the look the Theme scene chose, colours only: the push's token and
         // easing (`moderate`, sine-in-out; `fast` under Reduced; a cut under Off).
@@ -1003,12 +1085,72 @@ impl Stage {
             );
         }
         let _ = t;
+        self.hud.draw(&mut ui, &layout, &self.backend);
+        let mut marks = Vec::new();
+        let mut ended = None;
+        let mut notes = Vec::new();
+        if let Some(tour) = &mut self.tour {
+            notes = tour.take_notes();
+            if tour.play().touches
+                && let Some(player) = tour.player()
+            {
+                playback::draw_touches(&mut ui, player);
+            }
+            if let Some(at) = adv.next {
+                ui.request_repaint_at(at);
+            }
+            // A mark's state is what this frame drew, after the events up to the mark.
+            for name in &adv.marks {
+                marks.push(tour.check(name, &self.scenes, self.want, pos));
+                if name == tour::END {
+                    ended = Some(tour.tally());
+                }
+            }
+        }
         let (scene, out) = ui.finish();
+        self.text_focus = out.ime_area.is_some();
         Rendered {
             scene,
             out,
             layout,
             position: pos,
+            marks,
+            ended,
+            restarted: adv.restarted,
+            finished: adv.finished,
+            notes,
+        }
+    }
+
+    /// Takes the `H` key (press, release and the text it types) out of `events` and toggles the
+    /// frame-time panel on its press, so no scene's autopilot reads it as a person's input. A chord
+    /// (Ctrl, Alt or the logo key held) is not it.
+    fn take_hud_key(&mut self, events: &mut Vec<Event>) {
+        let is_h = |e: &Event| {
+            matches!(e, Event::Key { key: Key::Character(c), modifiers, .. }
+                if c.eq_ignore_ascii_case("h") && !modifiers.control && !modifiers.alt && !modifiers.logo)
+        };
+        let mut taken = false;
+        events.retain(|e| {
+            if is_h(e) {
+                if matches!(
+                    e,
+                    Event::Key {
+                        pressed: true,
+                        repeat: false,
+                        ..
+                    }
+                ) {
+                    self.hud.toggle();
+                }
+                taken = true;
+                false
+            } else {
+                true
+            }
+        });
+        if taken {
+            events.retain(|e| !matches!(e, Event::Text(t) if t.eq_ignore_ascii_case("h")));
         }
     }
 }

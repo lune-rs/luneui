@@ -11,9 +11,11 @@
 
 #[cfg(not(target_family = "wasm"))]
 pub mod dump;
+pub mod hud;
 pub mod scenes;
 pub mod shell;
 pub mod stage;
+pub mod tour;
 #[cfg(target_family = "wasm")]
 pub mod web;
 

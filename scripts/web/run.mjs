@@ -26,7 +26,23 @@ const DEMO_VIEW = { width: 600, height: 1100, scale: 2, touch: false };
 const DESKTOP_VIEW = { width: 1440, height: 900, scale: 2, touch: false };
 const PHONE_VIEW = { width: 390, height: 844, scale: 3, touch: true };
 let VIEW = DEMO_VIEW;
-const MARKS = 16;
+// The marks of each app's tour: `demo` has 16 (the phone showcase), `web-demo` 13 (six scenes' two marks
+// each and the end; `cargo test -p web-demo --test tour` checks this number against the app's own).
+const MARKS_OF = { demo: 16, "web-demo": 13 };
+// The shots a tour run takes, each when its mark is ok. The desktop web demo's three and the phone's one.
+const SHOTS_OF = {
+  demo: [
+    ["sheet-half", "shot-1"],
+    ["page-2", "shot-2"],
+    ["settings", "shot-3"],
+  ],
+  "web-demo": [
+    ["glass-live", "shot-1"],
+    ["data-live", "shot-2"],
+    ["theme-live", "shot-3"],
+  ],
+  "web-demo-phone": [["motion-live", "shot-1"]],
+};
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -570,6 +586,9 @@ async function main() {
   const origin = `http://${SERVER_HOST}:${port}`;
   const params = [];
   if (opts.demo) params.push("demo", "touches");
+  // The web demo plays its attract tour on a plain load; every check that is not the tour judges the
+  // page itself, so it asks for none.
+  if (opts.package !== "demo" && !opts.demo) params.push("interactive");
   if (opts.smoke) params.push("probe", "probe-clipboard", "probe-text-input");
   if (opts.typeField) params.push("probe-text");
   if (opts.gl) params.push("backend=gl");
@@ -740,7 +759,7 @@ async function main() {
       if (!layout.startsWith(`probe layout ${wantLayout} `)) throw new Error(`${layout} (wanted the ${wantLayout} layout)`);
     }
     if (!opts.demo) await shoot(page, "shot-1");
-    if (fullPage) {
+    if (fullPage && !opts.demo) {
       // A second look a few seconds on: the background has moved.
       await new Promise((r) => setTimeout(r, 4_000));
       await shoot(page, "shot-2");
@@ -767,11 +786,9 @@ async function main() {
     if (opts.typeField) await typeIntoField(page, lines, waitLine, shoot);
 
     if (opts.demo) {
-      const marks = [
-        ["sheet-half", "shot-1"],
-        ["page-2", "shot-2"],
-        ["settings", "shot-3"],
-      ];
+      const marks = SHOTS_OF[opts.phone && SHOTS_OF[`${opts.package}-phone`] ? `${opts.package}-phone` : opts.package] ?? [];
+      const MARKS = MARKS_OF[opts.package];
+      if (MARKS === undefined) throw new Error(`no tour is known for the package ${opts.package}`);
       let next = 0;
       const deadline = Date.now() + TOUR_MS;
       const endRe = /^demo end \d+\/\d+$/;
@@ -790,6 +807,19 @@ async function main() {
       const okMarks = lines.filter((l) => /^demo mark \S+ ok$/.test(l)).length;
       if (end !== `demo end ${MARKS}/${MARKS}` || okMarks !== MARKS) throw new Error(`${end} with ${okMarks} marks ok (wanted ${MARKS}/${MARKS})`);
       if (next < marks.length) throw new Error(`the tour ended before the shot at mark ${marks[next][0]}`);
+      // The web demo's frame readings (report only: headless timing is noise, D235's spirit): what the
+      // app printed every 5 s, summarised.
+      const frames = lines
+        .map((l) => /^web-demo frames (\d+) p50 ([\d.]+) p99 ([\d.]+) backend (.+)$/.exec(l))
+        .filter((m) => m !== null)
+        .map((m) => ({ frames: Number(m[1]), p50: Number(m[2]), p99: Number(m[3]), backend: m[4] }));
+      if (frames.length > 0) {
+        const med = (xs) => [...xs].sort((a, b) => a - b)[Math.floor((xs.length - 1) / 2)];
+        process.stdout.write(
+          `web-run: frame readings (report only, headless): ${frames.length} lines over the tour, ${frames[frames.length - 1].frames} frames, ` +
+            `median p50 ${med(frames.map((f) => f.p50)).toFixed(1)} ms, median p99 ${med(frames.map((f) => f.p99)).toFixed(1)} ms, worst p99 ${Math.max(...frames.map((f) => f.p99)).toFixed(1)} ms, backend ${frames[0].backend}\n`,
+        );
+      }
     }
     if (opts.smoke) await smokeMacKeymap(context, origin, params.filter((p) => !["demo", "touches", "probe-clipboard"].includes(p)));
     // A last look: nothing failed while the checks ran.
