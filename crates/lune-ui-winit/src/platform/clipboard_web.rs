@@ -32,9 +32,16 @@ fn browser_clipboard() -> Option<BrowserClipboard> {
 impl AsyncSource for Web {
     fn write(&mut self, text: &str) {
         if let Some(clipboard) = browser_clipboard() {
-            // The promise is dropped: a failed write is silent, and a rejection is a handled
-            // value, not an unhandled error, because `JsFuture` is never made from it.
-            let _ = clipboard.write_text(text);
+            // `writeText` is called now, so writes keep their request order. A failed write is
+            // silent: the promise is awaited and its result dropped, because a rejected promise
+            // that nothing awaits is an unhandled rejection (a console error, and an
+            // `unhandledrejection` event on the window). `writeText` rejects whenever the page is
+            // unfocused or has no transient activation, as a copy made in a later frame is in
+            // Safari and Firefox.
+            let promise = clipboard.write_text(text);
+            spawn_local(async move {
+                let _ = JsFuture::from(promise).await;
+            });
         }
     }
 

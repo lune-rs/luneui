@@ -568,6 +568,41 @@ async function typeIntoField(page, lines, waitLine, shoot) {
   await shoot(page, "text-typed");
 }
 
+// --smoke: a rejected `navigator.clipboard.writeText` (the page is unfocused, or the copy is not inside a
+// user gesture, as in Safari and Firefox) is silent: no unhandled promise rejection reaches the page. A
+// third page replaces `writeText` with a rejecting one and listens for `unhandledrejection`; the demo
+// writes through the toolkit's clipboard in its frame 2 (`?probe-clipboard`), and nothing may be reported.
+async function smokeRejectedWrite(context, origin, params) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const page = await context.newPage();
+  const seen = [];
+  const errors = [];
+  page.on("console", (m) => seen.push(m.text()));
+  page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+  await page.addInitScript(() => {
+    window.__writes = 0;
+    navigator.clipboard.writeText = () => {
+      window.__writes++;
+      return Promise.reject(new DOMException("not focused", "NotAllowedError"));
+    };
+    window.addEventListener("unhandledrejection", () => console.log("unhandledrejection"));
+  });
+  await page.goto(`${origin}/index.html?${params.join("&")}`, { waitUntil: "load", timeout: 30_000 });
+  const end = Date.now() + 30_000;
+  while (!seen.some((l) => /^probe clipboard_write \S+$/.test(l))) {
+    if (Date.now() > end) throw new Error("rejected-write page: no `probe clipboard_write`");
+    await sleep(50);
+  }
+  await sleep(1_000); // a rejection is reported a task or two after the call
+  const writes = await page.evaluate(() => window.__writes);
+  if (writes < 1) throw new Error("rejected-write page: the app never called writeText (the check saw nothing)");
+  if (seen.includes("unhandledrejection") || errors.length > 0) {
+    throw new Error(`a rejected clipboard write was not silent: ${errors[0] ?? "unhandledrejection"}`);
+  }
+  process.stdout.write(`web-run: rejected clipboard write ok (${writes} rejected, no unhandled rejection)\n`);
+  await page.close();
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.selfTest) {
@@ -822,6 +857,7 @@ async function main() {
       }
     }
     if (opts.smoke) await smokeMacKeymap(context, origin, params.filter((p) => !["demo", "touches", "probe-clipboard"].includes(p)));
+    if (opts.smoke) await smokeRejectedWrite(context, origin, params.filter((p) => !["demo", "touches", "probe-text-input"].includes(p)));
     // A last look: nothing failed while the checks ran.
     await new Promise((r) => setTimeout(r, 300));
     if (failure !== null) throw new Error(failure);

@@ -21,7 +21,7 @@ Reading, `apps/demo` (release profile: fat LTO, `strip`, `panic = "abort"`): `de
 
 - `--demo`: the page's query is `?demo&touches`; the demo's 16-mark tour plays and the run requires `demo end 16/16`.
 - `--gl`: `?backend=gl`, WebGL2 only; the run requires `probe adapter_backend Gl`.
-- `--smoke`: the demo prints its `probe` lines; the run also checks the timed frame (`presented 31`, a `Repaint::At` frame through the browser's timer), the clipboard round trip (`probe clipboard` equals `probe clipboard_write`, and the page's own `navigator.clipboard.readText()` returns it), the text bridge (the next section's list), and the keymap: the first page reports `navigator.platform` `Win32` (`probe keymap PC`, Ctrl+A is its select all) and a second page reports `MacIntel` (`probe keymap Mac`, Cmd+A then Backspace empties the field).
+- `--smoke`: the demo prints its `probe` lines; the run also checks the timed frame (`presented 31`, a `Repaint::At` frame through the browser's timer), the clipboard round trip (`probe clipboard` equals `probe clipboard_write`, and the page's own `navigator.clipboard.readText()` returns it), a write the browser rejects raises no unhandled promise rejection (a third page replaces `writeText` with a rejecting one; the check failed on the version that dropped the promise), the text bridge (the next section's list), and the keymap: the first page reports `navigator.platform` `Win32` (`probe keymap PC`, Ctrl+A is its select all) and a second page reports `MacIntel` (`probe keymap Mac`, Cmd+A then Backspace empties the field).
 
 Readings:
 

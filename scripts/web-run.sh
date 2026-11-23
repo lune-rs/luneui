@@ -21,6 +21,8 @@
 #                   It also runs the clipboard round trip (`?probe-clipboard`, the browser's clipboard-read and
 #                   clipboard-write granted for the server's origin): `probe clipboard` must equal `probe
 #                   clipboard_write`, and `navigator.clipboard.readText()` in the page must return that text.
+#                   A third page makes `navigator.clipboard.writeText` reject and requires that the toolkit's write raises no
+#                   unhandled promise rejection (a failed write is silent).
 #                   It also drives the web text bridge (D429; the query gains `probe-text-input`): the page's search
 #                   field is clicked twice (at most one `probe focused` line for both), `hello` is typed
 #                   (exactly `hello`), Backspace gives `hell`, a CDP composition then commit gives `hell日本`,
