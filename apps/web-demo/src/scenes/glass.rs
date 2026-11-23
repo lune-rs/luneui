@@ -609,7 +609,7 @@ impl Glass {
     fn revenue_card(&mut self, ui: &mut Ui<'_>, r: Rect) {
         let t = *ui.theme();
         let (value, sub, tone) = REVENUE[self.revenue];
-        let fmt = |v: f64| format!("{:.1}k", v / 1000.0);
+        let fmt = |v: f64| format!("{}", v.round() as u64);
         let text = fmt(value);
         let opts = StatOptions {
             label: "Revenue, USD",

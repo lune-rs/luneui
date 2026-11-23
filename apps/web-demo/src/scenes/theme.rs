@@ -406,6 +406,8 @@ pub enum Card {
     Controls,
     /// A small inbox.
     Inbox,
+    /// The label that sits on each accent, with its contrast.
+    Contrast,
 }
 
 /// Where the cards sit in a body.
@@ -417,41 +419,47 @@ pub struct Plan {
     pub height: f32,
 }
 
-/// The least height of a card.
+/// The height of a card at its natural pitch: its caption, its rows and the padding.
 fn min_h(card: Card, narrow: bool) -> f32 {
     match card {
-        Card::Look => 270.0,
+        Card::Look => 262.0,
         Card::Palette => {
             if narrow {
-                196.0
+                178.0
             } else {
-                236.0
+                260.0
             }
         }
         Card::Controls => {
             if narrow {
-                420.0
+                410.0
             } else {
-                300.0
+                232.0
             }
         }
-        Card::Inbox => 268.0,
+        Card::Inbox => 26.0 + 5.0 * 60.0 + 2.0 * CARD_PAD,
+        Card::Contrast => 130.0,
     }
 }
+
+/// How far a card's rows may spread past their natural pitch: a tenth, so the rows stay together
+/// and no card holds a gap over 40 px.
+const STRETCH: f32 = 1.1;
 
 /// The widest the left column of the wide frame gets.
 const LEFT_W: f32 = 340.0;
 
 /// Lays the cards out: two columns (the look and the palette, the controls and the inbox) with
-/// room, one stacked column (which scrolls) without. Spare height stretches each column's cards by
-/// at most 40 %.
+/// room, one stacked column (which scrolls) without. Cards are as tall as their rows at their natural
+/// pitch; spare height stretches a column's cards by at most a tenth and the rest is free space
+/// under the column.
 pub fn plan(body: Rect, wide: bool) -> Plan {
     let two = wide && body.w >= 760.0;
     let stack = |cards: &[Card], x: f32, w: f32, top: f32, fit: Option<f32>| {
         let mins: Vec<f32> = cards.iter().map(|c| min_h(*c, !two)).collect();
         let gaps = GAP * (cards.len() as f32 - 1.0);
         let need: f32 = mins.iter().sum::<f32>() + gaps;
-        let k = fit.map_or(1.0, |h| ((h - gaps) / (need - gaps)).clamp(1.0, 1.5));
+        let k = fit.map_or(1.0, |h| ((h - gaps) / (need - gaps)).clamp(1.0, STRETCH));
         let mut y = top;
         let mut out = Vec::new();
         for (c, h) in cards.iter().zip(mins) {
@@ -463,7 +471,7 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     if two {
         let right_w = body.w - LEFT_W - GAP;
         let (mut cards, lh) = stack(
-            &[Card::Look, Card::Palette],
+            &[Card::Look, Card::Palette, Card::Contrast],
             body.x,
             LEFT_W,
             body.y,
@@ -483,7 +491,13 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
         }
     } else {
         let (cards, h) = stack(
-            &[Card::Look, Card::Controls, Card::Inbox, Card::Palette],
+            &[
+                Card::Look,
+                Card::Controls,
+                Card::Inbox,
+                Card::Palette,
+                Card::Contrast,
+            ],
             body.x,
             body.w,
             body.y,
@@ -493,11 +507,12 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     }
 }
 
-const NAMES: [(&str, &str); 4] = [
+const NAMES: [(&str, &str); 5] = [
     ("Mara Okafor", "Build 482 is green on every target"),
     ("Jun Park", "Review: glass tint in the dialog card"),
     ("Sofia Reyes", "Release notes for 0.7.7, final pass"),
     ("Tomas Berg", "Frame times on the old laptop"),
+    ("Aiko Tanaka", "Sketches for the tour's first scene"),
 ];
 const TAGS: [(&str, Tone); 4] = [
     ("Passed", Tone::Ok),
@@ -582,6 +597,7 @@ impl ThemeScene {
                     Card::Palette => self.palette_card(ui, inner),
                     Card::Controls => self.controls_card(ui, inner),
                     Card::Inbox => self.inbox_card(ui, inner),
+                    Card::Contrast => self.contrast_card(ui, inner),
                 }
             }
         });
@@ -872,13 +888,42 @@ impl ThemeScene {
         self.targets.note("primary", b1);
     }
 
+    fn contrast_card(&mut self, ui: &mut Ui<'_>, inner: Rect) {
+        let t = *ui.theme();
+        caps(ui, "Label on the accent", inner.x, inner.y);
+        let base = self.look.preset.base();
+        let n = Accent::ALL.len();
+        let gap = 6.0;
+        let w = (inner.w - gap * (n as f32 - 1.0)) / n as f32;
+        let top = inner.y + 26.0;
+        let h = 44.0_f32.min((inner.bottom() - top - 20.0).max(24.0));
+        for (i, accent) in Accent::ALL.iter().enumerate() {
+            let look = Look {
+                preset: self.look.preset,
+                accent: *accent,
+            };
+            let theme = look.theme();
+            let chip = Rect::new(inner.x + i as f32 * (w + gap), top, w, h);
+            let p = ui.painter();
+            p.fill(chip, 8.0, accent.colour(&base));
+            p.text_centered(
+                &Spec::plain("Aa", Style::ui(t.font_m, theme.on_accent).medium()),
+                chip,
+            );
+            let ratio = format!("{:.1}", contrast(theme.on_accent, theme.accent));
+            let spec = Spec::plain(ratio, Style::ui(t.font_s, t.fg_secondary));
+            let tw = p.measure(&spec).0;
+            p.text(&spec, chip.x + (chip.w - tw) / 2.0, chip.bottom() + 6.0);
+        }
+    }
+
     fn inbox_card(&mut self, ui: &mut Ui<'_>, inner: Rect) {
         let t = *ui.theme();
         caps(ui, "Inbox", inner.x, inner.y);
         let top = inner.y + 26.0;
         let rows = NAMES.len();
-        let pitch = ((inner.bottom() - top) / rows as f32).min(72.0);
-        let hues = [t.accent, t.data, t.ok, t.gold];
+        let pitch = ((inner.bottom() - top) / rows as f32).min(66.0);
+        let hues = [t.accent, t.data, t.ok, t.gold, t.err];
         for (i, (name, subject)) in NAMES.iter().enumerate() {
             let r = Rect::new(
                 inner.x - 6.0,
@@ -914,7 +959,7 @@ impl ThemeScene {
                 &Spec::plain(initial, Style::ui(t.font_base, on).medium()),
                 disc,
             );
-            let (tag, tone) = TAGS[i];
+            let (tag, tone) = TAGS[i % TAGS.len()];
             let bw = badge::width(p, tag, false);
             let tx = disc.right() + 12.0;
             let w = (inner.right() - bw - 8.0 - tx).max(0.0);

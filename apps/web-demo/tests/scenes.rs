@@ -740,6 +740,66 @@ fn the_table_rows_slide_to_their_new_places() {
 }
 
 #[test]
+fn a_sort_never_prints_two_rows_over_each_other_and_starts_on_the_row_pitch() {
+    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
+    run.stage.want = SceneId::Data;
+    run.stage.still = true;
+    run.run(60, FRAME);
+    let mut frames = 0;
+    let mut moving = 0;
+    let mut worst_overlap = f32::MIN;
+    for head in ["head1", "head2", "head0", "head1", "head2"] {
+        let at = run
+            .stage
+            .scenes
+            .targets(SceneId::Data)
+            .and_then(|t| t.centre(head))
+            .expect("a header");
+        // The first frame after the click's lift is the start of the slide: every row on its pitch.
+        let mut s = Script::new();
+        s.wait(Duration::from_millis(60)).tap(at);
+        let mut player = Player::new(s);
+        let order_before = run.stage.scenes.data.order.clone();
+        let mut started = false;
+        for _ in 0..70 {
+            let mut events = Vec::new();
+            player.advance(run.time + FRAME, &mut events);
+            run.step(FRAME, events);
+            let poses = run.stage.scenes.data.row_poses.clone();
+            if !started && run.stage.scenes.data.order != order_before {
+                started = true;
+                for (i, (slot, _)) in poses.iter().enumerate() {
+                    assert!(
+                        (slot - slot.round()).abs() < 0.02,
+                        "{head}: row {i} is off the pitch at the start of the slide: {slot}"
+                    );
+                }
+            }
+            frames += 1;
+            if poses.iter().any(|(s, _)| (s - s.round()).abs() > 0.02) {
+                moving += 1;
+            }
+            for (i, a) in poses.iter().enumerate() {
+                for b in &poses[i + 1..] {
+                    let overlap = data::ROW_TEXT - (a.0 - b.0).abs() * lune_ui::widgets::table::ROW;
+                    worst_overlap = worst_overlap.max(overlap);
+                    assert!(
+                        overlap <= 2.0 || a.1 <= 0.3 || b.1 <= 0.3,
+                        "{head}: two rows overlap by {overlap:.1} px at opacities {} and {}",
+                        a.1,
+                        b.1
+                    );
+                }
+            }
+        }
+    }
+    println!(
+        "sorts: {frames} frames sampled, {moving} of them moving, no overlap over 2 px with both rows above 0.3 opacity"
+    );
+    assert!(moving >= 40, "{moving}");
+}
+
+#[test]
 fn the_grow_in_plays_on_each_entry_after_the_push_lands() {
     let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
     // From the scene next to it: a push passes through the scenes in between.
@@ -885,12 +945,9 @@ fn text_typed_through_the_events_reaches_the_field() {
 #[test]
 fn the_script_types_at_a_human_pace_and_the_preview_follows() {
     // The pace, from the schedule: 40 to 80 ms a character, and a pause after a word.
-    let doc = lune_ui::code_doc::CodeDoc::new(
-        "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\no\np\nq\nr\ns\nt",
-    );
     let mut gaps = Vec::new();
     for k in 0..4 {
-        let (acts, length) = text::round(k, &doc);
+        let (acts, length) = text::round(k);
         assert!(
             length > Duration::from_secs(10) && length < Duration::from_secs(40),
             "{length:?}"
@@ -966,27 +1023,27 @@ fn the_autopilot_types_into_the_field_and_the_source_and_the_preview_follows() {
 }
 
 #[test]
-fn the_code_view_shows_a_selection_the_script_makes() {
-    let mut run = Headless::new((1440.0, 900.0), 2.0, Insets::ZERO);
-    run.stage.want = SceneId::Text;
-    let doc = lune_ui::code_doc::CodeDoc::new("x");
-    let (acts, _) = text::round(0, &doc);
-    // Find when the script selects a line, and draw just before and just after.
-    let at = acts
-        .iter()
-        .find_map(|(t, a)| matches!(a, Act::SelectLine(_)).then_some(*t))
-        .expect("a selection");
-    let dt = Duration::from_millis(50);
-    while run.time + dt < at + Duration::from_millis(400) {
-        run.step(dt, Vec::new());
+fn the_code_lines_are_short_enough_for_the_narrowest_window() {
+    for (i, l) in text::CODE.lines().enumerate() {
+        assert!(l.chars().count() <= 28, "line {}: {l:?}", i + 1);
     }
-    let selected = run.step(dt, Vec::new()).scene;
-    // Later the script has moved on to the source; the picture differs.
-    for _ in 0..80 {
-        run.step(dt, Vec::new());
+}
+
+#[test]
+fn every_selection_the_script_makes_is_held_for_a_second_and_a_half() {
+    assert!(text::SELECTION_HOLD >= Duration::from_millis(1500));
+    let (acts, length) = text::round(0);
+    // Every selection the script makes is followed by at least the hold before the next act.
+    for (i, (t, a)) in acts.iter().enumerate() {
+        if matches!(a, Act::SelectAll(Part::Code) | Act::SelectLine(..)) {
+            let next = acts.get(i + 1).map_or(length, |n| n.0);
+            assert!(
+                next - *t >= text::SELECTION_HOLD,
+                "{a:?} is held {:?}",
+                next - *t
+            );
+        }
     }
-    let later = run.step(dt, Vec::new()).scene;
-    assert!(selected != later);
 }
 
 // ---------------------------------------------------------------------------------------------

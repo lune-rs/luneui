@@ -70,7 +70,7 @@ fn min_h(card: Card) -> f32 {
     match card {
         Card::Stats => 100.0,
         Card::Bars | Card::Pie | Card::Table => 292.0,
-        Card::Board | Card::Meters => 304.0,
+        Card::Board | Card::Meters => 290.0,
     }
 }
 
@@ -123,7 +123,7 @@ pub fn plan(body: Rect, wide: bool) -> Plan {
     let need = mins.iter().sum::<f32>() + gaps;
     let first = mins[0];
     let k = if rows.len() <= 3 {
-        ((body.h - gaps - first) / (need - gaps - first)).clamp(1.0, 1.4)
+        ((body.h - gaps - first) / (need - gaps - first)).clamp(1.0, 1.1)
     } else {
         1.0
     };
@@ -189,6 +189,18 @@ const SERVICES: [Service; 7] = [
         latency: 73,
     },
 ];
+
+/// How opaque a row's text is while it is `dy` px from its slot: solid at rest, a quarter of that
+/// from 4 px on. A row that travels past another one ghosts, so the two never print over each other
+/// (with both above 0.3 the rows are within 3.2 px of their slots, and a slot is 28 px apart).
+pub fn row_alpha(dy: f32) -> f32 {
+    let k = ((dy.abs() - 1.0) / 3.0).clamp(0.0, 1.0);
+    let smooth = k * k * (3.0 - 2.0 * k);
+    1.0 - 0.75 * smooth
+}
+
+/// The height of a row's text box: the table's own body line.
+pub const ROW_TEXT: f32 = 20.0;
 
 /// The table's own text sits this far above the middle of its slot (the hairline under each row).
 const ROW_NUDGE: f32 = 3.0;
@@ -330,6 +342,11 @@ pub struct Data {
     pub order: Vec<usize>,
     /// The meters, 0 to 1.
     pub meters: [f32; 5],
+    /// Where each service's row was drawn in the last frame: its slot (eased, in rows from the top)
+    /// and the opacity of its text.
+    pub row_poses: Vec<(f32, f32)>,
+    /// Where each row's slide began and where it goes (slots), for its fade.
+    row_runs: Vec<(f32, f32)>,
     /// The lane each task is in, and the order they were put in it.
     pub lanes: Vec<(u64, usize)>,
     /// How many days the chart has rolled.
@@ -366,6 +383,8 @@ impl Default for Data {
             pie: [38.0, 27.0, 19.0, 16.0],
             order: (0..SERVICES.len()).collect(),
             meters: [0.82, 0.64, 0.93, 0.38, 0.55],
+            row_poses: Vec::new(),
+            row_runs: Vec::new(),
             lanes: TASKS.iter().map(|t| (t.key, t.lane)).collect(),
             rolled: 0,
             grew: None,
@@ -709,7 +728,9 @@ impl Data {
     fn bars_card(&mut self, ui: &mut Ui<'_>, inner: Rect, grow: Option<Duration>) {
         let t = *ui.theme();
         caps(ui, "Traffic, 14 days", inner.x, inner.y);
-        let y = inner.y + 30.0;
+        // The chart (it has a fixed height) sits in the middle of what the card has under its caption.
+        let spare = (inner.h - 30.0 - bar_chart::height()).max(0.0);
+        let y = inner.y + 30.0 + spare / 2.0;
         let total: f64 = self.bars.iter().map(|b| b[0]).sum();
         let signups: f64 = self.bars.iter().map(|b| b[1]).sum();
         let summary = format!(
@@ -787,10 +808,15 @@ impl Data {
         let colours: [Rgba; 4] = [t.data, t.ok, t.gold, t.err];
         let side = inner.w >= 260.0;
         let dia = pie_chart::DIAMETER;
+        // The disc, and under it the leading source, sit in the middle of what the card has under
+        // its caption.
+        let footer = 46.0;
+        let block = dia + 14.0 + footer;
+        let top = inner.y + 28.0 + ((inner.h - 28.0 - block) / 2.0).max(0.0);
         let disc = if side {
-            Rect::new(inner.x, inner.y + 28.0, dia, dia)
+            Rect::new(inner.x, top, dia, dia)
         } else {
-            Rect::new(inner.x + (inner.w - dia) / 2.0, inner.y + 28.0, dia, dia)
+            Rect::new(inner.x + (inner.w - dia) / 2.0, top, dia, dia)
         };
         let growing = grow.is_some_and(|e| e < GROW + Duration::from_millis(300));
         let shown: Vec<f64> = self
@@ -860,6 +886,39 @@ impl Data {
                 t.fg_secondary,
             );
         }
+        // The leading source, under a hairline.
+        let lead = (0..SOURCES.len())
+            .max_by(|a, b| self.pie[*a].total_cmp(&self.pie[*b]))
+            .unwrap_or(0);
+        let fy = disc.bottom() + 14.0;
+        ui.painter().fill(
+            Rect::new(inner.x, fy, inner.w, 1.0),
+            0.0,
+            t.surface_separator,
+        );
+        line(
+            ui,
+            "Leading source",
+            inner.x,
+            fy + 14.0,
+            inner.w,
+            t.font_s,
+            t.fg_tertiary,
+        );
+        let text = format!(
+            "{}, {}%",
+            SOURCES[lead].1,
+            (self.pie[lead] / total * 100.0).round() as u32
+        );
+        line(
+            ui,
+            &text,
+            inner.x,
+            fy + 32.0,
+            inner.w,
+            t.font_m,
+            t.fg_primary,
+        );
     }
 
     fn table_card(&mut self, ui: &mut Ui<'_>, inner: Rect) {
@@ -880,6 +939,28 @@ impl Data {
                 ui.animate_f32(id, slot, &Motion::of(Kind::Move))
             })
             .collect();
+        // A row fades out as it leaves its slot and in as it reaches the next one, so two rows that
+        // cross never print over each other, and a row at rest or at the start of a slide is solid.
+        let before = std::mem::take(&mut self.row_poses);
+        let targets: Vec<f32> = (0..SERVICES.len())
+            .map(|i| self.order.iter().position(|o| *o == i).unwrap_or(i) as f32)
+            .collect();
+        if self.row_runs.len() != SERVICES.len() {
+            self.row_runs = targets.iter().map(|t| (*t, *t)).collect();
+        }
+        for (i, run) in self.row_runs.iter_mut().enumerate() {
+            if run.1 != targets[i] {
+                *run = (before.get(i).map_or(targets[i], |b| b.0), targets[i]);
+            }
+        }
+        self.row_poses = (0..SERVICES.len())
+            .map(|i| {
+                let (from, to) = self.row_runs[i];
+                let near = (slots[i] - from).abs().min((slots[i] - to).abs());
+                (slots[i], row_alpha(near * ROW))
+            })
+            .collect();
+        let poses = self.row_poses.clone();
         let layout = table::columns(&COLUMNS, rect.w);
         for (i, (x, w)) in layout.iter().enumerate() {
             self.targets.note(
@@ -904,20 +985,21 @@ impl Data {
             |ui, c: &CellCtx| {
                 let s = SERVICES[order[c.row]];
                 let dy = (slots[order[c.row]] - c.row as f32) * ROW;
+                let alpha = poses[order[c.row]].1;
                 let (text, style, right) = match c.column {
                     0 => (
                         s.name.to_owned(),
-                        Style::ui(t.font_base, t.fg_primary).medium(),
+                        Style::ui(t.font_base, with_alpha(t.fg_primary, alpha)).medium(),
                         false,
                     ),
                     1 => (
                         s.requests.to_string(),
-                        Style::mono(t.font_base, 20.0, t.fg_primary),
+                        Style::mono(t.font_base, ROW_TEXT, with_alpha(t.fg_primary, alpha)),
                         true,
                     ),
                     _ => (
                         s.latency.to_string(),
-                        Style::mono(t.font_base, 20.0, t.fg_secondary),
+                        Style::mono(t.font_base, ROW_TEXT, with_alpha(t.fg_secondary, alpha)),
                         true,
                     ),
                 };

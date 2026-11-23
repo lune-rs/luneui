@@ -33,30 +33,26 @@ pub const TYPE_MAX: Duration = Duration::from_millis(80);
 /// The extra pause after a space or a comma.
 pub const WORD_PAUSE: Duration = Duration::from_millis(170);
 
-/// The code view's text: a few lines of the toolkit's own API.
-const CODE: &str = "use lune_ui::prelude::*;
+/// The code view's text: a few lines of the toolkit's own API, none longer than 28 characters so
+/// every line fits the code view on the narrowest window (320 px) without a sideways scroll.
+pub const CODE: &str = "use lune_ui::prelude::*;
 
-/// A glass card with one button.
-fn card(ui: &mut Ui<'_>, r: Rect) -> bool {
+/// A glass card.
+fn card(ui: &mut Ui) {
     let t = *ui.theme();
+    let r = ui.rect();
+
+    // Frost and a hairline.
     let p = ui.painter();
+    p.frost(r, 12, t.glass);
+    p.ring(r, 12, t.border);
 
-    // Frost over the light, then a hairline.
-    p.frost(r, 12.0, premul(t.menu_glass), true);
-    p.ring(r, 12.0, 1.0, t.menu_popup_border, false);
-
-    let pad = r.inset(16.0, 16.0);
-    let b = ui.button(\"open\", pad, \"Open\", Primary);
-    if b.clicked {
-        ui.toast(\"Opened\", Tone::Ok);
+    // One button inside.
+    let b = r.inset(16);
+    if ui.button(\"Go\", b) {
+        ui.toast(\"Opened\");
     }
-
-    // The caller decides what a click does.
-    b.clicked
 }";
-
-/// The lines of the code the autopilot selects, one per round.
-const SELECTED: [usize; 4] = [3, 8, 13, 9];
 
 /// What the field is typed to, round by round.
 const PHRASES: [&str; 4] = [
@@ -94,8 +90,8 @@ pub enum Act {
     Focus(Part),
     /// Selects everything in a part.
     SelectAll(Part),
-    /// Selects the line of the code that holds this char offset.
-    SelectLine(usize),
+    /// Selects the line of a part that holds this char offset.
+    SelectLine(Part, usize),
     /// Types a character into a part.
     Type(Part, char),
 }
@@ -111,8 +107,16 @@ fn pace(n: u64, ch: char) -> Duration {
     d
 }
 
+/// How long a selection is held before the script goes on.
+pub const SELECTION_HOLD: Duration = Duration::from_millis(1800);
+
+/// The char offset of the start of the second line of `text`.
+fn second_line(text: &str) -> usize {
+    text.chars().position(|c| c == '\n').map_or(0, |n| n + 1)
+}
+
 /// Round `k` of the script: what is done and when, and how long the round lasts.
-pub fn round(k: u64, doc: &CodeDoc) -> (Vec<(Duration, Act)>, Duration) {
+pub fn round(k: u64) -> (Vec<(Duration, Act)>, Duration) {
     let mut acts = Vec::new();
     let mut t = Duration::from_millis(300);
     let ms = Duration::from_millis;
@@ -128,13 +132,12 @@ pub fn round(k: u64, doc: &CodeDoc) -> (Vec<(Duration, Act)>, Duration) {
         t += pace(k * 97 + i as u64, ch);
     }
     t += ms(1200);
-    // The code: select one line.
+    // The code: the whole text selected (a read-only view takes select all and copy), held.
     push(t, Act::Focus(Part::Code));
     t += ms(250);
-    let line = SELECTED[(k as usize) % SELECTED.len()].min(doc.line_count().saturating_sub(1));
-    push(t, Act::SelectLine(doc.line_start(line)));
-    t += ms(1800);
-    // The source: select it and type a document.
+    push(t, Act::SelectAll(Part::Code));
+    t += SELECTION_HOLD;
+    // The source: select it and type a document, then select its first line and hold.
     push(t, Act::Focus(Part::Source));
     t += ms(400);
     push(t, Act::SelectAll(Part::Source));
@@ -144,7 +147,9 @@ pub fn round(k: u64, doc: &CodeDoc) -> (Vec<(Duration, Act)>, Duration) {
         push(t, Act::Type(Part::Source, ch));
         t += pace(k * 131 + i as u64, ch);
     }
-    t += ms(1800);
+    t += ms(700);
+    push(t, Act::SelectLine(Part::Source, second_line(text)));
+    t += SELECTION_HOLD;
     (acts, t)
 }
 
@@ -173,7 +178,7 @@ pub struct Plan {
 }
 
 /// The lines the code view shows on a wide window and on a narrow one.
-const CODE_LINES: (f32, f32) = (20.0, 12.0);
+const CODE_LINES: (f32, f32) = (18.0, 18.0);
 
 /// The height of a card whose code view shows `lines` lines: the padding, the caption and the lines.
 fn code_h(lines: f32) -> f32 {
@@ -551,7 +556,7 @@ pub struct TextScene {
 impl Default for TextScene {
     fn default() -> Self {
         let doc = CodeDoc::new(CODE);
-        let (script, length) = round(0, &doc);
+        let (script, length) = round(0);
         Self {
             pilot: Pilot::default(),
             entry: Entry::default(),
@@ -576,7 +581,7 @@ impl TextScene {
         self.round = 0;
         self.clock = Duration::ZERO;
         self.next = 0;
-        let (script, length) = round(0, &self.doc);
+        let (script, length) = round(0);
         self.script = script;
         self.length = length;
     }
@@ -596,7 +601,7 @@ impl TextScene {
         while self.clock >= self.length {
             self.clock -= self.length;
             self.round += 1;
-            let (script, length) = round(self.round, &self.doc);
+            let (script, length) = round(self.round);
             self.script = script;
             self.length = length;
             self.next = 0;
@@ -628,8 +633,8 @@ impl TextScene {
                         ui.edit_command(id, EditCommand::SelectAll);
                     }
                 }
-                Act::SelectLine(at) => {
-                    if let Some(id) = id_of(Part::Code) {
+                Act::SelectLine(p, at) => {
+                    if let Some(id) = id_of(p) {
                         ui.edit_command(id, EditCommand::SelectLineAt(at));
                     }
                 }
