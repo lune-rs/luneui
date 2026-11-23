@@ -11,7 +11,7 @@ use lune_ui::scene::Scene;
 use web_demo::scenes::SceneId;
 use web_demo::stage::{
     BLOBS, Headless, Layout, NARROW_BELOW, RAIL_W, STILL_AT, blob_centre, blob_speed_bound,
-    shortest_period,
+    old_opacity, scrim, shortest_period,
 };
 
 const FRAME: Duration = Duration::from_micros(16_667);
@@ -340,4 +340,16 @@ fn frames_are_deterministic_and_a_still_stage_does_not_depend_on_the_clock() {
         frame(true, 0) == frame(false, STILL_AT.as_secs()),
         "still rests where the dump is taken"
     );
+}
+
+#[test]
+fn the_old_page_is_gone_by_the_middle_and_the_scrim_leaves_no_trace_at_the_end() {
+    println!("old page opacity at 50 %: {}", old_opacity(0.5));
+    assert!(old_opacity(0.5) <= 0.1);
+    assert_eq!(old_opacity(0.0), 1.0);
+    assert_eq!(scrim(0.0), 0.0);
+    assert_eq!(scrim(1.0), 0.0);
+    assert!(scrim(1.0 / 3.0) > 0.99, "the scrim reaches its peak");
+    // At 90 % of the time the eased progress is 0.976: under 1 % of the backdrop's alpha.
+    assert!(scrim(0.976) < 0.01, "{}", scrim(0.976));
 }

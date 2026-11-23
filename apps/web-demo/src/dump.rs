@@ -48,6 +48,8 @@ pub struct Request {
     pub to: Option<(SceneId, f32)>,
     /// The motion tier.
     pub tier: MotionTier,
+    /// The background rests (`--still`): the strips of a push then differ only by the push.
+    pub still: bool,
     /// The file name without `.png`.
     pub name: String,
 }
@@ -70,6 +72,7 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
         at: AT,
         to: None,
         tier: MotionTier::Full,
+        still: false,
         name: String::new(),
     };
     let (mut any, mut only, mut to, mut progress, mut scale_given) =
@@ -77,6 +80,10 @@ pub fn parse_request(args: impl Iterator<Item = String>) -> Option<Option<Reques
     let mut args = args;
     while let Some(arg) = args.next() {
         any = true;
+        if arg == "--still" {
+            req.still = true;
+            continue;
+        }
         let value = args.next()?;
         match arg.as_str() {
             "--only" => {
@@ -126,6 +133,7 @@ fn render(
     req: &Request,
 ) -> Result<(Vec<u8>, (u32, u32)), String> {
     run.stage.tier = req.tier;
+    run.stage.still = req.still;
     run.stage.want = req.scene;
     run.stage.backend = "headless".to_owned();
     let rendered = match req.to {
@@ -165,6 +173,7 @@ pub fn write_all(dir: &Path) -> Result<(), String> {
                 at: AT,
                 to: None,
                 tier: MotionTier::Full,
+                still: false,
                 name: format!("{prefix}-{}", scene.slug()),
             };
             let mut run = Headless::new(size, scale, safe_for(size));

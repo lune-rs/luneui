@@ -558,15 +558,21 @@ fn level(on: bool) -> f32 {
 }
 
 /// The narrow frame's title bar and tab bar. Returns the scene a tab chose.
-fn draw_bars(ui: &mut Ui<'_>, l: &Layout, pos: f32, current: SceneId) -> Option<usize> {
+fn draw_bars(ui: &mut Ui<'_>, l: &Layout, pos: f32) -> Option<usize> {
     let t = *ui.theme();
     glass(ui, l.title_bar, 0.0);
     glass(ui, l.tab_bar, 0.0);
-    let title = Spec::plain(
-        current.name(),
-        Style::ui(t.font_title, t.fg_bright).medium(),
-    );
-    ui.painter().text_centered(&title, l.title_row());
+    // The title cross-fades with the push (opacity only): the two names share the row.
+    let lo = pos.floor();
+    let f = pos - lo;
+    for (index, alpha) in [(lo as usize, 1.0 - f), (lo as usize + 1, f)] {
+        if alpha > 0.0 {
+            let name = SceneId::from_index(index).name();
+            let colour = with_alpha(t.fg_bright, alpha);
+            let title = Spec::plain(name, Style::ui(t.font_title, colour).medium());
+            ui.painter().text_centered(&title, l.title_row());
+        }
+    }
     let cells = l.tab_cells();
     let (chose, responses) = nav_group(
         ui,
@@ -632,34 +638,62 @@ struct Show {
     dx: f32,
     dy: f32,
     alpha: f32,
-    /// The scrim over what is below, and the opacity of the plate the page slides on (0 for none).
+    /// The scrim over what is below the page (0 for none).
     scrim: f32,
-    plate: f32,
 }
+
+impl Show {
+    /// A page at rest: on `Page`, in place, opaque, no scrim.
+    const REST: Show = Show {
+        layer: LayerId::Page,
+        dx: 0.0,
+        dy: 0.0,
+        alpha: 1.0,
+        scrim: 0.0,
+    };
+}
+
+/// The old page's opacity at `f` of a Full push (its eased progress): gone by the middle.
+pub fn old_opacity(f: f32) -> f32 {
+    1.0 - Easing::QuadOut.eval(f * 2.0)
+}
+
+/// The push's scrim (a share of the theme's `dialog_backdrop`) at `f`: 0 at both ends, `SCRIM_PEAK` a
+/// third of the way (`27/4 f (1 - f)^2` peaks at 1/3), so the settled frame has none.
+pub fn scrim(f: f32) -> f32 {
+    SCRIM_PEAK * 6.75 * f * (1.0 - f) * (1.0 - f)
+}
+
+/// The most the push's scrim darkens (a share of the theme's `dialog_backdrop`): it rises with the push
+/// and is gone at its end.
+const SCRIM_PEAK: f32 = 1.0;
 
 /// Draws `scene`'s page (its header and body) into the card, clipped to it.
 fn draw_page(ui: &mut Ui<'_>, scenes: &mut Scenes, l: &Layout, scene: SceneId, show: Show) {
     let t = *ui.theme();
-    let moved = show.dx != 0.0 || show.dy != 0.0 || show.alpha < 1.0;
+    let moved = show.dx != 0.0 || show.dy != 0.0;
+    let faded = show.alpha < 1.0;
     {
         let p = ui.painter();
         p.on(show.layer);
-        p.push_clip_rounded(l.card, CARD_RADIUS);
+        // Inside the card's hairline: a glyph clipped to a rect edge can bleed a pixel past it.
+        p.push_clip_rounded(l.card.inset(1.0, 1.0), CARD_RADIUS - 1.0);
         if show.scrim > 0.0 {
             p.fill(l.card, 0.0, with_alpha(t.dialog_backdrop, show.scrim));
         }
+        // A translation keeps the card's clip where it is on screen (a plain `push_xform` would move
+        // it with the page, and the page would spill out of the card).
         if moved {
+            p.push_translate(show.dx, show.dy);
+        }
+        if faded {
             p.push_xform(Xform {
                 origin: (0.0, 0.0),
                 scale: 1.0,
-                dx: show.dx,
-                dy: show.dy,
+                dx: 0.0,
+                dy: 0.0,
                 alpha: show.alpha,
             });
-        }
-        if show.plate > 0.0 {
-            let a = (show.plate.clamp(0.0, 1.0) * 255.0).round() as u8;
-            p.fill(l.card, 0.0, with_alpha_byte(t.menu_glass, a));
         }
         // The header.
         let page = l.page();
@@ -685,8 +719,11 @@ fn draw_page(ui: &mut Ui<'_>, scenes: &mut Scenes, l: &Layout, scene: SceneId, s
     let body = l.body(&t);
     ui.scope(scene.slug(), |ui| scenes.draw(scene, ui, body, l.wide));
     let p = ui.painter();
-    if moved {
+    if faded {
         p.pop_xform();
+    }
+    if moved {
+        p.pop_translate();
     }
     p.pop_clip();
     p.on(LayerId::Page);
@@ -811,12 +848,7 @@ impl Stage {
         let chose = if layout.wide {
             draw_rail(&mut ui, &layout, pos, &self.backend)
         } else {
-            draw_bars(
-                &mut ui,
-                &layout,
-                pos,
-                SceneId::from_index(pos.round() as usize),
-            )
+            draw_bars(&mut ui, &layout, pos)
         };
         if let Some(i) = chose {
             self.want = SceneId::from_index(i);
@@ -826,15 +858,7 @@ impl Stage {
         let near = pos.round();
         if (pos - near).abs() < 1e-3 {
             let at = SceneId::from_index(near as usize);
-            let rest = Show {
-                layer: LayerId::Page,
-                dx: 0.0,
-                dy: 0.0,
-                alpha: 1.0,
-                scrim: 0.0,
-                plate: 0.0,
-            };
-            draw_page(&mut ui, &mut self.scenes, &layout, at, rest);
+            draw_page(&mut ui, &mut self.scenes, &layout, at, Show::REST);
         } else {
             let lo = pos.floor();
             let f = pos - lo;
@@ -845,44 +869,37 @@ impl Stage {
             } else {
                 (layout.card.w, 0.0)
             };
-            let full = ui.tier() == MotionTier::Full;
-            let (under_show, over_show) = if full {
+            let (under_show, over_show) = if ui.tier() == MotionTier::Full {
                 (
+                    // The old page moves a quarter of the way and is gone by the middle of the push.
                     Show {
-                        layer: LayerId::Page,
                         dx: -f * PARALLAX * reach_x,
                         dy: -f * PARALLAX * reach_y,
-                        alpha: 1.0,
-                        scrim: 0.0,
-                        plate: 0.0,
+                        alpha: old_opacity(f),
+                        ..Show::REST
                     },
+                    // The new page slides in over a scrim that rises and is gone again at the end,
+                    // so the settled frame has none.
                     Show {
                         layer: LayerId::Popup,
                         dx: (1.0 - f) * reach_x,
                         dy: (1.0 - f) * reach_y,
-                        alpha: 1.0,
-                        scrim: Easing::QuadOut.eval(f),
-                        plate: (1.0 - f).sqrt(),
+                        scrim: scrim(f),
+                        ..Show::REST
                     },
                 )
             } else {
-                // Reduced: no movement, the new page fades in over the old one.
+                // Reduced: no movement; the old page fades out over the first half and the new one in
+                // over the second.
                 (
                     Show {
-                        layer: LayerId::Page,
-                        dx: 0.0,
-                        dy: 0.0,
-                        alpha: 1.0,
-                        scrim: 0.0,
-                        plate: 0.0,
+                        alpha: 1.0 - Easing::QuadIn.eval(f * 2.0),
+                        ..Show::REST
                     },
                     Show {
                         layer: LayerId::Popup,
-                        dx: 0.0,
-                        dy: 0.0,
-                        alpha: f,
-                        scrim: 0.0,
-                        plate: 1.0,
+                        alpha: Easing::QuadOut.eval(f * 2.0 - 1.0),
+                        ..Show::REST
                     },
                 )
             };
