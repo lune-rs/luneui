@@ -3,15 +3,20 @@
 
 #![deny(unsafe_code)]
 
+#[cfg(not(target_family = "wasm"))]
+use std::path::PathBuf;
+#[cfg(not(target_family = "wasm"))]
 use std::process::ExitCode;
 
-use std::path::PathBuf;
-
+#[cfg(not(target_family = "wasm"))]
 use demo::Options;
+#[cfg(not(target_family = "wasm"))]
 use winit::event_loop::EventLoop;
 
-const USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard]\n            [--demo [--loop | --exit-after-demo] [--touches]]\n       demo [--demo [--touches]] --dump <dir>   (headless: home, detail, sheet, cards and settings as PNGs; with --demo one PNG per mark of the tour)\n  --demo              play the showcase tour hands-free (demo mark <name> ok|FAIL, demo end <ok>/<total>)\n  --loop              with --demo: play it again when it ends\n  --touches           with --demo: draw a disc under each scripted touch\n  --exit-after-demo   with --demo, desktop: exit after the tour, 1 when a mark failed";
+#[cfg(not(target_family = "wasm"))]
+const USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--backend gl]\n            [--demo [--loop | --exit-after-demo] [--touches]]\n       demo [--demo [--touches]] --dump <dir>   (headless: home, detail, sheet, cards and settings as PNGs; with --demo one PNG per mark of the tour)\n  --demo              play the showcase tour hands-free (demo mark <name> ok|FAIL, demo end <ok>/<total>)\n  --loop              with --demo: play it again when it ends\n  --touches           with --demo: draw a disc under each scripted touch\n  --exit-after-demo   with --demo, desktop: exit after the tour, 1 when a mark failed\n  --backend gl        in a browser: WebGL2 even where WebGPU exists (ignored here)";
 
+#[cfg(not(target_family = "wasm"))]
 /// What the command line asks for.
 #[derive(Debug)]
 enum Mode {
@@ -29,6 +34,7 @@ enum Mode {
 /// What the command line asks for, or `None` for an argument that is not understood or a
 /// combination that makes no sense. The window flags are [`demo::parse_window_args`]'s; only
 /// `--dump <dir>` is read here.
+#[cfg(not(target_family = "wasm"))]
 fn parse_args(args: impl Iterator<Item = String>) -> Option<Mode> {
     let mut dump: Option<PathBuf> = None;
     let mut rest = Vec::new();
@@ -60,6 +66,7 @@ fn parse_args(args: impl Iterator<Item = String>) -> Option<Mode> {
     Some(Mode::Window(options))
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn main() -> ExitCode {
     let Some(mode) = parse_args(std::env::args().skip(1)) else {
         eprintln!("{USAGE}");
@@ -107,4 +114,10 @@ fn main() -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+/// The browser build: the page's query string carries the flags ([`demo::web::main`]).
+#[cfg(target_family = "wasm")]
+fn main() {
+    demo::web::main();
 }

@@ -8,16 +8,25 @@
 //!
 //! App code: it reads the clock (time since start is the frame's time) and runs the event loop. It
 //! uses the facade only.
+//!
+//! In a browser (`wasm32-unknown-unknown`, the `web` module) the window is a `<canvas>`, the GPU opens
+//! asynchronously and every line the demo prints goes to the console.
 
 #![deny(unsafe_code)]
 
+#[cfg(not(target_family = "wasm"))]
 pub mod dump;
 pub mod showcase;
+#[cfg(target_family = "wasm")]
+pub mod web;
 
 use std::cell::Cell;
+#[cfg(target_family = "wasm")]
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -27,7 +36,9 @@ use winit::window::{Window, WindowId};
 
 use lune_ui::clipboard::Clipboard;
 use lune_ui::frame::FrameRenderer;
-use lune_ui::gpu::{self, Gpu};
+#[cfg(not(target_family = "wasm"))]
+use lune_ui::gpu;
+use lune_ui::gpu::Gpu;
 use lune_ui::input::{Event, OutputState, Translator, control_flow};
 use lune_ui::layout::Insets;
 use lune_ui::mobile::{self, KeyboardInset, SceneAttach};
@@ -126,6 +137,22 @@ mod access {
     }
 }
 
+/// Prints one line of the demo's report (`presented`, `probe`, `demo mark`, `demo end`): to
+/// stdout, or to the browser's console where there is no stdout.
+fn say(line: &str) {
+    #[cfg(target_family = "wasm")]
+    web_sys::console::log_1(&line.into());
+    #[cfg(not(target_family = "wasm"))]
+    println!("{line}");
+}
+
+/// [`say`] with a format string.
+macro_rules! say {
+    ($($arg:tt)*) => {
+        $crate::say(&format!($($arg)*))
+    };
+}
+
 /// The window's title, which is also the accessibility tree's root label.
 const TITLE: &str = "luneui demo";
 
@@ -138,7 +165,15 @@ const PHONE: (f64, f64) = (402.0, 874.0);
 /// The text the clipboard probe writes: unique to the process, so a stale pasteboard cannot pass
 /// for this run's write.
 fn clipboard_probe_text() -> String {
-    format!("luneui-probe-{}", std::process::id())
+    // A browser has no process id (`std::process::id` panics there): the clock's milliseconds are as
+    // unique.
+    #[cfg(target_family = "wasm")]
+    let unique = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    #[cfg(not(target_family = "wasm"))]
+    let unique = std::process::id();
+    format!("luneui-probe-{unique}")
 }
 
 /// The backdrop blur's sigma (physical pixels) and saturation, the gallery's values.
@@ -181,6 +216,8 @@ pub struct Options {
     /// With `demo`: exit the event loop after `demo end`, with an error when a mark failed.
     /// Desktop only: on iOS and Android the loop cannot return, so it is ignored there.
     pub exit_after_demo: bool,
+    /// In a browser: draw through WebGL2 even where WebGPU exists (`?backend=gl`). Ignored elsewhere.
+    pub force_gl: bool,
 }
 
 impl Default for Options {
@@ -197,12 +234,13 @@ impl Default for Options {
             repeat: false,
             touches: false,
             exit_after_demo: false,
+            force_gl: false,
         }
     }
 }
 
 /// The window flags' usage line, printed when an Android launch-arguments file does not parse.
-pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--demo [--loop | --exit-after-demo] [--touches]]";
+pub const WINDOW_USAGE: &str = "usage: demo [--probe] [--frames <n>] [--no-scene-attach] [--draw-while-suspended] [--focus-field] [--probe-clipboard] [--backend gl|auto] [--demo [--loop | --exit-after-demo] [--touches]]";
 
 /// The options the window flags ask for, or `None` for an argument that is not understood or a
 /// combination that makes no sense. The command line's `--dump` is not a window flag: the binary
@@ -222,6 +260,11 @@ pub fn parse_window_args(args: impl Iterator<Item = String>) -> Option<Options> 
             "--loop" => options.repeat = true,
             "--touches" => options.touches = true,
             "--exit-after-demo" => options.exit_after_demo = true,
+            "--backend" => match args.next()?.as_str() {
+                "gl" => options.force_gl = true,
+                "auto" => options.force_gl = false,
+                _ => return None,
+            },
             _ => return None,
         }
     }
@@ -235,8 +278,13 @@ pub fn parse_window_args(args: impl Iterator<Item = String>) -> Option<Options> 
     Some(options)
 }
 
-/// Whether this platform's event loop can return, so `Options::frames` applies.
-const LOOP_RETURNS: bool = cfg!(not(any(target_os = "ios", target_os = "android")));
+/// Whether this platform's event loop can return, so `Options::frames` applies (in a browser it
+/// never does: `run` hands the app to the page and comes back at once).
+const LOOP_RETURNS: bool = cfg!(not(any(
+    target_os = "ios",
+    target_os = "android",
+    target_family = "wasm"
+)));
 
 /// The presented frame at which a `--probe` run prints the scene state a second time; the demo
 /// keeps requesting frames until it.
@@ -273,7 +321,7 @@ fn probe_scene(window: &Window, attach: bool) {
 
 /// Prints one `probe <key> <value>` line.
 fn probe_line(key: &str, value: impl std::fmt::Display) {
-    println!("probe {key} {value}");
+    say!("probe {key} {value}");
 }
 
 /// `Ok(position)` or the error, as one token run.
@@ -446,7 +494,7 @@ fn probe_touch_targets(
     targets.push_str(&format!("pager {},{},{}", px(x0), px(y), px(x1)));
     if seen.targets != targets {
         for line in targets.lines() {
-            println!("probe {line}");
+            say!("probe {line}");
         }
         seen.targets = targets;
     }
@@ -490,21 +538,21 @@ impl Tour {
     fn report(&mut self, marks: &[MarkResult], restarted: bool, finished: bool) -> bool {
         if restarted {
             self.loops += 1;
-            println!("demo loop {}", self.loops);
+            say!("demo loop {}", self.loops);
         }
         for mark in marks {
             self.total += 1;
             match &mark.result {
                 Ok(()) => {
                     self.ok += 1;
-                    println!("demo mark {} ok", mark.name);
+                    say!("demo mark {} ok", mark.name);
                 }
-                Err(why) => println!("demo mark {} FAIL {why}", mark.name),
+                Err(why) => say!("demo mark {} FAIL {why}", mark.name),
             }
         }
         if finished && !self.ended {
             self.ended = true;
-            println!("demo end {}/{}", self.ok, self.total);
+            say!("demo end {}/{}", self.ok, self.total);
             return true;
         }
         false
@@ -529,6 +577,12 @@ struct App {
     keyboard_changed: Rc<Cell<bool>>,
     /// Between `suspended` and `resumed`: nothing is acquired, drawn or presented.
     paused: bool,
+    /// In a browser: the window is open and the GPU is being opened on the page's task queue.
+    #[cfg(target_family = "wasm")]
+    setting_up: bool,
+    /// In a browser: where that setup leaves its result (`take_setup` picks it up).
+    #[cfg(target_family = "wasm")]
+    pending: web::Slot,
     /// The last frame, or an event since, asks for another: `about_to_wait` requests it. A request
     /// made inside `RedrawRequested` is lost while iOS is idle (docs/mobile.md, M1 reading).
     want_frame: bool,
@@ -540,20 +594,20 @@ struct App {
     error: Option<String>,
 }
 
-/// Opens the window, the GPU and the surface.
-fn setup(
+/// Opens the window, with the accessibility bridge: everything that needs no GPU.
+fn open_window(
     event_loop: &ActiveEventLoop,
     options: Options,
-    keyboard_changed: Rc<Cell<bool>>,
     proxy: EventLoopProxy<()>,
-) -> Result<Shown, String> {
-    let probe = options.probe;
+) -> Result<(Arc<Window>, access::Access), String> {
     let attrs = Window::default_attributes()
         .with_title(TITLE)
         .with_inner_size(LogicalSize::new(PHONE.0, PHONE.1))
         // The accessibility bridge wants a window that was never shown: with the feature the
         // window starts hidden and is shown after the scene attach.
         .with_visible(!cfg!(feature = "access"));
+    #[cfg(target_family = "wasm")]
+    let attrs = web::with_page_canvas(attrs)?;
     let window = Arc::new(
         event_loop
             .create_window(attrs)
@@ -569,11 +623,24 @@ fn setup(
         // An attach shows only a window that is not hidden, so the app shows this one itself.
         window.set_visible(true);
     }
-    let instance = gpu::instance(Some(Box::new(event_loop.owned_display_handle())));
+    Ok((window, access))
+}
+
+/// Opens the surface and the GPU over `window` on `instance`, and everything that draws into it.
+/// The future never waits on anything native wgpu does not answer at once; in a browser it is
+/// driven by the page's task queue ([`web::spawn_setup`]).
+async fn open_gpu(
+    instance: wgpu::Instance,
+    window: Arc<Window>,
+    access: access::Access,
+    options: Options,
+    keyboard_changed: Rc<Cell<bool>>,
+) -> Result<Shown, String> {
+    let probe = options.probe;
     let surface = instance
         .create_surface(window.clone())
         .map_err(|e| format!("surface: {e}"))?;
-    let mut gpu = pollster::block_on(Gpu::new(instance, Some(&surface)))?;
+    let mut gpu = Gpu::new(instance, Some(&surface)).await?;
     let size = window.inner_size();
     let surface =
         WindowSurface::with_options(&gpu, surface, (size.width, size.height), surface_options())?;
@@ -592,14 +659,17 @@ fn setup(
             waker.request_redraw();
         })
     };
+    let info = gpu.adapter.get_info();
     if probe {
-        let info = gpu.adapter.get_info();
         probe_window("created", &window, Some(&surface));
         probe_line("adapter_name", &info.name);
         probe_line("adapter_backend", format!("{:?}", info.backend));
         probe_line("adapter_type", format!("{:?}", info.device_type));
         probe_line("adapter_driver", &info.driver);
         probe_line("alpha_mode", format!("{:?}", surface.alpha_mode()));
+    } else if cfg!(target_family = "wasm") {
+        // The browser checks read which backend the page got: WebGPU or the WebGL2 fallback.
+        probe_line("adapter_backend", format!("{:?}", info.backend));
     }
     Ok(Shown {
         window,
@@ -615,7 +685,49 @@ fn setup(
     })
 }
 
+/// Opens the window, the GPU and the surface (natively, in one go).
+#[cfg(not(target_family = "wasm"))]
+fn setup(
+    event_loop: &ActiveEventLoop,
+    options: Options,
+    keyboard_changed: Rc<Cell<bool>>,
+    proxy: EventLoopProxy<()>,
+) -> Result<Shown, String> {
+    let (window, access) = open_window(event_loop, options, proxy)?;
+    let instance = gpu::instance(Some(Box::new(event_loop.owned_display_handle())));
+    pollster::block_on(open_gpu(
+        instance,
+        window,
+        access,
+        options,
+        keyboard_changed,
+    ))
+}
+
 impl App {
+    /// Records `why` as the run's error and stops the loop; in a browser the console says it, as no
+    /// caller of `run` is left to.
+    fn fail(&mut self, event_loop: &ActiveEventLoop, why: String) {
+        #[cfg(target_family = "wasm")]
+        web_sys::console::error_1(&format!("demo: {why}").into());
+        self.error = Some(why);
+        event_loop.exit();
+    }
+
+    /// In a browser: takes the GPU setup's result once it is there and asks for the first frame.
+    #[cfg(target_family = "wasm")]
+    fn take_setup(&mut self, event_loop: &ActiveEventLoop) {
+        let done = self.pending.borrow_mut().take();
+        match done {
+            Some(Ok(shown)) => {
+                shown.window.request_redraw();
+                self.shown = Some(shown);
+            }
+            Some(Err(why)) => self.fail(event_loop, why),
+            None => {}
+        }
+    }
+
     /// Draws one frame and presents it.
     fn render(&mut self, event_loop: &ActiveEventLoop) -> Result<(), String> {
         if self.paused {
@@ -641,6 +753,18 @@ impl App {
         let Some(surface) = surface.as_mut() else {
             return Ok(());
         };
+        if cfg!(target_family = "wasm") {
+            // A canvas has no size until the page's resize observer reports one (winit's `Resized`),
+            // and an event that came while the GPU was opening was dropped: a frame waits for a
+            // real size and draws at the window's own.
+            let inner = window.inner_size();
+            if inner.width == 0 || inner.height == 0 {
+                return Ok(());
+            }
+            if surface.size() != (inner.width, inner.height) {
+                surface.resize(gpu, inner.width, inner.height);
+            }
+        }
         let target = match surface.acquire(gpu)? {
             Acquired::Frame(t) => t,
             Acquired::Skip => return Ok(()),
@@ -722,7 +846,7 @@ impl App {
         self.presented += 1;
         let probe = self.options.probe;
         if probe || self.presented <= self.options.log_frames {
-            println!("presented {} {}x{}", self.presented, size.0, size.1);
+            say!("presented {} {}x{}", self.presented, size.0, size.1);
         }
         if probe {
             probe_touch_targets(&mut self.probe_seen, &layout, scale, &self.demo.showcase);
@@ -778,7 +902,7 @@ impl ApplicationHandler for App {
                 // failure is printed and the app waits, without a surface, for the next `resumed`.
                 match rebuild_surface(&shown.gpu, &shown.window, shown.format) {
                     Ok(surface) => shown.surface = Some(surface),
-                    Err(e) => println!("{e}"),
+                    Err(e) => say!("{e}"),
                 }
             }
             if self.options.probe {
@@ -787,6 +911,22 @@ impl ApplicationHandler for App {
             shown.window.request_redraw();
             return;
         }
+        // In a browser the GPU opens on the page's task queue and `take_setup` picks it up.
+        #[cfg(target_family = "wasm")]
+        if !self.setting_up {
+            self.setting_up = true;
+            match open_window(event_loop, self.options, self.proxy.clone()) {
+                Ok((window, access)) => web::spawn_setup(
+                    window,
+                    access,
+                    self.options,
+                    self.keyboard_changed.clone(),
+                    self.pending.clone(),
+                ),
+                Err(e) => self.fail(event_loop, e),
+            }
+        }
+        #[cfg(not(target_family = "wasm"))]
         match setup(
             event_loop,
             self.options,
@@ -797,10 +937,7 @@ impl ApplicationHandler for App {
                 shown.window.request_redraw();
                 self.shown = Some(shown);
             }
-            Err(e) => {
-                self.error = Some(e);
-                event_loop.exit();
-            }
+            Err(e) => self.fail(event_loop, e),
         }
     }
 
@@ -835,7 +972,11 @@ impl ApplicationHandler for App {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        #[cfg(target_family = "wasm")]
+        self.take_setup(event_loop);
+        #[cfg(not(target_family = "wasm"))]
+        let _ = event_loop;
         // Every frame this run asks for is requested here, never inside `RedrawRequested`, where a
         // request is lost while iOS is idle (docs/mobile.md, M1 reading).
         if self.keyboard_changed.take() {
@@ -865,6 +1006,8 @@ impl ApplicationHandler for App {
         if event_loop.exiting() {
             return;
         }
+        #[cfg(target_family = "wasm")]
+        self.take_setup(event_loop);
         // An input event needs a frame to be read; a redraw request is not one.
         if !matches!(event, WindowEvent::RedrawRequested) {
             self.want_frame = true;
@@ -906,8 +1049,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 if let Err(e) = self.render(event_loop) {
-                    self.error = Some(e);
-                    event_loop.exit();
+                    self.fail(event_loop, e);
                 }
             }
             _ => {}
@@ -924,7 +1066,7 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
             touches: options.touches,
         });
     }
-    let mut app = App {
+    let app = App {
         proxy: event_loop.create_proxy(),
         options,
         tour: Tour::default(),
@@ -940,12 +1082,30 @@ pub fn run(event_loop: EventLoop<()>, options: Options) -> Result<(), String> {
         last_keyboard: Insets::ZERO,
         keyboard_changed: Rc::new(Cell::new(false)),
         paused: false,
+        #[cfg(target_family = "wasm")]
+        setting_up: false,
+        #[cfg(target_family = "wasm")]
+        pending: Rc::new(RefCell::new(None)),
         want_frame: false,
         probe_seen: ProbeSeen::default(),
         #[cfg(target_os = "android")]
         content_rect_seen: String::new(),
         error: None,
     };
+    // A browser owns its loop: the app goes to the page and `run` returns at once, so a failure
+    // reaches the console through `App::fail` and the tour's verdict through the `demo end` line.
+    #[cfg(target_family = "wasm")]
+    {
+        web::spawn(event_loop, app);
+        Ok(())
+    }
+    #[cfg(not(target_family = "wasm"))]
+    run_native(event_loop, app, options)
+}
+
+/// Runs `app` on `event_loop` until it exits, and reports its error or a failed tour.
+#[cfg(not(target_family = "wasm"))]
+fn run_native(event_loop: EventLoop<()>, mut app: App, options: Options) -> Result<(), String> {
     event_loop
         .run_app(&mut app)
         .map_err(|e| format!("event loop: {e}"))?;
@@ -1002,8 +1162,8 @@ fn android_main(app: winit::platform::android::activity::AndroidApp) {
     let options = match launch_options(&app) {
         Ok(o) => o,
         Err(()) => {
-            println!("demo: bad launch arguments");
-            println!("{WINDOW_USAGE}");
+            say!("demo: bad launch arguments");
+            say!("{WINDOW_USAGE}");
             return;
         }
     };

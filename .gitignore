@@ -7,3 +7,6 @@ CLAUDE.local.md
 # build output, OS noise
 /target
 .DS_Store
+
+# the web driver's packages (scripts/web/package.json)
+/scripts/web/node_modules

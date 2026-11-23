@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>luneui demo</title>
+<link rel="preconnect" href="https://cdn.fonts.izzat.dev" crossorigin>
+<link rel="stylesheet" href="https://cdn.fonts.izzat.dev/rznsans/latest/web/rznsans.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #0f1216; }
+  body { display: flex; align-items: center; justify-content: center; font: 14px RznSans, sans-serif; color: #9aa4b2; }
+  canvas { width: 402px; height: 874px; display: block; outline: none; touch-action: none; }
+  #status { position: fixed; top: 12px; left: 0; right: 0; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="luneui" tabindex="0"></canvas>
+<p id="status">Loading…</p>
+<script type="module">
+  import init from "./demo.js";
+  const status = document.getElementById("status");
+  const gl = document.createElement("canvas").getContext("webgl2");
+  if (!navigator.gpu && !gl) {
+    status.textContent = "This page needs WebGPU or WebGL2.";
+  } else {
+    init().then(() => status.remove(), (e) => { status.textContent = "Could not start: " + e; });
+  }
+</script>
+</body>
+</html>
