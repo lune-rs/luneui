@@ -3966,16 +3966,17 @@ mod m10 {
     use lune_ui_core::text::{CaretPos, LineSpan, Spec, TextKey, TextSystem, Unit};
     use lune_ui_core::theme::{DARK, Theme};
     use lune_ui_core::ui::FrameConfig;
-    use lune_ui_core::widgets::button::{ButtonOptions, IconButton};
+    use lune_ui_core::widgets::button::{ButtonOptions, IconButton, IconButtonExtras};
     use lune_ui_core::widgets::filter_bar::FilterOptions;
+    use lune_ui_core::widgets::message_list::{HEADER_HEIGHT, MessageListOptions, MessageRow};
     use lune_ui_core::widgets::progress::ProgressOptions;
     use lune_ui_core::widgets::radio_group::RadioOption;
     use lune_ui_core::widgets::ring_gauge::{RingGaugeOptions, RingSegment};
     use lune_ui_core::widgets::slider::SliderOptions;
     use lune_ui_core::widgets::sparkline::{SparkStyle, SparklineOptions};
     use lune_ui_core::widgets::spinner::SpinnerOptions;
-    use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripOptions};
-    use lune_ui_core::widgets::toast::{ToastKind, ToastSpec, Toasts};
+    use lune_ui_core::widgets::tab_strip::{BusyCue, Tab, TabKey, TabStripExtras, TabStripOptions};
+    use lune_ui_core::widgets::toast::{ToastExtras, ToastKind, ToastSpec, Toasts};
     use lune_ui_core::widgets::tone::Tone;
     use lune_ui_core::widgets::tree_view::{
         ChevronStyle, GuideStub, GuideStyle, TreeOptions, TreeRow,
@@ -4303,6 +4304,19 @@ mod m10 {
                 name: "Search",
             },
         );
+        // A bell with a badge, open: the pill is in `attention()` and its text in `on_attention()`.
+        ui.icon_button_with(
+            "icon-button-badge",
+            Rect::new(540.0, 10.0, 32.0, 32.0),
+            &IconButton {
+                glyph: icon::SEARCH,
+                glyph_size: 16.0,
+                color: None,
+                radius: 4.0,
+                name: "Notifications",
+            },
+            &IconButtonExtras::new().with_badge("3").with_open(true),
+        );
         ui.radio_group(
             "radio",
             Rect::new(300.0, 60.0, 180.0, 0.0),
@@ -4331,7 +4345,8 @@ mod m10 {
                 progress: None,
             },
         ];
-        ui.tab_strip(
+        // The second tab asks for attention: its dot is in `attention()`, which the theme sets.
+        ui.tab_strip_with(
             "strip",
             Rect::new(300.0, 170.0, 400.0, 32.0),
             &tabs,
@@ -4344,6 +4359,27 @@ mod m10 {
                 name: "Documents",
                 header_tint: None,
             },
+            &TabStripExtras::new().with_attention(&[TabKey(2)]),
+        );
+        // The inbox: its header with the action, an unread row with the attention dot and a read one.
+        ui.message_list_header(
+            "inbox-header",
+            Rect::new(560.0, 60.0, 300.0, HEADER_HEIGHT),
+            "Notifications",
+            Some("Clear all"),
+        );
+        ui.message_list(
+            "inbox",
+            Rect::new(560.0, 100.0, 300.0, 200.0),
+            &[
+                MessageRow::new("Build finished")
+                    .with_age("now")
+                    .with_body("All tests passed.")
+                    .with_meta("main")
+                    .with_unread(true),
+                MessageRow::new("Deploy started").with_age("2 m"),
+            ],
+            &MessageListOptions::new("Notifications").with_max_height(200.0),
         );
         ui.filter_bar(
             "filter",
@@ -5001,6 +5037,17 @@ mod m10 {
             Duration::ZERO,
         );
         loud.set_expanded(id, true);
+        // A notice: header, title and the drain line, all in the theme's toast colours.
+        loud.push_with(
+            ToastSpec::new(ToastKind::Warning, "Check the output"),
+            ToastExtras::new()
+                .with_source("build")
+                .with_age("now")
+                .with_title("Finished")
+                .with_timeout(Duration::from_secs(30))
+                .with_drain(true),
+            Duration::ZERO,
+        );
         for (ms, last) in [(0_u64, false), (300, false), (700, false), (1500, true)] {
             h.at_ms(ms);
             if ms == 300 {

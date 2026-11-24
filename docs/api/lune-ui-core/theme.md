@@ -345,10 +345,21 @@ Source: `crates/lune-ui-core/src/theme.rs:21`
 
 `impl Theme`
 
+- <a id="method.Theme.attention"></a>`pub fn attention(&self) -> Rgba`
+
+  The attention colour: what asks to be looked at (a tab with something new, a count
+  badge's fill). It is a role, not a field of its own, and reads [`Theme::warn`](theme.md#structfield.Theme.warn), so a theme
+  file sets it through `FileStatusModified` together with that colour.
+
 - <a id="method.Theme.color_key"></a>`pub fn color_key(&self, key: &str) -> Option<Rgba>`
 
   The colour a theme file's colour `key` sets in this theme (the first field it sets, when
   it sets more than one), or `None` for a key that is not in [`COLOR_KEYS`](theme.md#constant.COLOR_KEYS).
+
+- <a id="method.Theme.on_attention"></a>`pub fn on_attention(&self) -> Rgba`
+
+  The colour of text or a glyph drawn on [`Theme::attention`](theme.md#method.Theme.attention): reads
+  [`Theme::status_warning_dark`](theme.md#structfield.Theme.status_warning_dark) (4.96:1 on the preset's attention colour).
 
 - <a id="method.Theme.with_acrylic"></a>`pub fn with_acrylic(self, level: AcrylicLevel) -> Theme`
   `#[must_use]`
@@ -609,7 +620,7 @@ pub const COLOR_KEYS: &[&str];
 
 The colour keys a theme file can set, in table order.
 
-Source: `crates/lune-ui-core/src/theme.rs:239`
+Source: `crates/lune-ui-core/src/theme.rs:252`
 
 <a id="constant.DARK"></a>
 ### Constant `DARK`
@@ -621,5 +632,5 @@ pub const DARK: Theme;
 The dark preset's theme under a neutral name, for code and tests that need a theme but not a
 particular preset.
 
-Source: `crates/lune-ui-core/src/theme.rs:291`
+Source: `crates/lune-ui-core/src/theme.rs:304`
 

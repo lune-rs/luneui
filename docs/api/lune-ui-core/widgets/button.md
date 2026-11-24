@@ -34,7 +34,7 @@ pub struct ButtonLook {
 
 The continuous look of a button.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:106`
+Source: `crates/lune-ui-core/src/widgets/button.rs:152`
 
 **Fields**
 
@@ -83,7 +83,7 @@ pub struct ButtonOptions<'a> {
 
 What [`Ui::button_with`](../ui.md#method.Ui.button_with) is given besides its rect and text.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:66`
+Source: `crates/lune-ui-core/src/widgets/button.rs:67`
 
 **Fields**
 
@@ -120,7 +120,7 @@ pub struct ButtonState {
 
 What the pointer and keyboard are doing to a button.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:98`
+Source: `crates/lune-ui-core/src/widgets/button.rs:144`
 
 **Fields**
 
@@ -155,7 +155,7 @@ pub struct IconButton<'a> {
 
 A button that is only a glyph: ghost behaviour, the glyph centred in the caller's rect.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:86`
+Source: `crates/lune-ui-core/src/widgets/button.rs:87`
 
 **Fields**
 
@@ -181,6 +181,63 @@ Source: `crates/lune-ui-core/src/widgets/button.rs:86`
 - `impl<'a> PartialEq for IconButton<'a>`
 - `impl<'a> StructuralPartialEq for IconButton<'a>`
 
+<a id="struct.IconButtonExtras"></a>
+### Struct `IconButtonExtras`
+
+```rust
+#[non_exhaustive]
+pub struct IconButtonExtras<'a> {
+    pub badge: Option<&'a str>,
+    pub open: bool,
+}
+```
+
+What [`Ui::icon_button_with`](../ui.md#method.Ui.icon_button_with) is given besides the [`IconButton`](button.md#struct.IconButton): a badge over its corner and
+the open state. A struct of its own so [`IconButton`](button.md#struct.IconButton), which apps build by literal, gains no
+field (R-infra-7); every later field stays additive.
+
+Source: `crates/lune-ui-core/src/widgets/button.rs:111`
+
+**Fields**
+
+- <a id="structfield.IconButtonExtras.badge"></a>`pub badge: Option<&'a str>`
+
+  A badge at the button's top right: a pill in `Theme::attention` with this text in
+  `Theme::on_attention`; `Some("")` is a plain 15 px circle; `None` draws no badge.
+
+- <a id="structfield.IconButtonExtras.open"></a>`pub open: bool`
+
+  The button's popover or panel is open: it rests on the ghost hover fill and its node is
+  expanded.
+
+**Methods and associated items**
+
+`impl<'a> IconButtonExtras<'a>`
+
+- <a id="method.IconButtonExtras.new"></a>`pub fn new() -> Self`
+  `#[must_use]`
+
+  No badge and not open: what [`Ui::icon_button`](../ui.md#method.Ui.icon_button) draws.
+
+- <a id="method.IconButtonExtras.with_badge"></a>`pub fn with_badge(self, text: &'a str) -> Self`
+  `#[must_use]`
+
+  The extras with a badge showing `text`.
+
+- <a id="method.IconButtonExtras.with_open"></a>`pub fn with_open(self, open: bool) -> Self`
+  `#[must_use]`
+
+  The extras with the open state set or cleared.
+
+**Trait implementations**
+
+- `impl<'a> Clone for IconButtonExtras<'a>`
+- `impl<'a> Copy for IconButtonExtras<'a>`
+- `impl<'a> Debug for IconButtonExtras<'a>`
+- `impl<'a> Default for IconButtonExtras<'a>`
+- `impl<'a> PartialEq for IconButtonExtras<'a>`
+- `impl<'a> StructuralPartialEq for IconButtonExtras<'a>`
+
 ## Enums
 
 <a id="enum.ButtonKind"></a>
@@ -196,7 +253,7 @@ pub enum ButtonKind {
 
 Which button.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:46`
+Source: `crates/lune-ui-core/src/widgets/button.rs:47`
 
 **Variants**
 
@@ -236,7 +293,7 @@ pub fn button<H: Copy + PartialEq>(
 Draws a primary or secondary button in `r` and registers `hit` over it. The Painter form: a
 [`Ui`](../ui.md#struct.Ui) has [`Ui::button`](../ui.md#method.Ui.button), which also handles focus, keys and the accessibility node.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:276`
+Source: `crates/lune-ui-core/src/widgets/button.rs:344`
 
 <a id="fn.button_width"></a>
 ### Function `button_width`
@@ -247,7 +304,7 @@ pub fn button_width<H: Copy + PartialEq>(p: &mut Painter<'_, H>, text: &str) -> 
 
 The width [`button`](button.md#fn.button) needs for `text`: the label and 16 px each side.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:298`
+Source: `crates/lune-ui-core/src/widgets/button.rs:366`
 
 <a id="fn.button_width_with"></a>
 ### Function `button_width_with`
@@ -263,7 +320,7 @@ pub fn button_width_with<H: Copy + PartialEq>(
 The width [`Ui::button_with`](../ui.md#method.Ui.button_with) fits: the label, the glyph and its gap when there is one, and
 the padding (16 each side, 12 for a small button).
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:305`
+Source: `crates/lune-ui-core/src/widgets/button.rs:373`
 
 <a id="fn.paint"></a>
 ### Function `paint`
@@ -281,7 +338,7 @@ pub fn paint<H: Copy + PartialEq>(
 Draws a button in `r` with `look`. `kind` is the look's own: [`ButtonLook::of`](button.md#method.ButtonLook.of) already took it
 into account, and the drawing is the same for every kind (R4).
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:168`
+Source: `crates/lune-ui-core/src/widgets/button.rs:214`
 
 <a id="fn.paint_icon"></a>
 ### Function `paint_icon`
@@ -297,7 +354,7 @@ pub fn paint_icon<H: Copy + PartialEq>(
 
 [`paint`](button.md#fn.paint) for [`Ui::icon_button`](../ui.md#method.Ui.icon_button): the ghost look of `button` over the caller's rect.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:207`
+Source: `crates/lune-ui-core/src/widgets/button.rs:253`
 
 <a id="fn.paint_with"></a>
 ### Function `paint_with`
@@ -315,9 +372,53 @@ pub fn paint_with<H: Copy + PartialEq>(
 [`paint`](button.md#fn.paint) for [`Ui::button_with`](../ui.md#method.Ui.button_with)'s variants: `r` is cut to 24 high when `options.small`, the
 corner radius, the glyph and the ghost fill follow `options`. For specimen sheets.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:181`
+Source: `crates/lune-ui-core/src/widgets/button.rs:227`
 
 ## Constants
+
+<a id="constant.BADGE_HEIGHT"></a>
+### Constant `BADGE_HEIGHT`
+
+```rust
+pub const BADGE_HEIGHT: f32 = 15.0;
+```
+
+The badge's height, which is also its least width: a 15 px circle for an empty badge.
+
+Source: `crates/lune-ui-core/src/widgets/button.rs:98`
+
+<a id="constant.BADGE_INSET"></a>
+### Constant `BADGE_INSET`
+
+```rust
+pub const BADGE_INSET: (f32, f32);
+```
+
+How far a badge's top-right corner lies from the button's right edge and from its top.
+
+Source: `crates/lune-ui-core/src/widgets/button.rs:104`
+
+<a id="constant.BADGE_MIN_WIDTH"></a>
+### Constant `BADGE_MIN_WIDTH`
+
+```rust
+pub const BADGE_MIN_WIDTH: f32 = 15.0;
+```
+
+The least width of a badge.
+
+Source: `crates/lune-ui-core/src/widgets/button.rs:100`
+
+<a id="constant.BADGE_PAD"></a>
+### Constant `BADGE_PAD`
+
+```rust
+pub const BADGE_PAD: f32 = 4.0;
+```
+
+A badge's horizontal padding round its text.
+
+Source: `crates/lune-ui-core/src/widgets/button.rs:102`
 
 <a id="constant.FOCUS"></a>
 ### Constant `FOCUS`
@@ -328,7 +429,7 @@ pub const FOCUS: Motion;
 
 Focus ring opacity.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:42`
+Source: `crates/lune-ui-core/src/widgets/button.rs:43`
 
 <a id="constant.HOVER"></a>
 ### Constant `HOVER`
@@ -339,7 +440,7 @@ pub const HOVER: Motion;
 
 Fill colour change on hover and press.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:38`
+Source: `crates/lune-ui-core/src/widgets/button.rs:39`
 
 <a id="constant.ICON_GAP"></a>
 ### Constant `ICON_GAP`
@@ -348,7 +449,7 @@ Source: `crates/lune-ui-core/src/widgets/button.rs:38`
 pub const ICON_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:35`
+Source: `crates/lune-ui-core/src/widgets/button.rs:36`
 
 <a id="constant.ICON_SIZE"></a>
 ### Constant `ICON_SIZE`
@@ -359,7 +460,7 @@ pub const ICON_SIZE: f32 = 16.0;
 
 The glyph of a labelled icon button, and the gap between it and the label.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:34`
+Source: `crates/lune-ui-core/src/widgets/button.rs:35`
 
 <a id="constant.PRESS"></a>
 ### Constant `PRESS`
@@ -370,7 +471,7 @@ pub const PRESS: Motion;
 
 Press scale.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:40`
+Source: `crates/lune-ui-core/src/widgets/button.rs:41`
 
 <a id="constant.PRESS_SCALE"></a>
 ### Constant `PRESS_SCALE`
@@ -381,7 +482,7 @@ pub const PRESS_SCALE: f32 = 0.98;
 
 The press scale about the rect's centre.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:27`
+Source: `crates/lune-ui-core/src/widgets/button.rs:28`
 
 <a id="constant.SMALL_HEIGHT"></a>
 ### Constant `SMALL_HEIGHT`
@@ -392,7 +493,7 @@ pub const SMALL_HEIGHT: f32 = 24.0;
 
 A small button's height, corner radius and horizontal padding.
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:30`
+Source: `crates/lune-ui-core/src/widgets/button.rs:31`
 
 <a id="constant.SMALL_PADDING"></a>
 ### Constant `SMALL_PADDING`
@@ -401,7 +502,7 @@ Source: `crates/lune-ui-core/src/widgets/button.rs:30`
 pub const SMALL_PADDING: f32 = 12.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:32`
+Source: `crates/lune-ui-core/src/widgets/button.rs:33`
 
 <a id="constant.SMALL_RADIUS"></a>
 ### Constant `SMALL_RADIUS`
@@ -410,5 +511,5 @@ Source: `crates/lune-ui-core/src/widgets/button.rs:32`
 pub const SMALL_RADIUS: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/button.rs:31`
+Source: `crates/lune-ui-core/src/widgets/button.rs:32`
 

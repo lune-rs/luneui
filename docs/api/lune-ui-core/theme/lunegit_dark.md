@@ -6,7 +6,7 @@
 
 Lunegit dark theme (`Lunegit.Desktop/Themes/DarkTheme.axaml`, `App.axaml`).
 
-Source: `crates/lune-ui-core/src/theme.rs:294`
+Source: `crates/lune-ui-core/src/theme.rs:307`
 
 ## Constants
 
@@ -19,7 +19,7 @@ pub const CARD: GlassLayer;
 
 Card and header-tint layer (tint 1, `GlassMaterialDarkHeaderOpacity` 0.8).
 
-Source: `crates/lune-ui-core/src/theme.rs:404`
+Source: `crates/lune-ui-core/src/theme.rs:417`
 
 <a id="constant.CARD_CORNER_RADIUS"></a>
 ### Constant `CARD_CORNER_RADIUS`
@@ -28,7 +28,7 @@ Source: `crates/lune-ui-core/src/theme.rs:404`
 pub const CARD_CORNER_RADIUS: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/theme.rs:411`
+Source: `crates/lune-ui-core/src/theme.rs:424`
 
 <a id="constant.PANEL"></a>
 ### Constant `PANEL`
@@ -39,7 +39,7 @@ pub const PANEL: GlassLayer;
 
 Panel layer (`GlassTintLightOpacity` 0.8, `GlassMaterialLightOpacity` 0.7).
 
-Source: `crates/lune-ui-core/src/theme.rs:396`
+Source: `crates/lune-ui-core/src/theme.rs:409`
 
 <a id="constant.THEME"></a>
 ### Constant `THEME`
@@ -48,7 +48,7 @@ Source: `crates/lune-ui-core/src/theme.rs:396`
 pub const THEME: Theme;
 ```
 
-Source: `crates/lune-ui-core/src/theme.rs:299`
+Source: `crates/lune-ui-core/src/theme.rs:312`
 
 <a id="constant.TINT"></a>
 ### Constant `TINT`
@@ -57,7 +57,7 @@ Source: `crates/lune-ui-core/src/theme.rs:299`
 pub const TINT: Rgba;
 ```
 
-Source: `crates/lune-ui-core/src/theme.rs:385`
+Source: `crates/lune-ui-core/src/theme.rs:398`
 
 <a id="constant.WINDOW"></a>
 ### Constant `WINDOW`
@@ -68,5 +68,5 @@ pub const WINDOW: GlassLayer;
 
 Base window layer (`GlassTintDarkOpacity` 1, `GlassMaterialDarkOpacity` 0.7).
 
-Source: `crates/lune-ui-core/src/theme.rs:388`
+Source: `crates/lune-ui-core/src/theme.rs:401`
 

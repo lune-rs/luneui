@@ -20,8 +20,9 @@ use lune_ui_core::widgets::dialog::{Cancel, Dialog, DialogGlass};
 use lune_ui_core::widgets::field::FieldOptions;
 use lune_ui_core::widgets::popover::PopoverOptions;
 use lune_ui_core::widgets::toast::{
-    APPEAR, EXPAND, GAP, HISTORY_CAP, LEAVE, MAX_VISIBLE, SHIFT, ToastAction, ToastId, ToastKind,
-    ToastResponse, ToastSpec, Toasts, WIDTH, WIDTH_EXPANDED, toast_size,
+    APPEAR, DRAIN, EXPAND, GAP, HISTORY_CAP, LEAVE, MAX_VISIBLE, SHIFT, ToastAction, ToastExtras,
+    ToastId, ToastKind, ToastResponse, ToastSpec, ToastStackOptions, Toasts, WIDTH, WIDTH_EXPANDED,
+    toast_size,
 };
 
 const WIN: (f32, f32) = (800.0, 600.0);
@@ -1392,4 +1393,532 @@ fn a_long_log_shapes_only_the_lines_in_view() {
     // The tail follows: about 13 lines fit 184 px at 14 px a line, plus the margin lines.
     assert!(texts < 40, "{texts} texts");
     let _ = FRAME;
+}
+
+// -- notices (`ToastExtras`), the hold, the drain line, the body action and the live rects ------
+
+fn secs(n: u64) -> u64 {
+    n * 1000
+}
+
+/// A frame with the pointer at `at` (or off the window), at `t` ms.
+fn frame_at(
+    h: &mut UiHarness,
+    toasts: &mut Toasts,
+    at: Option<(f32, f32)>,
+    t: u64,
+) -> (Scene, FrameOutput, ToastResponse) {
+    match at {
+        Some((x, y)) => h.input.pointer_to(x, y),
+        None => h.input.pointer_to(2.0, 2.0),
+    };
+    frame(h, toasts, t)
+}
+
+/// A notice: an info toast with a 6 s timeout of its own.
+fn timed(extras: ToastExtras) -> ToastExtras {
+    extras.with_timeout(Duration::from_secs(6))
+}
+
+/// A bench with one settled notice, its id and its card's centre.
+fn notice_bench(spec: ToastSpec, extras: ToastExtras) -> (UiHarness, Toasts, ToastId, (f32, f32)) {
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let id = toasts.push_with(spec, extras, ms(0));
+    let (_, out) = settle(&mut h, &mut toasts, 0);
+    let card = out.tree.get(node_of(id)).expect("toast node").bounds;
+    (h, toasts, id, centre(card))
+}
+
+#[test]
+fn a_notice_with_actions_times_out_on_its_own_timeout_and_a_plain_one_stays() {
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let plain = toasts.push(prompt("Plain"), ms(0));
+    let notice = toasts.push_with(prompt("Notice"), timed(ToastExtras::new()), ms(0));
+    frame(&mut h, &mut toasts, 0);
+    frame(&mut h, &mut toasts, secs(6) - 1);
+    assert!(toasts.is_live(notice));
+    frame(&mut h, &mut toasts, secs(6));
+    assert!(!toasts.is_live(notice), "gone at its timeout");
+    assert!(toasts.is_live(plain));
+    assert_eq!(toasts.history().count(), 1);
+    frame(&mut h, &mut toasts, secs(6) + 100);
+    let (_, out, _) = frame(&mut h, &mut toasts, secs(6) + 400);
+    assert_eq!(shown(&out), ["Plain"], "the fade ended");
+    let (_, out, _) = frame(&mut h, &mut toasts, 600_000);
+    assert_eq!(shown(&out), ["Plain"], "a plain toast with actions stays");
+}
+
+#[test]
+fn the_pointer_over_a_notice_holds_its_timer_and_leaving_resumes_it() {
+    let (mut h, mut toasts, id, over) = notice_bench(info("Held"), timed(ToastExtras::new()));
+    frame_at(&mut h, &mut toasts, None, 1000);
+    frame_at(&mut h, &mut toasts, Some(over), secs(2));
+    frame_at(&mut h, &mut toasts, Some(over), 3500);
+    let (_, out, _) = frame_at(&mut h, &mut toasts, Some(over), 4900);
+    assert_eq!(shown(&out), ["Held"]);
+    // No frame is due while it is held.
+    assert_eq!(
+        frame_at(&mut h, &mut toasts, Some(over), 4950).1.repaint,
+        Repaint::Idle
+    );
+    // It leaves at 5 s with 4 s left, so the deadline is 9 s, not a restart.
+    frame_at(&mut h, &mut toasts, None, secs(5));
+    let (_, out, _) = frame_at(&mut h, &mut toasts, None, 8900);
+    assert_eq!(shown(&out), ["Held"]);
+    assert!(toasts.is_live(id));
+    let (_, out, _) = frame_at(&mut h, &mut toasts, None, secs(9));
+    assert!(shown(&out).is_empty());
+    assert!(!toasts.is_live(id));
+    frame_at(&mut h, &mut toasts, None, secs(9) + 100);
+    frame_at(&mut h, &mut toasts, None, secs(9) + 400);
+    assert!(toasts.is_empty());
+}
+
+#[test]
+fn the_pointer_over_a_button_of_a_notice_holds_it_too() {
+    let (mut h, mut toasts, id, _) = notice_bench(prompt("Held"), timed(ToastExtras::new()));
+    let (_, out, _) = frame_at(&mut h, &mut toasts, None, 1000);
+    let open = centre(button_named(&out, "Open"));
+    frame_at(&mut h, &mut toasts, Some(open), secs(2));
+    let (_, out, _) = frame_at(&mut h, &mut toasts, Some(open), secs(8));
+    assert_eq!(shown(&out), ["Held"], "held past its 6 s");
+    assert!(toasts.is_live(id));
+}
+
+#[test]
+fn a_finger_on_a_notice_does_not_hold_it() {
+    let (mut h, mut toasts, id, over) = notice_bench(info("Touched"), timed(ToastExtras::new()));
+    frame(&mut h, &mut toasts, 1000);
+    h.input.touch_start(1, over.0, over.1);
+    frame(&mut h, &mut toasts, secs(2));
+    h.input.touch_end(1, over.0, over.1);
+    frame(&mut h, &mut toasts, 2100);
+    assert!(toasts.is_live(id), "a press on an inert body does nothing");
+    frame(&mut h, &mut toasts, secs(6));
+    assert!(!toasts.is_live(id), "the timer ran at its own pace");
+}
+
+/// The 2 px fills of `color` on the toast layer: their rects.
+fn lines(scene: &Scene, color: [u8; 4]) -> Vec<[f32; 4]> {
+    let want = premul(color);
+    scene
+        .merged(LayerId::Toast)
+        .geometry
+        .under
+        .iter()
+        .filter(|s| s.color == want && s.rect[3] == DRAIN)
+        .map(|s| s.rect)
+        .collect()
+}
+
+#[test]
+fn the_drain_line_is_the_fraction_left_under_full_and_absent_otherwise() {
+    for (tier, shown_line) in [
+        (MotionTier::Full, true),
+        (MotionTier::Reduced, false),
+        (MotionTier::Off, false),
+    ] {
+        let mut h = UiHarness::new(WIN);
+        h.tier = tier;
+        let mut toasts = Toasts::default();
+        let id = toasts.push_with(
+            info("Draining"),
+            timed(ToastExtras::new().with_drain(true)),
+            ms(0),
+        );
+        settle(&mut h, &mut toasts, 0);
+        let (scene, out, _) = frame(&mut h, &mut toasts, secs(3));
+        let card = out.tree.get(node_of(id)).expect("node").bounds;
+        let l = lines(&scene, DARK.toast_info);
+        if shown_line {
+            assert_eq!(l.len(), 1, "{tier:?}: {l:?}");
+            assert!(
+                (l[0][2] - card.w / 2.0).abs() <= 1.0,
+                "{tier:?}: {}",
+                l[0][2]
+            );
+            assert_eq!(l[0][0], card.x, "left-anchored");
+            assert_eq!(l[0][1] + l[0][3], card.bottom(), "on the bottom edge");
+        } else {
+            assert!(l.is_empty(), "{tier:?}: {l:?}");
+        }
+    }
+    // No line without the flag, none for an untimed toast; the timeout still runs under Reduced.
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    toasts.push_with(info("No line"), timed(ToastExtras::new()), ms(0));
+    toasts.push_with(
+        spec(ToastKind::Error, "Untimed"),
+        ToastExtras::new().with_drain(true),
+        ms(0),
+    );
+    settle(&mut h, &mut toasts, 0);
+    let (scene, _, _) = frame(&mut h, &mut toasts, secs(3));
+    assert!(lines(&scene, DARK.toast_info).is_empty());
+    assert!(lines(&scene, DARK.toast_error).is_empty());
+}
+
+#[test]
+fn a_running_drain_line_asks_for_frames_and_a_held_one_does_not() {
+    let (mut h, mut toasts, _, over) =
+        notice_bench(info("Draining"), timed(ToastExtras::new().with_drain(true)));
+    let r = frame_at(&mut h, &mut toasts, None, 1000).1.repaint;
+    assert!(
+        matches!(r, Repaint::At(t) if t < ms(1100)),
+        "the line moves, so the next busy tick is due soon: {r:?}"
+    );
+    frame_at(&mut h, &mut toasts, Some(over), secs(2));
+    assert_eq!(
+        frame_at(&mut h, &mut toasts, Some(over), 2500).1.repaint,
+        Repaint::Idle,
+        "held: still line, no deadline"
+    );
+}
+
+/// The frame that releases a hold asks for a busy frame at once: the drain line moves again,
+/// it does not wait for the deadline. Each way a hold ends is one case.
+#[test]
+fn releasing_a_hold_asks_for_a_busy_frame_that_frame() {
+    let busy = |r: Repaint, from: u64| matches!(r, Repaint::At(t) if t < ms(from + 100));
+    for how in [
+        "pointer moved away",
+        "pointer left the window",
+        "a finger touched",
+    ] {
+        let (mut h, mut toasts, _, over) =
+            notice_bench(info("Draining"), timed(ToastExtras::new().with_drain(true)));
+        frame_at(&mut h, &mut toasts, Some(over), secs(2));
+        let held = frame_at(&mut h, &mut toasts, Some(over), 2500).1.repaint;
+        assert_eq!(held, Repaint::Idle, "{how}: held, no frames");
+        let r = match how {
+            "pointer moved away" => frame_at(&mut h, &mut toasts, None, secs(3)).1.repaint,
+            "pointer left the window" => {
+                h.input.pointer_leave();
+                frame(&mut h, &mut toasts, secs(3)).1.repaint
+            }
+            _ => {
+                h.input.touch_start(1, over.0, over.1);
+                frame(&mut h, &mut toasts, secs(3)).1.repaint
+            }
+        };
+        assert!(
+            busy(r, secs(3)),
+            "{how}: the release frame asks for a busy tick, got {r:?}"
+        );
+    }
+}
+
+#[test]
+fn a_body_action_reports_and_the_toast_leaves_without_toggling_the_log() {
+    let mut spec = info("Open me");
+    spec.log = vec!["a log line".into()];
+    let (mut h, mut toasts, id, _) = notice_bench(spec, ToastExtras::new().with_body_action(7));
+    let (_, out, _) = frame(&mut h, &mut toasts, 600);
+    let r = click(&mut h, &mut toasts, body_point(&out, id), 700);
+    assert_eq!(r.action, Some((id, 7)));
+    assert!(!toasts.is_live(id));
+    assert!(!toasts.expanded(id));
+    assert_eq!(toasts.history().count(), 1);
+}
+
+#[test]
+fn toasts_with_places_the_stack_in_an_area_inset_by_the_margin() {
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    toasts.push(info("older"), ms(0));
+    let newest = toasts.push(info("newest"), ms(0));
+    let opts = ToastStackOptions::new()
+        .with_area(Rect::new(100.0, 100.0, 600.0, 400.0))
+        .with_margin(22.0);
+    let mut out = None;
+    for at in [0, 100, 200, 400] {
+        out = Some(h.at_ms(at).frame(|ui| {
+            ui.toasts_with("t", &mut toasts, &opts);
+        }));
+    }
+    let tree = out.expect("frames").1.tree;
+    let b = tree.get(node_of(newest)).expect("node").bounds;
+    assert!((b.right() - 678.0).abs() < 0.01, "{b:?}");
+    assert!((b.bottom() - 478.0).abs() < 0.01, "{b:?}");
+    // The default options are the window's bottom right with the margin of 16.
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let id = toasts.push(info("one"), ms(0));
+    let (_, out) = settle(&mut h, &mut toasts, 0);
+    let b = out.tree.get(node_of(id)).expect("node").bounds;
+    assert_eq!((b.right(), b.bottom()), (WIN.0 - 16.0, WIN.1 - 16.0));
+}
+
+fn texts_of(scene: &Scene) -> Vec<(u64, f32, f32)> {
+    scene
+        .merged(LayerId::Toast)
+        .texts
+        .iter()
+        .map(|t| (t.key.0, t.x, t.y))
+        .collect()
+}
+
+fn key_of(text: &str, style: Style) -> u64 {
+    Spec::plain(text, style).cache_key(1.0)
+}
+
+#[test]
+fn the_header_shows_the_source_and_the_age_and_its_dismiss_button_dismisses() {
+    let extras = ToastExtras::new()
+        .with_source("build")
+        .with_age("now")
+        .with_title("Done")
+        .with_timeout(Duration::from_secs(60));
+    let (mut h, mut toasts, id, _) = notice_bench(info("It compiled"), extras);
+    let (scene, out, _) = frame(&mut h, &mut toasts, 600);
+    let t = texts_of(&scene);
+    let at = |style: Style, text: &str| {
+        let k = key_of(text, style);
+        t.iter()
+            .find(|i| i.0 == k)
+            .unwrap_or_else(|| panic!("no {text}"))
+    };
+    let source = at(Style::ui(DARK.font_base, DARK.fg_primary).medium(), "build");
+    let age = at(Style::ui(DARK.font_s, DARK.fg_muted), "now");
+    let title = at(Style::ui(DARK.font_base, DARK.fg_bright).bold(), "Done");
+    let message_key = Spec::plain("It compiled", Style::ui(DARK.font_base, DARK.fg_primary))
+        .wrapped(294.0)
+        .cache_key(1.0);
+    let message = t
+        .iter()
+        .find(|i| i.0 == message_key)
+        .expect("the message, wrapped at the inner width");
+    assert!(age.1 > source.1, "the age is to the right of the source");
+    assert!(
+        source.2 < title.2 && title.2 < message.2,
+        "header, title, message"
+    );
+    let card = out.tree.get(node_of(id)).expect("node").bounds;
+    assert!(
+        (title.1 - message.1).abs() < 0.01 && title.1 < card.x + 14.0,
+        "the title and message start at the inner left edge"
+    );
+    // The header's dismiss button dismisses.
+    let r = click(
+        &mut h,
+        &mut toasts,
+        centre(button_named(&out, "Dismiss")),
+        700,
+    );
+    assert_eq!(r, ToastResponse::default());
+    assert!(!toasts.is_live(id));
+    assert_eq!(toasts.history().count(), 1);
+}
+
+#[test]
+fn a_notice_with_a_title_names_its_node_by_the_title() {
+    let mut spec = info("The message");
+    spec.detail = Some("The detail".into());
+    let (mut h, mut toasts, id, _) = notice_bench(spec, ToastExtras::new().with_title("The title"));
+    let (_, out, _) = frame(&mut h, &mut toasts, 600);
+    let n = out.tree.get(node_of(id)).expect("node");
+    assert_eq!(n.name, "The title");
+    assert_eq!(n.description.as_deref(), Some("The message\nThe detail"));
+    // A plain toast is named by its message as before.
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let id = toasts.push(info("Plain"), ms(0));
+    let (_, out) = settle(&mut h, &mut toasts, 0);
+    assert_eq!(out.tree.get(node_of(id)).expect("node").name, "Plain");
+}
+
+#[test]
+fn a_title_and_no_header_keeps_the_glyph_row_and_grows_it() {
+    let (mut h, mut toasts, _, _) = notice_bench(info("Msg"), ToastExtras::new().with_title("T"));
+    let mut p = Toasts::default();
+    p.push(info("Msg"), ms(0));
+    let mut hp = UiHarness::new(WIN);
+    settle(&mut hp, &mut p, 0);
+    let (_, with, _) = frame(&mut h, &mut toasts, 600);
+    let (_, plain, _) = frame(&mut hp, &mut p, 600);
+    let height = |out: &FrameOutput| {
+        out.tree
+            .nodes
+            .iter()
+            .find(|n| matches!(n.role, Role::Status))
+            .expect("toast")
+            .bounds
+            .h
+    };
+    assert!(height(&with) > height(&plain), "the title line adds height");
+    // The Dismiss button stays in the first row, at the right.
+    assert!(button_named(&with, "Dismiss").y < button_named(&with, "Dismiss").bottom());
+}
+
+#[test]
+fn update_with_keeps_a_held_toast_held_with_its_remaining_time() {
+    let (mut h, mut toasts, id, over) = notice_bench(info("Held"), timed(ToastExtras::new()));
+    frame_at(&mut h, &mut toasts, Some(over), secs(2));
+    toasts.update_with(
+        id,
+        info("Held, new age"),
+        timed(ToastExtras::new().with_age("1m")),
+    );
+    let (_, out, _) = frame_at(&mut h, &mut toasts, Some(over), secs(8));
+    assert_eq!(shown(&out), ["Held, new age"], "still held at 8 s");
+    // It leaves at 8 s with the 4 s it had left.
+    frame_at(&mut h, &mut toasts, None, secs(8));
+    let (_, out, _) = frame_at(&mut h, &mut toasts, None, 11_900);
+    assert_eq!(shown(&out).len(), 1);
+    frame_at(&mut h, &mut toasts, None, secs(12));
+    assert!(!toasts.is_live(id));
+}
+
+#[test]
+fn update_with_keeps_the_deadline_of_a_timed_notice() {
+    let (mut h, mut toasts, id, _) = notice_bench(info("Timed"), timed(ToastExtras::new()));
+    frame_at(&mut h, &mut toasts, None, secs(3));
+    toasts.update_with(
+        id,
+        info("Timed again"),
+        timed(ToastExtras::new().with_age("3s")),
+    );
+    let (_, out, _) = frame_at(&mut h, &mut toasts, None, secs(6) - 1);
+    assert_eq!(shown(&out), ["Timed again"]);
+    frame_at(&mut h, &mut toasts, None, secs(6));
+    assert!(!toasts.is_live(id), "gone at 6 s, not 9 s");
+}
+
+#[test]
+fn update_keeps_a_notice_s_extras() {
+    let (mut h, mut toasts, id, _) =
+        notice_bench(info("One"), ToastExtras::new().with_title("Kept"));
+    toasts.update(id, info("Two"));
+    let (_, out, _) = frame(&mut h, &mut toasts, 600);
+    let n = out.tree.get(node_of(id)).expect("node");
+    assert_eq!(
+        (n.name.as_str(), n.description.as_deref()),
+        ("Kept", Some("Two"))
+    );
+}
+
+#[test]
+fn live_holds_each_drawn_toast_with_the_rect_its_body_takes_input_in() {
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let a = toasts.push(info("first"), ms(0));
+    let b = toasts.push_with(info("second"), timed(ToastExtras::new()), ms(0));
+    // Pushed, not yet drawn.
+    assert!(toasts.is_live(a) && toasts.is_live(b));
+    assert!(toasts.live().is_empty());
+    let (_, out) = settle(&mut h, &mut toasts, 0);
+    let live = toasts.live().to_vec();
+    assert_eq!(
+        live.iter().map(|l| l.0).collect::<Vec<_>>(),
+        [a, b],
+        "top to bottom"
+    );
+    for (id, rect) in &live {
+        let card = out.tree.get(node_of(*id)).expect("node").bounds;
+        for (x, y) in [
+            (rect.x, card.x),
+            (rect.y, card.y),
+            (rect.w, card.w),
+            (rect.h, card.h),
+        ] {
+            assert!((x - y).abs() < 0.01, "{id:?}: {rect:?} vs {card:?}");
+        }
+    }
+    let r = live[0].1;
+    assert!(toasts.contains(centre(r)));
+    assert!(!toasts.contains((r.x - 1.0, r.y + r.h / 2.0)));
+    assert!(!toasts.contains((r.x + r.w / 2.0, r.y - 1.0)));
+    assert!(
+        toasts.contains((r.x + 2.0, r.bottom() - 2.0)),
+        "a corner of the card"
+    );
+    // The model starts empty.
+    let none = Toasts::default();
+    assert!(none.live().is_empty() && !none.contains((1.0, 1.0)) && !none.is_live(ToastId(1)));
+}
+
+#[test]
+fn live_and_is_live_follow_a_toast_out_by_a_timeout_its_x_or_an_action() {
+    let mut h = UiHarness::new(WIN);
+    let mut toasts = Toasts::default();
+    let timed_out = toasts.push(info("times out"), ms(0));
+    let closed = toasts.push(spec(ToastKind::Error, "closed"), ms(0));
+    let acted = toasts.push(prompt("acted"), ms(0));
+    settle(&mut h, &mut toasts, 0);
+    assert_eq!(toasts.live().len(), 3);
+    // The timeout: not live from the frame it starts leaving.
+    frame(&mut h, &mut toasts, secs(4));
+    assert!(!toasts.is_live(timed_out));
+    assert!(toasts.live().iter().all(|l| l.0 != timed_out));
+    frame(&mut h, &mut toasts, secs(4) + 400);
+    // The x.
+    let (_, out, _) = frame(&mut h, &mut toasts, secs(5));
+    let x = out
+        .tree
+        .nodes
+        .iter()
+        .filter(|n| n.role == Role::Button && n.name == "Dismiss")
+        .map(|n| centre(n.bounds))
+        .next()
+        .expect("a dismiss button");
+    click(&mut h, &mut toasts, x, secs(5) + 50);
+    assert!(!toasts.is_live(closed));
+    assert!(toasts.live().iter().all(|l| l.0 != closed));
+    frame(&mut h, &mut toasts, secs(5) + 500);
+    // An action.
+    let (_, out, _) = frame(&mut h, &mut toasts, secs(6));
+    let r = click(
+        &mut h,
+        &mut toasts,
+        centre(button_named(&out, "Open")),
+        secs(6) + 50,
+    );
+    assert_eq!(r.action, Some((acted, 2)));
+    assert!(!toasts.is_live(acted));
+    assert!(toasts.live().is_empty());
+    // Once the last fade ends the model is empty too.
+    frame(&mut h, &mut toasts, secs(6) + 100);
+    frame(&mut h, &mut toasts, secs(6) + 600);
+    assert!(toasts.is_empty() && toasts.live().is_empty());
+}
+
+#[test]
+fn a_notice_body_with_no_action_and_no_log_is_inert_and_a_plain_one_toggles() {
+    let (mut h, mut toasts, id, _) = notice_bench(info("Inert"), ToastExtras::new());
+    let (_, out, _) = frame(&mut h, &mut toasts, 600);
+    let r = click(&mut h, &mut toasts, body_point(&out, id), 700);
+    assert_eq!(r, ToastResponse::default());
+    assert!(!toasts.expanded(id));
+    // The timer ran on (the pointer held it from 700 ms to 1 s: 300 ms late): info's 4 s.
+    frame_at(&mut h, &mut toasts, None, 1000);
+    frame_at(&mut h, &mut toasts, None, secs(4) + 300 - 1);
+    assert!(toasts.is_live(id));
+    frame_at(&mut h, &mut toasts, None, secs(4) + 300);
+    assert!(
+        !toasts.is_live(id),
+        "gone on schedule, no expand waited for"
+    );
+    // The node offers no log toggle, and no default action.
+    let mut h = UiHarness::new(WIN);
+    let mut t2 = Toasts::default();
+    let id2 = t2.push_with(info("Inert"), ToastExtras::new(), ms(0));
+    let (_, out) = settle(&mut h, &mut t2, 0);
+    let n = out.tree.get(node_of(id2)).expect("node");
+    assert!(!n.actions.contains(Action::Default) && !n.actions.contains(Action::Expand));
+    assert!(n.actions.contains(Action::Dismiss));
+    // A notice with a log toggles it, as a plain toast does.
+    let mut with_log = info("Logged");
+    with_log.log = vec!["line".into()];
+    let (mut h, mut toasts, id, _) = notice_bench(with_log, ToastExtras::new());
+    let (_, out, _) = frame(&mut h, &mut toasts, 600);
+    click(&mut h, &mut toasts, body_point(&out, id), 700);
+    assert!(toasts.expanded(id));
+    let mut h = UiHarness::new(WIN);
+    let mut plain = Toasts::default();
+    let id = plain.push(info("Plain"), ms(0));
+    let (_, out) = settle(&mut h, &mut plain, 0);
+    click(&mut h, &mut plain, body_point(&out, id), 700);
+    assert!(plain.expanded(id));
 }

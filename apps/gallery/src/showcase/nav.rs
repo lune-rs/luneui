@@ -94,6 +94,7 @@ pub(crate) const GROUPS: &[Group] = &[
             "split-panes",
             "tree-view",
             "settings-page",
+            "message-list",
         ],
     },
     Group {

@@ -47,6 +47,7 @@ mod list_row;
 mod locale;
 mod markdown;
 mod menu;
+mod message_list;
 pub(crate) mod motion;
 mod nav_bar;
 mod nav_item;
@@ -210,6 +211,7 @@ pub(crate) static PAGES: &[&Page] = &[
     &sparkline::PAGE,
     &battery::PAGE,
     &system_monitor::PAGE,
+    &message_list::PAGE,
 ];
 
 /// The window background of a Ui page (glass) and its card. Returns the card. On a

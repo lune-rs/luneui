@@ -9,14 +9,15 @@
 use lune_ui::icon;
 use lune_ui::input::NamedKey;
 use lune_ui::lunegit_dark::THEME;
-use lune_ui::motion::MotionTier;
+use lune_ui::motion::{MotionTier, Time};
 use lune_ui::near_black;
 use lune_ui::paint::Rect;
 use lune_ui::text::{Spec, Style};
 use lune_ui::ui::Ui;
 use lune_ui::widgets::menu::MenuRow;
 use lune_ui::widgets::tab_strip::{
-    BusyCue, CONTENT_SWAP, GAP, HEIGHT, MIN_WIDTH, Tab, TabEvent, TabKey, TabStripOptions,
+    BusyCue, CONTENT_SWAP, GAP, HEIGHT, MIN_WIDTH, Tab, TabEvent, TabKey, TabStripExtras,
+    TabStripOptions,
 };
 use lune_ui::widgets::tone::Tone;
 
@@ -86,6 +87,11 @@ struct Demo {
     /// The tab the open context menu is for, and where it opened (window space). The strip opens
     /// no menu: it reports `context`, and the page builds its own with `Ui::menu`.
     menu: Option<(TabKey, (f32, f32))>,
+    /// The tabs that ask for attention (the strip draws the cue on the inactive ones).
+    cued: Vec<u64>,
+    /// The time at which tab 2's cue turns on, once: the pop scene's script has no input that
+    /// does it.
+    cue_at: Option<Time>,
 }
 
 /// What a row of the page's tab menu does.
@@ -114,6 +120,8 @@ impl Demo {
             tone: Tone::Neutral,
             tint: true,
             menu: None,
+            cued: Vec::new(),
+            cue_at: None,
         }
     }
 
@@ -256,7 +264,13 @@ impl PageState for Demo {
             name: "Sessions",
             header_tint: self.tint.then_some(header_tint),
         };
-        let response = ui.tab_strip("strip", strip, &tabs, &opts);
+        if self.cue_at.is_some_and(|at| ui.time() >= at) {
+            self.cue_at = None;
+            self.cued.push(2);
+        }
+        let cued: Vec<TabKey> = self.cued.iter().map(|k| TabKey(*k)).collect();
+        let extras = TabStripExtras::new().with_attention(&cued);
+        let response = ui.tab_strip_with("strip", strip, &tabs, &opts, &extras);
         for event in response.events {
             self.apply(event);
         }
@@ -283,6 +297,13 @@ impl PageState for Demo {
             ("Comet", Some(BusyCue::Comet)),
             ("Breath", Some(BusyCue::Breath)),
         ];
+        let mut attention = self.cued.contains(&2);
+        if panel.toggle(ui, "Attention cue (Tab 2)", &mut attention) {
+            self.cued.retain(|k| *k != 2);
+            if attention {
+                self.cued.push(2);
+            }
+        }
         let names: Vec<&str> = cues.iter().map(|(n, _)| *n).collect();
         let mut at = cues.iter().position(|(_, c)| *c == self.busy).unwrap_or(0);
         if panel.choice(ui, "Busy cue", &names, &mut at) {
@@ -354,6 +375,26 @@ fn long_title() -> Box<dyn PageState> {
     items[1].title =
         "A title far longer than the widest tab the strip will ever draw for it".to_owned();
     Box::new(Demo::new(items, Some(2)))
+}
+
+/// Four tabs, the first active, every one marked: the active one draws nothing; the others draw
+/// the dot with a short title, a long closable title (elided sooner) and a shining title (the
+/// band stays, the dot alone is the cue).
+fn attention() -> Box<dyn PageState> {
+    let mut items = numbered(4);
+    items[2].title = "A title far longer than the room a cued tab leaves for it".to_owned();
+    items[3].progress = Some(Tone::Neutral);
+    let mut demo = Demo::new(items, Some(1));
+    demo.cued = vec![1, 2, 3, 4];
+    Box::new(demo)
+}
+
+/// Tab 2's cue turns on at 100 ms.
+fn attention_pop() -> Box<dyn PageState> {
+    Box::new(Demo {
+        cue_at: Some(Time::from_millis(100)),
+        ..Demo::new(numbered(3), Some(1))
+    })
 }
 
 fn empty() -> Box<dyn PageState> {
@@ -501,6 +542,35 @@ const SCENES: &[UiScene] = &[
         script: &[],
         capture_ms: 0,
         expect: Expect::Settled,
+    },
+    // The shine's phase 1/6; the active tab (1) has no dot.
+    UiScene {
+        id: "tab-strip-attention",
+        scale: 2.0,
+        tier: MotionTier::Full,
+        state: attention,
+        script: &[],
+        capture_ms: 300,
+        expect: Expect::Waiting,
+    },
+    // Half of the 350 ms pop, from the frame the cue turned on at 100 ms.
+    UiScene {
+        id: "tab-strip-attention-pop",
+        scale: 2.0,
+        tier: MotionTier::Full,
+        state: attention_pop,
+        script: &[
+            Step {
+                at_ms: 0,
+                events: &[],
+            },
+            Step {
+                at_ms: 100,
+                events: &[],
+            },
+        ],
+        capture_ms: 275,
+        expect: Expect::Moving,
     },
     UiScene {
         id: "tab-strip-empty",

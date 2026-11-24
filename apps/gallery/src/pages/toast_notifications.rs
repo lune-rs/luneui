@@ -10,7 +10,9 @@ use lune_ui::motion::MotionTier;
 use lune_ui::paint::Rect;
 use lune_ui::ui::Ui;
 use lune_ui::widgets::button::ButtonKind;
-use lune_ui::widgets::toast::{ToastAction, ToastId, ToastKind, ToastSpec, Toasts};
+use lune_ui::widgets::toast::{
+    ToastAction, ToastExtras, ToastId, ToastKind, ToastSpec, ToastStackOptions, Toasts,
+};
 
 use super::{caption, card, heading};
 use crate::page::Stage;
@@ -46,6 +48,10 @@ enum Mode {
     Appearing,
     /// A warning toast leaving from 600 ms, over an error one.
     Leaving,
+    /// A notice: header row, title, two actions, the drain line half way, placed in the card.
+    Notice,
+    /// A notice with a title and no header or actions, placed in the card.
+    NoticeTitle,
 }
 
 const LOG: [&str; 14] = [
@@ -90,6 +96,42 @@ fn prompt_spec() -> ToastSpec {
         ],
         ..ToastSpec::new(ToastKind::Info, "An update is available")
     }
+}
+
+/// The notice the scenes and the knob push: a build that finished, with two actions.
+fn notice_spec() -> ToastSpec {
+    ToastSpec {
+        actions: vec![
+            ToastAction {
+                label: "Dismiss".into(),
+                primary: false,
+                id: NOTICE_DISMISS,
+            },
+            ToastAction {
+                label: "Open".into(),
+                primary: true,
+                id: NOTICE_OPEN,
+            },
+        ],
+        ..ToastSpec::new(ToastKind::Success, "All 214 tests passed in 38 s.")
+    }
+}
+
+/// The action numbers of the notice: its Dismiss button and its Open button, which a press on the
+/// body reports too.
+const NOTICE_DISMISS: u64 = 11;
+const NOTICE_OPEN: u64 = 12;
+
+/// The notice's extras with a timeout of `timeout`: the header, the title, the drain line and a
+/// body that opens.
+fn notice_extras(timeout: Duration) -> ToastExtras {
+    ToastExtras::new()
+        .with_source("build")
+        .with_age("now")
+        .with_title("Build finished")
+        .with_timeout(timeout)
+        .with_drain(true)
+        .with_body_action(NOTICE_OPEN)
 }
 
 fn loading_spec(progress: Option<f32>) -> ToastSpec {
@@ -185,6 +227,12 @@ fn appearing() -> Box<dyn PageState> {
 fn leaving() -> Box<dyn PageState> {
     state(Mode::Leaving)
 }
+fn notice() -> Box<dyn PageState> {
+    state(Mode::Notice)
+}
+fn notice_title() -> Box<dyn PageState> {
+    state(Mode::NoticeTitle)
+}
 
 impl State {
     /// What each scene starts with, at the page's first frame.
@@ -228,6 +276,21 @@ impl State {
                     let id = t.push(ToastSpec::new(kind, message), now);
                     t.dismiss(id, now);
                 }
+            }
+            // The drain line is half way at the capture (800 ms of 1600).
+            Mode::Notice => {
+                t.push_with(
+                    notice_spec(),
+                    notice_extras(Duration::from_millis(1600)),
+                    now,
+                );
+            }
+            Mode::NoticeTitle => {
+                t.push_with(
+                    ToastSpec::new(ToastKind::Info, "The branch was rebuilt from main."),
+                    ToastExtras::new().with_title("Build finished"),
+                    now,
+                );
             }
             Mode::Appearing | Mode::Leaving => {
                 t.push(ToastSpec::new(ToastKind::Error, "Fetch failed"), now);
@@ -315,14 +378,25 @@ impl PageState for State {
         let area = Rect::new(x, panel_top + 20.0, 360.0, card.bottom() - panel_top - 44.0);
         ui.toast_history("history", area, &mut self.toasts);
 
-        let resp = ui.toasts("toasts", &mut self.toasts);
+        // The notices sit in the card with a margin of 22, as an app's content card would hold
+        // them; the other scenes use the window's corner.
+        let opts = match self.mode {
+            Mode::Notice | Mode::NoticeTitle => {
+                ToastStackOptions::new().with_area(card).with_margin(22.0)
+            }
+            _ => ToastStackOptions::new(),
+        };
+        let resp = ui.toasts_with("toasts", &mut self.toasts, &opts);
         if let Some((_, action)) = resp.action {
-            let said = if action == 1 {
-                "Installing"
-            } else {
-                "Maybe later"
+            let said = match action {
+                1 => Some("Installing"),
+                NOTICE_OPEN => Some("Opened the build"),
+                NOTICE_DISMISS => None,
+                _ => Some("Maybe later"),
             };
-            self.toasts.push(ToastSpec::new(ToastKind::Info, said), now);
+            if let Some(said) = said {
+                self.toasts.push(ToastSpec::new(ToastKind::Info, said), now);
+            }
         }
         if let Some(id) = resp.cancelled {
             self.toasts
@@ -336,6 +410,14 @@ impl PageState for State {
         panel.choice(ui, "Kind", &names, &mut self.kind);
         panel.text(ui, "Title", &mut self.title);
         panel.text(ui, "Detail", &mut self.detail);
+        if panel.button(ui, "Push a notice") {
+            // Hover it to hold the timer; a press on the body opens it.
+            self.toasts.push_with(
+                notice_spec(),
+                notice_extras(Duration::from_secs(10)),
+                ui.time(),
+            );
+        }
         if panel.button(ui, "Push this toast") {
             let spec = ToastSpec {
                 detail: (!self.detail.is_empty()).then(|| self.detail.clone()),
@@ -389,6 +471,13 @@ const fn scene(
         expect,
     }
 }
+
+/// A frame at 0, so the toast of the scene is pushed there and the capture falls part way into
+/// its timeout.
+const FIRST: &[Step] = &[Step {
+    at_ms: 0,
+    events: &[],
+}];
 
 const SCENES: &[UiScene] = &[
     // Timed toasts wait on their deadline: a frame is due, nothing moves.
@@ -444,6 +533,23 @@ const SCENES: &[UiScene] = &[
         ACT,
         690,
         Expect::Moving,
+    ),
+    // The notice at 800 ms of its 1600 ms timeout: the drain line is half the card's width, and
+    // a frame is due at the busy cadence.
+    scene(
+        "toast-notifications-notice",
+        notice,
+        FIRST,
+        800,
+        Expect::Waiting,
+    ),
+    // A title over the message, no header, no actions.
+    scene(
+        "toast-notifications-notice-title",
+        notice_title,
+        FIRST,
+        800,
+        Expect::Waiting,
     ),
 ];
 

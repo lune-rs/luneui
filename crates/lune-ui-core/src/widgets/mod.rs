@@ -30,6 +30,7 @@ pub mod lane_graph;
 pub mod list_row;
 pub mod markdown;
 pub mod menu;
+pub mod message_list;
 pub mod nav_bar;
 pub mod nav_item;
 pub mod nav_stack;

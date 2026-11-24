@@ -668,6 +668,24 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   A ghost button holding only a glyph, centred in `rect` (the caller's rect is its size: 28
   by 28, 24 by 24, ...). Role button named `button.name`; Enter and Space click.
 
+- <a id="method.Ui.icon_button_with"></a>
+
+  ```rust
+  pub fn icon_button_with(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      button: &IconButton<'_>,
+      extras: &IconButtonExtras<'_>,
+  ) -> Response
+  ```
+
+  [`Self::icon_button`](ui.md#method.Ui.icon_button) with the [`IconButtonExtras`](widgets/button.md#struct.IconButtonExtras): a badge over the button's top right
+  corner (drawn above the glyph and never clipped by the button; it takes no input of its
+  own) and the open state (the ghost hover fill at rest, the node `Expanded`). The node's
+  description is the badge's text when it has one. With the default extras it is exactly
+  `icon_button`, and the same key gives the same ids and state.
+
 `impl Ui<'_>`
 
 - <a id="method.Ui.callout"></a>`pub fn callout(&mut self, key: impl Hash, rect: Rect, opts: &CalloutOptions<'_>) -> CalloutResponse`
@@ -976,6 +994,46 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   is in [`MdResponse::link`](widgets/markdown.md#structfield.MdResponse.link) and a task box clicked, when `opts.tasks_live`, in
   [`MdResponse::task`](widgets/markdown.md#structfield.MdResponse.task); the document opens nothing and changes nothing. The vertical wheel
   goes to the area around a table or code block that scrolls only sideways.
+
+`impl Ui<'_>`
+
+- <a id="method.Ui.message_list"></a>
+
+  ```rust
+  pub fn message_list(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      rows: &[MessageRow<'_>],
+      opts: &MessageListOptions<'_>,
+  ) -> MessageListResponse
+  ```
+
+  A message list under `key` at the top left of `rect`, with the width of `rect`: one row per
+  [`MessageRow`](widgets/message_list.md#struct.MessageRow) in a scroll area at most `opts.max_height` high (and `rect.h`), a `List` node
+  named `opts.label` with a `ListItem` per row (named by its title, described by its body and
+  meta line, "Unread" first when it is). One tab stop; Up, Down, Home and End move focus
+  (Down on the last row wraps), Enter and Space and a click report
+  [`MessageListResponse::clicked`](widgets/message_list.md#structfield.MessageListResponse.clicked), a secondary click or the show-menu action reports
+  `context`. The focused row scrolls into view. With no rows nothing is drawn and the height
+  is 0.
+
+- <a id="method.Ui.message_list_header"></a>
+
+  ```rust
+  pub fn message_list_header(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      title: &str,
+      action: Option<&str>,
+  ) -> bool
+  ```
+
+  The header of a message list in `rect`: `title` bold and bright at the left, centred in the
+  rect's height ([`HEADER_HEIGHT`](widgets/message_list.md#constant.HEADER_HEIGHT) is what the rect is usually given), and when `action` is
+  `Some`, a small ghost text button with that label at the right. Returns whether the button
+  was clicked this frame.
 
 `impl Ui<'_>`
 
@@ -1512,6 +1570,28 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   changes it. A secondary click (or the show-menu action) on a tab comes back as `context`,
   the tab and its rect; the strip opens no menu, the app opens its own with [`Ui::menu`](ui.md#method.Ui.menu)
   there. See the module docs.
+
+- <a id="method.Ui.tab_strip_with"></a>
+
+  ```rust
+  pub fn tab_strip_with(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      tabs: &[Tab<'_>],
+      opts: &TabStripOptions<'_>,
+      extras: &TabStripExtras<'_>,
+  ) -> TabStripResponse
+  ```
+
+  [`Self::tab_strip`](ui.md#method.Ui.tab_strip) with `extras`: the tabs that ask for attention draw a dot in
+  [`Theme::attention`](theme.md#method.Theme.attention) before their title and a bright
+  title, unless they are the active tab. The dot and its gap ([`CUE_DOT`](widgets/tab_strip.md#constant.CUE_DOT), [`CUE_GAP`](widgets/tab_strip.md#constant.CUE_GAP)) come
+  out of the title's room, so a cued tab is no wider and the title elides sooner. When a
+  tab's cue turns on the dot pops once ([`CUE_POP`](widgets/tab_strip.md#constant.CUE_POP)); a tab first drawn cued does not pop.
+  The cued tab's node description adds the string `luneui.tab-strip.attention`. Under the same
+  `key` it has the same ids and state as `tab_strip`, so an app may use either from frame to
+  frame; with default extras it draws exactly what `tab_strip` does.
 
 `impl Ui<'_>`
 
@@ -2234,6 +2314,22 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   the model themselves. A toast is a `Status` node (`Alert` for an error) named by its
   message and described by its detail; its default action toggles the log, `Dismiss`
   dismisses it. Buttons are tab stops of the scope below; nothing takes focus on its own.
+  [`Self::toasts_with`](ui.md#method.Ui.toasts_with) with the default options.
+
+- <a id="method.Ui.toasts_with"></a>
+
+  ```rust
+  pub fn toasts_with(
+      &mut self,
+      key: impl Hash,
+      toasts: &mut Toasts,
+      opts: &ToastStackOptions,
+  ) -> ToastResponse
+  ```
+
+  [`Self::toasts`](ui.md#method.Ui.toasts) with `opts`: the stack sits at the bottom right of `opts.area` (else the
+  window), inset by `opts.margin`. A notice (see the module docs) takes its hold, its drain
+  line and its body action here, and the call refills [`Toasts::live`](widgets/toast.md#method.Toasts.live).
 
 `impl<'a> Ui<'a>`
 

@@ -14,8 +14,9 @@ use lune_ui_core::text::{Spec, Style, TextSystem};
 use lune_ui_core::theme::DARK;
 use lune_ui_core::ui::{Response, Ui, WidgetId};
 use lune_ui_core::widgets::button::{
-    ButtonKind, ButtonLook, ButtonOptions, ButtonState, FOCUS, HOVER, ICON_GAP, ICON_SIZE,
-    IconButton, PRESS, SMALL_HEIGHT, SMALL_RADIUS, button, button_width, button_width_with,
+    BADGE_HEIGHT, BADGE_INSET, BADGE_MIN_WIDTH, BADGE_PAD, ButtonKind, ButtonLook, ButtonOptions,
+    ButtonState, FOCUS, HOVER, ICON_GAP, ICON_SIZE, IconButton, IconButtonExtras, PRESS,
+    SMALL_HEIGHT, SMALL_RADIUS, button, button_width, button_width_with,
 };
 use lune_ui_core::widgets::radio_group::RadioOption;
 
@@ -854,4 +855,156 @@ fn an_enabled_button_takes_one_activation_key_and_leaves_the_other() {
     });
     assert!(clicked);
     assert_eq!(out.fired.len(), 1, "as before: Enter won, Space went on");
+}
+
+// ---- The icon button's badge and open state ----
+
+/// The `attention()` fills of the first layer: a badge is one rounded fill.
+fn badge_fills(scene: &Scene) -> Vec<[f32; 4]> {
+    let want = premul(DARK.attention());
+    scene.layers[0]
+        .geometry
+        .under
+        .iter()
+        .filter(|f| f.color == want)
+        .map(|f| f.rect)
+        .collect()
+}
+
+fn with_extras(extras: IconButtonExtras<'_>) -> (Scene, lune_ui_core::input::FrameOutput) {
+    UiHarness::new(WIN).frame(|ui| {
+        ui.icon_button_with("b", ICON_RECT, &icon_button(), &extras);
+    })
+}
+
+#[test]
+fn a_badge_is_a_15_px_pill_at_the_top_right_and_wider_for_longer_text() {
+    let (scene, _) = with_extras(IconButtonExtras::new().with_badge("3"));
+    let fills = badge_fills(&scene);
+    assert_eq!(fills.len(), 1, "{fills:?}");
+    let [x, y, w, h] = fills[0];
+    let text_w = FakeText
+        .measure(
+            &Spec::plain("3", Style::ui(DARK.font_s, DARK.on_attention()).bold()),
+            1.0,
+        )
+        .0;
+    assert_eq!(h, BADGE_HEIGHT);
+    assert_eq!(w, (text_w + 2.0 * BADGE_PAD).max(BADGE_MIN_WIDTH));
+    assert_eq!(w, 15.0, "one digit stays at the least width");
+    assert_eq!(x + w, ICON_RECT.right() - BADGE_INSET.0);
+    assert_eq!(y, ICON_RECT.y + BADGE_INSET.1);
+    // The text is drawn in on_attention(), bold.
+    let key = Spec::plain("3", Style::ui(DARK.font_s, DARK.on_attention()).bold()).cache_key(1.0);
+    assert!(scene.layers[0].texts.iter().any(|t| t.key.0 == key));
+
+    let (scene, _) = with_extras(IconButtonExtras::new().with_badge("128"));
+    let [x, _, w, h] = badge_fills(&scene)[0];
+    assert!(w > BADGE_MIN_WIDTH, "{w}");
+    assert_eq!(h, BADGE_HEIGHT);
+    assert_eq!(x + w, ICON_RECT.right() - BADGE_INSET.0, "same right edge");
+}
+
+#[test]
+fn an_empty_badge_is_a_plain_circle_and_none_draws_nothing_and_changes_nothing() {
+    let (scene, _) = with_extras(IconButtonExtras::new().with_badge(""));
+    let fills = badge_fills(&scene);
+    assert_eq!(fills.len(), 1);
+    assert_eq!((fills[0][2], fills[0][3]), (BADGE_MIN_WIDTH, BADGE_HEIGHT));
+    assert_eq!(scene.layers[0].texts.len(), 1, "the glyph only");
+
+    let (none, none_out) = with_extras(IconButtonExtras::new());
+    assert!(badge_fills(&none).is_empty());
+    let (plain, plain_out) = UiHarness::new(WIN).frame(|ui| {
+        ui.icon_button("b", ICON_RECT, &icon_button());
+    });
+    assert_eq!(format!("{none:?}"), format!("{plain:?}"));
+    assert_eq!(none_out.tree.get(id()), plain_out.tree.get(id()));
+}
+
+#[test]
+fn the_node_describes_a_badge_and_an_open_button_is_expanded_on_the_hover_fill() {
+    let (_, out) = with_extras(IconButtonExtras::new().with_badge("3"));
+    let node = out.tree.get(id()).expect("node");
+    assert_eq!(node.description.as_deref(), Some("3"));
+    assert!(!node.states.contains(State::Expanded));
+    let (_, out) = with_extras(IconButtonExtras::new().with_badge(""));
+    assert_eq!(out.tree.get(id()).expect("node").description, None);
+
+    // Open: the hover fill at rest, over the caller's rect at the button's radius, and Expanded.
+    let (scene, out) = with_extras(IconButtonExtras::new().with_open(true));
+    let fill = scene.layers[0].geometry.under[0];
+    assert_eq!(fill.rect, [20.0, 20.0, 28.0, 28.0]);
+    assert_eq!(
+        (fill.radii, fill.color),
+        ([4.0; 4], premul(DARK.surface_hover))
+    );
+    assert!(
+        out.tree
+            .get(id())
+            .expect("node")
+            .states
+            .contains(State::Expanded)
+    );
+    // Not open: no fill and not expanded.
+    let (scene, out) = with_extras(IconButtonExtras::new().with_open(false));
+    assert!(scene.layers[0].geometry.under.is_empty());
+    assert!(
+        !out.tree
+            .get(id())
+            .expect("node")
+            .states
+            .contains(State::Expanded)
+    );
+    // Pressed, an open button takes the press fill as today.
+    let mut h = UiHarness::new(WIN);
+    let draw = |ui: &mut Ui<'_>| {
+        ui.icon_button_with(
+            "b",
+            ICON_RECT,
+            &icon_button(),
+            &IconButtonExtras::new().with_open(true),
+        )
+    };
+    with(&mut h, draw);
+    h.input.pointer_to(34.0, 34.0).press(PointerButton::Primary);
+    h.at_ms(10);
+    with(&mut h, draw);
+    h.at_ms(1000);
+    let (scene, _) = with(&mut h, draw);
+    assert_eq!(
+        scene.layers[0].geometry.under[0].color,
+        premul(DARK.surface_active)
+    );
+}
+
+#[test]
+fn a_badged_button_still_clicks_by_pointer_enter_and_space() {
+    let draw = |ui: &mut Ui<'_>| {
+        ui.icon_button_with(
+            "b",
+            ICON_RECT,
+            &icon_button(),
+            &IconButtonExtras::new().with_badge("3"),
+        )
+    };
+    let mut h = UiHarness::new(WIN);
+    with(&mut h, draw);
+    // On the badge itself too: it takes no input of its own.
+    let badge = badge_fills(&with(&mut h, draw).0)[0];
+    h.input
+        .pointer_to(badge[0] + badge[2] / 2.0, badge[1] + badge[3] / 2.0)
+        .click(PointerButton::Primary);
+    let (_, r) = with(&mut h, draw);
+    assert!(r.clicked);
+    for key in [NamedKey::Enter, NamedKey::Space] {
+        let mut h = UiHarness::new(WIN);
+        with(&mut h, draw);
+        h.input.key_down(Key::Named(NamedKey::Tab), None);
+        h.at_ms(10);
+        with(&mut h, draw);
+        h.input.key_down(Key::Named(key), None);
+        h.at_ms(20);
+        assert!(with(&mut h, draw).1.clicked, "{key:?}");
+    }
 }

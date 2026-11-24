@@ -29,7 +29,7 @@ rename and close policy.
 
 ## Existing code
 
-The widget: `crates/lune-ui-core/src/widgets/tab_strip.rs` (`Ui::tab_strip`, `TabKey`, `Tab`, `TabStripOptions`, `TabEvent`, `BusyCue`, `CONTENT_SWAP`, `SLIDE`), tests `crates/lune-ui-core/tests/widget_tab_strip.rs`, page and scenes `apps/gallery/src/pages/tab_strip.rs`.
+The widget: `crates/lune-ui-core/src/widgets/tab_strip.rs` (`Ui::tab_strip`, `TabKey`, `Tab`, `TabStripOptions`, `TabEvent`, `BusyCue`, `CONTENT_SWAP`, `SLIDE`; `Ui::tab_strip_with`, `TabStripExtras`, `CUE_DOT`, `CUE_GAP`, `CUE_POP`, `CUE_POP_SCALE`, [D442]), tests `crates/lune-ui-core/tests/widget_tab_strip.rs`, page and scenes `apps/gallery/src/pages/tab_strip.rs`.
 Geometry: `crates/lune-ui-core/src/chrome.rs:5-20` (constants and `outline`), tests `:172-226`; see `core.tab-outline`. The gallery `chrome` scene draws it (`apps/gallery/src/scenes.rs:173`).
 Lunegit's strip: `src/Lunegit.Desktop/Views/TerminalPanelView.axaml:22-125,203-374` and `Views/TerminalPanelView.axaml.cs:255-480`, `Controls/Terminal/TerminalTabChrome.cs` (outline control),
 `Controls/Terminal/TerminalChromeGeometry.cs`, `Controls/Terminal/TerminalChromeAnimation.cs`, `Controls/Terminal/TerminalTabDragController.cs`.
@@ -72,6 +72,7 @@ Conflict: a comment in Lunegit's tab template says the tab "is capped at MaxWidt
 | panel unfocused | outline brush `border_subtle` | [L src/Lunegit.Desktop/Views/TerminalPanelView.axaml:28-30] |
 | focus-visible (tab) | outline ring per the toolkit's focus ring on the activate area | [core.focus] |
 | progress | the title shines: a 48 px band of light passes through it left to right every 1800 ms, in `fg_bright`, `status_warning_light` #FFD666 or `status_error_light` #EF9A9A ([D132], D270); no icon, no reserved gap, the tab is no wider. Deviates from Lunegit's spinner icon on the user's request (R3). Reduced: the whole title breathes between its colour and the light, on the breath curve; Off: a fixed half mix, no repaint. The shine's frames tick at the busy cadence (`Repaint::At`, 30 a second by default; D298), and a tab scrolled out of view asks nothing | [derived: user review R3, D270] |
+| attention (an inactive tab the app marks with `TabStripExtras::attention`, [D442]) | a 7 px round dot in `Theme::attention()` (= `warn`) at the tab's left padding, vertically centred, then the title 7 px after it in `fg_bright` instead of `fg_muted`; the dot and its gap come out of the title's room, so the tab is no wider and the title elides sooner. The active tab shows nothing (no dot, no colour change); with `progress` the title keeps its base colour and band and the dot alone is the cue. The dot follows the tab through a drag, a slide and a lift | [derived: Luneterm R1, D442] |
 | busy (command running) | outline sweep, comet or breath (Reduced: breath; Off: static) | [L src/Lunegit.Desktop/Controls/Terminal/TerminalTabChrome.cs:246-272], [L src/Lunegit.Core/Settings/TerminalOutlineAnimationResolver.cs:17-28] |
 | dragging | dragged tab tracks the pointer, neighbours shifted; a neighbour's title shows through the dragged tab's translucent fill, as in Lunegit (no ZIndex or opacity on the drag) | [infra.drag-and-drop], [L src/Lunegit.Desktop/Views/TerminalPanelView.axaml:54-69] |
 | overflow | strip scrolled; a partially visible tab has its notch dropped under 12 px | [L src/Lunegit.Desktop/Controls/Terminal/TerminalChromeGeometry.cs:54-58] |
@@ -88,6 +89,7 @@ Conflict: a comment in Lunegit's tab template says the tab "is capped at MaxWidt
 | dragged tab settles into its slot | tab x offset | settle | fast | sine-in-out | snap | [D40], [infra.drag-and-drop] |
 | activate: content swap (the card body's crossfade) | outgoing and incoming content opacity | page-swap | base | sine-in-out | keep | [L src/Lunegit.Desktop/Themes/Animations.axaml:209-224], [L src/Lunegit.Desktop/ViewModels/TerminalPanelViewModel.cs:829-834] |
 | active tab changes | the notch's span (left and width, mixed by a 0 to 1 progress; the scroll offset applied after) | move | fast | sine-in-out | snap | [D291] |
+| a tab's attention cue turns on | the dot's scale, 1 to 1.7 to 1 (`1 + 0.7 sin(pi p)`, p the progress) | pop | moderate | linear (the sine is the curve) | snap | [derived: D442] |
 | outline brush focus change | outline colour | focus | instant | linear | keep | [L src/Lunegit.Desktop/Themes/Animations.axaml:182-186] |
 
 The content swap is the card body's job (the app composes the strip with its content); the strip only reports the activation. In Reduced the crossfade runs at Fast (180) and in Off it is zero [L src/Lunegit.Desktop/ViewModels/TerminalPanelViewModel.cs:829-834], [L src/Lunegit.Desktop/Themes/AnimationsReduced.axaml:144-147].
@@ -117,6 +119,7 @@ Never animated: the strip's layout (a tab or the new-tab button opening or closi
 ### Accessibility
 
 - Role `tab-list` for the strip with one `tab` per tab; name = the tab title; states selected (the active tab), focused, and `busy` while a command runs; actions: default (activate), focus, show-menu, scroll-into-view [infra.accessibility].
+- A tab that draws the attention cue has the node description `<title>, <luneui.tab-strip.attention>`; the title alone otherwise (the tooltip sets the description to the title, and the strip patches the cued one after it) [D442].
 - Close button: role `button`, name = `luneui.tab-strip.close`; new-tab button: role `button`, name = `luneui.tab-strip.new`; each is its own node [infra.accessibility].
 - The tab panel relationship (which content a tab controls) has no field in the node list: `role-gap: tab to panel association` (stays open, [D122]).
 
@@ -124,6 +127,8 @@ Never animated: the strip's layout (a tab or the new-tab button opening or closi
 
 - `luneui.tab-strip.new`: "New tab" (Lunegit: "New terminal tab", the word terminal dropped) [L src/Lunegit.Infrastructure/Localization/en.json:780].
 - `luneui.tab-strip.close`: "Close tab" [L src/Lunegit.Infrastructure/Localization/en.json:781].
+
+- `luneui.tab-strip.attention`: "Needs attention", after the title in the description of a tab that draws the attention cue [D442].
 
 The confirm and rename dialog texts, "Duplicate Tab" and "Copy Working Directory" are app strings [L src/Lunegit.Infrastructure/Localization/en.json:782-785,825-832].
 
@@ -147,6 +152,8 @@ The confirm and rename dialog texts, "Duplicate Tab" and "Copy Working Directory
 - `tab-strip-settle`: released tab settling, t = 90 ms.
 - `tab-strip-content-swap`: activation of tab 3, outgoing and incoming content at t = 125 ms (half of `base`).
 - `tab-strip-switch-mid`: the same activation, captured 90 ms (half of `fast`) after the strip first draws the new active tab (t = 106 ms; the click frame still draws the old key): the notch is half way between tab 2 and tab 3, moving.
+- `tab-strip-attention`: four tabs, every one marked, the first active: the active one draws nothing; tab 2 (short title), tab 3 (a long closable title, elided sooner) and tab 4 (shining: the band stays, the dot alone is the cue) draw the dot; t = 300 ms, `Waiting` ([D442]).
+- `tab-strip-attention-pop`: tab 2's cue turns on at 100 ms; captured at 275 ms, the middle of the 350 ms pop (the dot at 1.7 times its size), moving ([D442]).
 - `phone-widgets-tabs-pan`: a finger moved 170 px left from the second tab of an overflowing strip: the strip scrolled, no tab was activated and nothing reordered, settled.
 
 ### Painter primitives
@@ -162,6 +169,7 @@ The confirm and rename dialog texts, "Duplicate Tab" and "Copy Working Directory
 - Busy cue: sweep angle at phase p is `p * 360` degrees; the comet dash is `0.14` of the contour; the breath opacity runs between 0.38 and 1.0 over 1800 ms; none of them runs when no command is running and `Repaint` is Idle when settled [L src/Lunegit.Desktop/Controls/Terminal/TerminalChromeAnimation.cs:60-66,105]. The cue's frames tick at the busy cadence (`Repaint::At`, D298); a hover or activation fade in flight is `Now` until it settles.
 - Tier: Off gives the static outline; Reduced gives breath [L src/Lunegit.Core/Settings/TerminalOutlineAnimationResolver.cs:17-28].
 - Conformance: hover, slide, settle, the notch's slide (`tab_strip::SLIDE`) and content-swap transitions pass `motion::conformance`.
+- Attention cue ([D442]): `an_inactive_cued_tab_draws_a_dot_before_a_bright_title`, `the_active_tab_in_attention_draws_no_cue`, `a_cued_tab_that_shines_keeps_its_band_and_shows_the_dot`, `a_cued_title_elides_sooner_and_the_tab_keeps_its_width`, `the_dot_pops_once_when_the_cue_turns_on` (Reduced and Off: no pop), `a_pop_asks_for_frames_and_a_settled_cue_does_not`, `a_tab_first_drawn_cued_does_not_pop`, `the_node_description_names_the_cue_only_while_it_is_drawn`, `tab_strip_and_default_extras_draw_the_same_scene`.
 - Semantic node: one `tab-list`, one `tab` per tab with `selected` on the active one; an injected `AccessAction` default activates the tab.
 - Tests, bullet by bullet. `crates/lune-ui-core/tests/widget_tab_strip.rs`: behaviour `a_press_on_a_tab_activates_it_once`, `a_press_on_the_close_button_closes_and_neither_activates_nor_arms_a_drag`, `press_move_4_and_release_reorders`, `escape_cancels_with_no_reorder`, `the_arrows_rove_and_wrap_home_and_end_go_to_the_ends_and_focus_does_not_activate`; outline `the_notch_wraps_the_active_tab_and_a_flush_tab_keeps_the_card_corner`, `a_click_slides_the_notch_to_the_new_tab`, `closing_the_last_active_tab_keeps_the_notch_for_the_whole_slide`, `reduced_and_off_switch_in_one_frame`, layout `hover_and_activation_move_no_slot_for_titles_from_90_to_224_px`, `the_new_tab_button_follows_the_last_tab_by_6_px`, `a_press_in_the_empty_strip_space_reaches_the_region_under_it`, `the_active_tab_cut_under_12_px_or_scrolled_away_has_no_notch` (and the geometry tests `chrome.rs`: see `core.tab-outline`); pixel probes `at_scale_2_the_strip_keeps_its_measures_in_device_px`, `widths_follow_the_title_within_the_limits_and_the_gap_is_between_tabs_only`; busy cue `the_sweep_is_two_passes_and_its_phase_is_time_over_2400_ms`, `the_comet_is_0_14_of_the_contour_and_travels_it_in_2400_ms`, `the_breath_runs_between_0_38_and_1_over_1800_ms`, `no_cue_is_idle_and_a_finished_cue_stops`; tier `reduced_forces_the_breath_and_off_is_static_and_idle`; conformance `every_motion_row_conforms_under_every_tier`, `the_content_swap_is_base_full_fast_reduced_and_nothing_off`; node `one_tab_list_a_tab_per_tab_and_the_active_one_selected`, `an_access_default_activates_and_a_close_default_closes`; disabled `a_disabled_strip_activates_nothing_from_enter_or_space_and_still_does_after_enabling`, `a_disabled_strip_nodes_are_disabled_and_offer_no_focus_or_action`.
 

@@ -13,9 +13,9 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | planned | 0 |
 | stub | 0 |
 | in-progress | 2 |
-| done | 114 |
+| done | 115 |
 | external | 4 |
-| **total** | **120** |
+| **total** | **121** |
 
 ## core
 
@@ -119,6 +119,7 @@ under `docs/components/<area>/` and re-run the script. See [README](README.md).
 | id | title | status | consumers | summary |
 | --- | --- | --- | --- | --- |
 | [layout.icon-rail](layout/icon-rail.md) | Icon rail | done | lunegit | Narrow icon column of 40 px toolbar buttons that switch the side panels and toggle the terminal, with a notification badge |
+| [layout.message-list](layout/message-list.md) | Message list | done | any | A scrolling list of messages for a popover inbox (title, age, two lines of body, meta, an unread dot) with one roving tab stop, and the header above it |
 | [layout.nav-stack](layout/nav-stack.md) | Navigation stack | done | any | Navigation stack of a phone app: the app's levels, the top one pushed in from the right, popped back out by a call or an edge swipe, the level below following by a third with a shade and a shadow |
 | [layout.page](layout/page.md) | Page card (header, scroll body, footer) | done | wane | The card that holds a screen: header with title and actions, scrolling body, optional pinned footer |
 | [layout.pager](layout/pager.md) | Pager | done | any | Pager of a phone screen: pages side by side that a finger swipes between one at a time with a rubber band at the ends, and a row of dots with one tab stop |

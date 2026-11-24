@@ -23,10 +23,23 @@ Drawing: the stack sits bottom right (margin 16, gap 8, newest at the bottom), 3
 expanded, without an overlay record and without a focus scope: a toast opened by an overlay
 must not take Tab or Escape from the dialog under it, so only its buttons are tab stops, of the
 scope the app called [`Ui::toasts`](../ui.md#method.Ui.toasts) in. A press on the body toggles the log; Dismiss and Cancel
-do not. Motion (none in the shipped app, so D40's kinds at their defaults): appear is opacity
+do not. [`Ui::toasts_with`](../ui.md#method.Ui.toasts_with) places the stack in an area of the app's instead of the window. Motion (none in the shipped app, so D40's kinds at their defaults): appear is opacity
 and a rise of 8 px, leave is opacity, a neighbour's move after an arrival or a removal is one
 retargeted offset, and the expand animates the height with the text wrapped once at the target
 width. Reduced fades instead of moving, Off snaps.
+
+A notice is a toast pushed with [`ToastExtras`](toast.md#struct.ToastExtras) ([`Toasts::push_with`](toast.md#method.Toasts.push_with)); a toast pushed with
+[`Toasts::push`](toast.md#method.Toasts.push) behaves exactly as above and nothing below applies to it. A notice may add a
+header row (a source, an age, the buttons) and a title line, a glyph and an accent of its own, a
+timeout of its own that applies with actions too, a drain line that shows the time left, and a
+body press that reports an action instead of toggling the log. While the pointer (not a finger)
+rests on a notice its timer is held and resumes with the time that was left. A notice with no
+body action and no log has an inert body: a press on it does nothing, and its timer runs.
+
+The app can ask where the toasts are: [`Toasts::live`](toast.md#method.Toasts.live) and [`Toasts::contains`](toast.md#method.Toasts.contains) read the rects
+of the last [`Ui::toasts_with`](../ui.md#method.Ui.toasts_with) call, [`Toasts::is_live`](toast.md#method.Toasts.is_live) asks the model whether a toast has not
+started leaving. Eviction is unchanged: a toast with actions is never evicted, so toasts with
+actions stack without bound unless the app caps them.
 
 Source: `crates/lune-ui-core/src/widgets/toast.rs:1`
 
@@ -45,7 +58,7 @@ pub struct ToastAction {
 
 An action button of a toast (a prompt): the app's label and its own number for it.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:136`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:156`
 
 **Fields**
 
@@ -65,6 +78,124 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:136`
 - `impl PartialEq for ToastAction`
 - `impl StructuralPartialEq for ToastAction`
 
+<a id="struct.ToastExtras"></a>
+### Struct `ToastExtras`
+
+```rust
+#[non_exhaustive]
+pub struct ToastExtras {
+    pub source: Option<String>,
+    pub age: Option<String>,
+    pub title: Option<String>,
+    pub glyph: Option<&'static str>,
+    pub accent: Option<Rgba>,
+    pub timeout: Option<std::time::Duration>,
+    pub drain: bool,
+    pub body_action: Option<u64>,
+}
+```
+
+What a notice adds to a [`ToastSpec`](toast.md#struct.ToastSpec) ([`Toasts::push_with`](toast.md#method.Toasts.push_with)). Build it with [`Self::new`](toast.md#method.ToastExtras.new) and
+the `with_*` methods; new fields stay additive.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:209`
+
+**Fields**
+
+- <a id="structfield.ToastExtras.source"></a>`pub source: Option<String>`
+
+  The header row's text: who the notice is from. A header row (the glyph, this, the age and
+  the buttons) shows only when this is `Some`.
+
+- <a id="structfield.ToastExtras.age"></a>`pub age: Option<String>`
+
+  The age text, right-aligned in the header row; the app writes it and refreshes it with
+  [`Toasts::update_with`](toast.md#method.Toasts.update_with). Shown only with a `source`.
+
+- <a id="structfield.ToastExtras.title"></a>`pub title: Option<String>`
+
+  A bold line above the message, one line, elided. It names the toast's node, and the message
+  describes it.
+
+- <a id="structfield.ToastExtras.glyph"></a>`pub glyph: Option<&'static str>`
+
+  The glyph for the kind's own (also for a loading toast, which then shows no spinner).
+
+- <a id="structfield.ToastExtras.accent"></a>`pub accent: Option<Rgba>`
+
+  The colour of the glyph and the drain line, for the kind's own.
+
+- <a id="structfield.ToastExtras.timeout"></a>`pub timeout: Option<std::time::Duration>`
+
+  How long the toast lives, for the kind's rule; it applies with actions too. `None` keeps
+  the kind's rule.
+
+- <a id="structfield.ToastExtras.drain"></a>`pub drain: bool`
+
+  Draws the [`DRAIN`](toast.md#constant.DRAIN) line along the card's bottom edge while a timeout runs (Full tier).
+
+- <a id="structfield.ToastExtras.body_action"></a>`pub body_action: Option<u64>`
+
+  A press on the body (not on a button) reports `ToastResponse::action` with this number and
+  the toast leaves, as an action button does, instead of toggling the log.
+
+**Methods and associated items**
+
+`impl ToastExtras`
+
+- <a id="method.ToastExtras.new"></a>`pub fn new() -> Self`
+
+  No extras: a toast pushed with it is a notice with the kind's own look and timeout, and an
+  inert body unless it has a log.
+
+- <a id="method.ToastExtras.with_accent"></a>`pub fn with_accent(self, accent: Rgba) -> Self`
+  `#[must_use]`
+
+  The accent colour, for the kind's own.
+
+- <a id="method.ToastExtras.with_age"></a>`pub fn with_age(self, age: impl Into<String>) -> Self`
+  `#[must_use]`
+
+  The age text of the header row.
+
+- <a id="method.ToastExtras.with_body_action"></a>`pub fn with_body_action(self, id: u64) -> Self`
+  `#[must_use]`
+
+  The number a press on the body reports.
+
+- <a id="method.ToastExtras.with_drain"></a>`pub fn with_drain(self, drain: bool) -> Self`
+  `#[must_use]`
+
+  Whether the drain line shows.
+
+- <a id="method.ToastExtras.with_glyph"></a>`pub fn with_glyph(self, glyph: &'static str) -> Self`
+  `#[must_use]`
+
+  The glyph, for the kind's own.
+
+- <a id="method.ToastExtras.with_source"></a>`pub fn with_source(self, source: impl Into<String>) -> Self`
+  `#[must_use]`
+
+  The header row's text.
+
+- <a id="method.ToastExtras.with_timeout"></a>`pub fn with_timeout(self, timeout: Duration) -> Self`
+  `#[must_use]`
+
+  The timeout, for the kind's rule.
+
+- <a id="method.ToastExtras.with_title"></a>`pub fn with_title(self, title: impl Into<String>) -> Self`
+  `#[must_use]`
+
+  The title line.
+
+**Trait implementations**
+
+- `impl Clone for ToastExtras`
+- `impl Debug for ToastExtras`
+- `impl Default for ToastExtras`
+- `impl PartialEq for ToastExtras`
+- `impl StructuralPartialEq for ToastExtras`
+
 <a id="struct.ToastId"></a>
 ### Struct `ToastId`
 
@@ -74,7 +205,7 @@ pub struct ToastId(pub u64);
 
 A toast's identity, stable from [`Toasts::push`](toast.md#method.Toasts.push) until it is gone.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:116`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:136`
 
 **Fields**
 
@@ -104,7 +235,7 @@ pub struct ToastResponse {
 
 What [`Ui::toasts`](../ui.md#method.Ui.toasts) reports for a frame.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:359`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:583`
 
 **Fields**
 
@@ -141,7 +272,7 @@ pub struct ToastSpec {
 
 What a toast shows. Texts are the app's.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:145`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:165`
 
 **Fields**
 
@@ -172,6 +303,58 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:145`
 - `impl PartialEq for ToastSpec`
 - `impl StructuralPartialEq for ToastSpec`
 
+<a id="struct.ToastStackOptions"></a>
+### Struct `ToastStackOptions`
+
+```rust
+#[non_exhaustive]
+pub struct ToastStackOptions {
+    pub area: Option<Rect>,
+    pub margin: f32,
+}
+```
+
+Where [`Ui::toasts_with`](../ui.md#method.Ui.toasts_with) puts the stack. Build it with [`Self::new`](toast.md#method.ToastStackOptions.new) and the `with_*` methods.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:300`
+
+**Fields**
+
+- <a id="structfield.ToastStackOptions.area"></a>`pub area: Option<Rect>`
+
+  The rect the stack sits at the bottom right of; `None` is the overlay bounds (the window).
+
+- <a id="structfield.ToastStackOptions.margin"></a>`pub margin: f32`
+
+  The distance from the area's right and bottom edge.
+
+**Methods and associated items**
+
+`impl ToastStackOptions`
+
+- <a id="method.ToastStackOptions.new"></a>`pub fn new() -> Self`
+
+  The window's bottom right with [`MARGIN`](toast.md#constant.MARGIN).
+
+- <a id="method.ToastStackOptions.with_area"></a>`pub fn with_area(self, area: Rect) -> Self`
+  `#[must_use]`
+
+  The area the stack sits in.
+
+- <a id="method.ToastStackOptions.with_margin"></a>`pub fn with_margin(self, margin: f32) -> Self`
+  `#[must_use]`
+
+  The distance from the area's edges.
+
+**Trait implementations**
+
+- `impl Clone for ToastStackOptions`
+- `impl Copy for ToastStackOptions`
+- `impl Debug for ToastStackOptions`
+- `impl Default for ToastStackOptions`
+- `impl PartialEq for ToastStackOptions`
+- `impl StructuralPartialEq for ToastStackOptions`
+
 <a id="struct.Toasts"></a>
 ### Struct `Toasts`
 
@@ -184,7 +367,7 @@ pub struct Toasts {
 The toasts an app has up and the archive of those that left. The app owns it, pushes from
 anywhere and hands it to [`Ui::toasts`](../ui.md#method.Ui.toasts) and [`Ui::toast_history`](../ui.md#method.Ui.toast_history) every frame.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:208`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:371`
 
 **Methods and associated items**
 
@@ -193,6 +376,10 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:208`
 - <a id="method.Toasts.clear_history"></a>`pub fn clear_history(&mut self)`
 
   Empties the history and the unread count.
+
+- <a id="method.Toasts.contains"></a>`pub fn contains(&self, pos: (f32, f32)) -> bool`
+
+  Whether `pos` (window space) is inside a toast of [`Self::live`](toast.md#method.Toasts.live).
 
 - <a id="method.Toasts.dismiss"></a>`pub fn dismiss(&mut self, id: ToastId, _now: Time)`
 
@@ -211,6 +398,18 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:208`
 
   Whether no toast shows and none is still fading out.
 
+- <a id="method.Toasts.is_live"></a>`pub fn is_live(&self, id: ToastId) -> bool`
+
+  Whether toast `id` is up: true from [`Self::push`](toast.md#method.Toasts.push) until it starts leaving (a timeout, its
+  x, an action, [`Self::dismiss`](toast.md#method.Toasts.dismiss) or an eviction), read from the model, not the last frame.
+
+- <a id="method.Toasts.live"></a>`pub fn live(&self) -> &[(ToastId, Rect)]`
+
+  The toasts drawn by the last [`Ui::toasts`](../ui.md#method.Ui.toasts) or [`Ui::toasts_with`](../ui.md#method.Ui.toasts_with) call that had not started
+  leaving, top to bottom, each with the window-space rect its body takes input in (a press
+  anywhere on the card, a button too, is inside it). Valid until the next call; empty before
+  the first one.
+
 - <a id="method.Toasts.mark_read"></a>`pub fn mark_read(&mut self)`
 
   Sets the unread count to 0.
@@ -220,6 +419,11 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:208`
   Shows `spec` at the bottom of the stack. While 3 toasts show, the oldest that is not
   loading and has no actions leaves first (not archived); when none qualifies, the stack
   grows. The timer of a timed toast starts at `now`.
+
+- <a id="method.Toasts.push_with"></a>`pub fn push_with(&mut self, spec: ToastSpec, extras: ToastExtras, now: Time) -> ToastId`
+
+  [`Self::push`](toast.md#method.Toasts.push) for a notice: `extras` adds the header, title, glyph, accent, timeout, drain
+  and body action (see the module docs). The eviction rule reads only `spec`.
 
 - <a id="method.Toasts.set_expanded"></a>`pub fn set_expanded(&mut self, id: ToastId, expanded: bool)`
 
@@ -235,6 +439,15 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:208`
   that was not timed and now is starts its timer at the next frame; one already timed keeps
   its deadline; one that is not timed any more loses it. Does nothing once the toast is
   leaving or gone.
+
+  A notice keeps its extras; a held one stays held with the time it has left.
+
+- <a id="method.Toasts.update_with"></a>`pub fn update_with(&mut self, id: ToastId, spec: ToastSpec, extras: ToastExtras)`
+
+  [`Self::update`](toast.md#method.Toasts.update) with new `extras` (a new age text, a new title). The timer follows the
+  same rule: a timed toast keeps its deadline and its drain line's whole (a fresh timeout is
+  [`Self::dismiss`](toast.md#method.Toasts.dismiss) and a new push), a held one stays held, one that becomes timed starts at
+  the next frame, and one that is not timed any more loses it.
 
 **Trait implementations**
 
@@ -259,7 +472,7 @@ pub enum ToastKind {
 
 What a toast says it is.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:120`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:140`
 
 **Variants**
 
@@ -304,9 +517,10 @@ pub fn toast_size<H: Copy + PartialEq>(
 ) -> (f32, f32)
 ```
 
-The size of a toast with `spec` as it settles, collapsed or `expanded`.
+The size of a toast with `spec` as it settles, collapsed or `expanded`. A notice's header and
+title add to it; this is the size of a toast pushed with [`Toasts::push`](toast.md#method.Toasts.push).
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:455`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:728`
 
 ## Constants
 
@@ -317,7 +531,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:455`
 pub const ACTION_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:98`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:111`
 
 <a id="constant.ACTION_PAD"></a>
 ### Constant `ACTION_PAD`
@@ -328,7 +542,7 @@ pub const ACTION_PAD: (f32, f32);
 
 An action button's padding, horizontal then vertical, and the space between buttons.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:97`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:110`
 
 <a id="constant.APPEAR"></a>
 ### Constant `APPEAR`
@@ -339,7 +553,7 @@ pub const APPEAR: Motion;
 
 A toast appearing: opacity 0 to 1 and a rise from [`APPEAR_RISE`](toast.md#constant.APPEAR_RISE) px below.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:47`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:60`
 
 <a id="constant.APPEAR_RISE"></a>
 ### Constant `APPEAR_RISE`
@@ -350,7 +564,7 @@ pub const APPEAR_RISE: f32 = 8.0;
 
 How far below its place a toast starts.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:55`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:68`
 
 <a id="constant.BORDER"></a>
 ### Constant `BORDER`
@@ -359,7 +573,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:55`
 pub const BORDER: f32 = 1.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:74`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:87`
 
 <a id="constant.BUTTON"></a>
 ### Constant `BUTTON`
@@ -368,7 +582,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:74`
 pub const BUTTON: f32 = 20.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:84`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:97`
 
 <a id="constant.BUTTON_GLYPH"></a>
 ### Constant `BUTTON_GLYPH`
@@ -380,7 +594,7 @@ pub const BUTTON_GLYPH: f32 = 12.0;
 The Dismiss and Cancel glyph, the button around it (glyph plus 4 px each side), its corner
 radius, and the space before Cancel and before Dismiss.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:83`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:96`
 
 <a id="constant.BUTTON_RADIUS"></a>
 ### Constant `BUTTON_RADIUS`
@@ -389,7 +603,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:83`
 pub const BUTTON_RADIUS: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:85`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:98`
 
 <a id="constant.CANCEL_MARGIN"></a>
 ### Constant `CANCEL_MARGIN`
@@ -398,7 +612,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:85`
 pub const CANCEL_MARGIN: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:86`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:99`
 
 <a id="constant.CLEAR_GLYPH"></a>
 ### Constant `CLEAR_GLYPH`
@@ -407,7 +621,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:86`
 pub const CLEAR_GLYPH: f32 = 14.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:107`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:127`
 
 <a id="constant.DETAIL_TOP"></a>
 ### Constant `DETAIL_TOP`
@@ -418,7 +632,7 @@ pub const DETAIL_TOP: f32 = 4.0;
 
 The space above the detail, above the progress bar, the log block and the actions.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:89`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:102`
 
 <a id="constant.DISMISS_MARGIN"></a>
 ### Constant `DISMISS_MARGIN`
@@ -427,7 +641,18 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:89`
 pub const DISMISS_MARGIN: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:87`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:100`
+
+<a id="constant.DRAIN"></a>
+### Constant `DRAIN`
+
+```rust
+pub const DRAIN: f32 = 2.0;
+```
+
+A notice's drain line: its height along the card's bottom edge.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:113`
 
 <a id="constant.EXPAND"></a>
 ### Constant `EXPAND`
@@ -438,7 +663,7 @@ pub const EXPAND: Motion;
 
 A toast growing or shrinking to show or hide its log.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:53`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:66`
 
 <a id="constant.GAP"></a>
 ### Constant `GAP`
@@ -447,7 +672,19 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:53`
 pub const GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:71`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:84`
+
+<a id="constant.HEADER_GAP"></a>
+### Constant `HEADER_GAP`
+
+```rust
+pub const HEADER_GAP: f32 = 8.0;
+```
+
+The least space between a notice header's source and its age, and between the age and the
+buttons.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:118`
 
 <a id="constant.HISTORY_CAP"></a>
 ### Constant `HISTORY_CAP`
@@ -458,7 +695,7 @@ pub const HISTORY_CAP: usize = 50;
 
 How many archived toasts the history keeps.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:60`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:73`
 
 <a id="constant.HISTORY_DETAIL_INSET"></a>
 ### Constant `HISTORY_DETAIL_INSET`
@@ -467,7 +704,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:60`
 pub const HISTORY_DETAIL_INSET: f32 = 22.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:112`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:132`
 
 <a id="constant.HISTORY_GAP"></a>
 ### Constant `HISTORY_GAP`
@@ -476,7 +713,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:112`
 pub const HISTORY_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:111`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:131`
 
 <a id="constant.HISTORY_HEADER"></a>
 ### Constant `HISTORY_HEADER`
@@ -485,7 +722,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:111`
 pub const HISTORY_HEADER: f32 = 24.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:104`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:124`
 
 <a id="constant.HISTORY_HEADER_BOTTOM"></a>
 ### Constant `HISTORY_HEADER_BOTTOM`
@@ -494,7 +731,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:104`
 pub const HISTORY_HEADER_BOTTOM: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:105`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:125`
 
 <a id="constant.HISTORY_HEADER_TOP"></a>
 ### Constant `HISTORY_HEADER_TOP`
@@ -507,7 +744,7 @@ The history panel: the space above the header, its row, the space below it and a
 (the shipped panel's margins), the clear-all button, its glyph, and a row's padding, margin and
 glyph.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:103`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:123`
 
 <a id="constant.HISTORY_ICON"></a>
 ### Constant `HISTORY_ICON`
@@ -516,7 +753,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:103`
 pub const HISTORY_ICON: f32 = 14.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:110`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:130`
 
 <a id="constant.HISTORY_LIST_TOP"></a>
 ### Constant `HISTORY_LIST_TOP`
@@ -525,7 +762,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:110`
 pub const HISTORY_LIST_TOP: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:106`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:126`
 
 <a id="constant.HISTORY_MARGIN"></a>
 ### Constant `HISTORY_MARGIN`
@@ -534,7 +771,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:106`
 pub const HISTORY_MARGIN: f32 = 1.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:109`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:129`
 
 <a id="constant.HISTORY_PAD"></a>
 ### Constant `HISTORY_PAD`
@@ -543,7 +780,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:109`
 pub const HISTORY_PAD: (f32, f32);
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:108`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:128`
 
 <a id="constant.ICON"></a>
 ### Constant `ICON`
@@ -555,7 +792,7 @@ pub const ICON: f32 = 16.0;
 The kind glyph and the gap after it; the detail's, the actions' and the log's left inset is
 the glyph plus its gap.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:78`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:91`
 
 <a id="constant.ICON_GAP"></a>
 ### Constant `ICON_GAP`
@@ -564,7 +801,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:78`
 pub const ICON_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:79`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:92`
 
 <a id="constant.INFO_TIMEOUT"></a>
 ### Constant `INFO_TIMEOUT`
@@ -575,7 +812,7 @@ pub const INFO_TIMEOUT: std::time::Duration;
 
 When an info, a success and a warning toast time out.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:62`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:75`
 
 <a id="constant.LEAVE"></a>
 ### Constant `LEAVE`
@@ -586,7 +823,7 @@ pub const LEAVE: Motion;
 
 A toast leaving: opacity 1 to 0.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:49`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:62`
 
 <a id="constant.LOG_HEIGHT"></a>
 ### Constant `LOG_HEIGHT`
@@ -597,7 +834,7 @@ pub const LOG_HEIGHT: f32 = 200.0;
 
 The log block: its height, its padding, its corner radius and a line.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:92`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:105`
 
 <a id="constant.LOG_LINE"></a>
 ### Constant `LOG_LINE`
@@ -606,7 +843,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:92`
 pub const LOG_LINE: f32 = 14.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:95`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:108`
 
 <a id="constant.LOG_PAD"></a>
 ### Constant `LOG_PAD`
@@ -615,7 +852,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:95`
 pub const LOG_PAD: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:93`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:106`
 
 <a id="constant.LOG_RADIUS"></a>
 ### Constant `LOG_RADIUS`
@@ -624,7 +861,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:93`
 pub const LOG_RADIUS: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:94`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:107`
 
 <a id="constant.MARGIN"></a>
 ### Constant `MARGIN`
@@ -635,7 +872,7 @@ pub const MARGIN: f32 = 16.0;
 
 The distance from the window's right and bottom edge, and between toasts.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:70`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:83`
 
 <a id="constant.MAX_VISIBLE"></a>
 ### Constant `MAX_VISIBLE`
@@ -646,7 +883,7 @@ pub const MAX_VISIBLE: usize = 3;
 
 How many toasts show at once.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:58`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:71`
 
 <a id="constant.PAD"></a>
 ### Constant `PAD`
@@ -655,7 +892,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:58`
 pub const PAD: f32 = 12.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:75`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:88`
 
 <a id="constant.RADIUS"></a>
 ### Constant `RADIUS`
@@ -666,7 +903,7 @@ pub const RADIUS: f32 = 8.0;
 
 The corner radius, the border and the padding inside it.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:73`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:86`
 
 <a id="constant.SECTION_TOP"></a>
 ### Constant `SECTION_TOP`
@@ -675,7 +912,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:73`
 pub const SECTION_TOP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:90`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:103`
 
 <a id="constant.SHIFT"></a>
 ### Constant `SHIFT`
@@ -686,7 +923,7 @@ pub const SHIFT: Motion;
 
 A toast moving after an arrival or a removal above or below it.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:51`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:64`
 
 <a id="constant.SUCCESS_TIMEOUT"></a>
 ### Constant `SUCCESS_TIMEOUT`
@@ -695,7 +932,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:51`
 pub const SUCCESS_TIMEOUT: std::time::Duration;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:63`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:76`
 
 <a id="constant.TEXT_INSET"></a>
 ### Constant `TEXT_INSET`
@@ -704,7 +941,18 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:63`
 pub const TEXT_INSET: f32 = 24f32;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:80`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:93`
+
+<a id="constant.TITLE_GAP"></a>
+### Constant `TITLE_GAP`
+
+```rust
+pub const TITLE_GAP: f32 = 2.0;
+```
+
+The space between a notice's title and its message.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:115`
 
 <a id="constant.WARNING_TIMEOUT"></a>
 ### Constant `WARNING_TIMEOUT`
@@ -713,7 +961,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:80`
 pub const WARNING_TIMEOUT: std::time::Duration;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:64`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:77`
 
 <a id="constant.WIDTH"></a>
 ### Constant `WIDTH`
@@ -724,7 +972,7 @@ pub const WIDTH: f32 = 320.0;
 
 The collapsed and the expanded width.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:67`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:80`
 
 <a id="constant.WIDTH_EXPANDED"></a>
 ### Constant `WIDTH_EXPANDED`
@@ -733,5 +981,5 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:67`
 pub const WIDTH_EXPANDED: f32 = 720.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:68`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:81`
 

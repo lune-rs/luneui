@@ -14,6 +14,9 @@
 //!   the notch is on its tab every other frame.
 //! - Every id comes from a [`TabKey`], never an index, so applying a `Reorder` or removing a tab
 //!   moves no state to another tab.
+//! - An inactive tab the app marks ([`TabStripExtras::attention`]) draws a round dot in the
+//!   theme's attention colour before its title, and the title turns bright. The dot comes out of
+//!   the title's room, so no tab is wider for it; it pops once when the cue turns on ([`CUE_POP`]).
 
 use std::hash::Hash;
 use std::mem;
@@ -64,6 +67,23 @@ const CLOSE_MARGIN: f32 = 8.0;
 const BUTTON_RADIUS: f32 = 4.0;
 const NEW_MARGIN: f32 = 6.0;
 
+/// The attention dot's diameter at rest.
+pub const CUE_DOT: f32 = 7.0;
+/// Between the attention dot and the title. The dot and this gap come out of the title's room.
+pub const CUE_GAP: f32 = 7.0;
+/// The attention dot's pop when its cue turns on: its progress runs 0 to 1 over the Moderate
+/// token, and the dot's scale is `1 + (CUE_POP_SCALE - 1) * sin(pi * p)`, so it swells and
+/// returns. Reduced and Off snap it: the dot does not pop.
+pub const CUE_POP: Motion = Motion {
+    kind: Kind::Pop,
+    token: Token::Moderate,
+    easing: Easing::Linear,
+    reduced: Reduce::Snap,
+    reduced_token: None,
+};
+/// The attention dot's largest scale, at the middle of [`CUE_POP`].
+pub const CUE_POP_SCALE: f32 = 1.7;
+
 /// The tab fill and the close button's opacity.
 pub const HOVER: Motion = Motion::of(Kind::Hover);
 /// The tab's focus ring.
@@ -112,6 +132,31 @@ pub enum BusyCue {
     Comet,
     /// The outline's opacity breathes.
     Breath,
+}
+
+/// What [`Ui::tab_strip_with`] shows beyond [`TabStripOptions`]. Build it with [`Self::new`] and
+/// the `with_*` methods; new fields stay additive.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct TabStripExtras<'a> {
+    /// The tabs that ask for attention: each inactive one draws the attention dot and a bright
+    /// title (see the module docs). The active tab shows nothing, and a key that names no tab is
+    /// ignored.
+    pub attention: &'a [TabKey],
+}
+
+impl<'a> TabStripExtras<'a> {
+    /// No extras: [`Ui::tab_strip_with`] with it draws what [`Ui::tab_strip`] does.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The tabs that ask for attention.
+    #[must_use]
+    pub fn with_attention(mut self, keys: &'a [TabKey]) -> Self {
+        self.attention = keys;
+        self
+    }
 }
 
 /// What a strip shows besides its tabs.
@@ -330,6 +375,9 @@ struct StripState {
     shown: Option<(TabKey, (f32, f32))>,
     /// Where the slide in flight started.
     slide_from: Option<(f32, f32)>,
+    /// Each tab drawn in the last frame and whether it drew the attention cue: a cue that turns
+    /// on pops only for a tab drawn before.
+    cues: Vec<(TabKey, bool)>,
 }
 
 /// One tab's ids and what the frame made of its layout.
@@ -371,21 +419,39 @@ impl Ui<'_> {
         tabs: &[Tab<'_>],
         opts: &TabStripOptions<'_>,
     ) -> TabStripResponse {
+        self.tab_strip_with(key, rect, tabs, opts, &TabStripExtras::default())
+    }
+
+    /// [`Self::tab_strip`] with `extras`: the tabs that ask for attention draw a dot in
+    /// [`Theme::attention`](crate::theme::Theme::attention) before their title and a bright
+    /// title, unless they are the active tab. The dot and its gap ([`CUE_DOT`], [`CUE_GAP`]) come
+    /// out of the title's room, so a cued tab is no wider and the title elides sooner. When a
+    /// tab's cue turns on the dot pops once ([`CUE_POP`]); a tab first drawn cued does not pop.
+    /// The cued tab's node description adds the string `luneui.tab-strip.attention`. Under the same
+    /// `key` it has the same ids and state as `tab_strip`, so an app may use either from frame to
+    /// frame; with default extras it draws exactly what `tab_strip` does.
+    pub fn tab_strip_with(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        tabs: &[Tab<'_>],
+        opts: &TabStripOptions<'_>,
+        extras: &TabStripExtras<'_>,
+    ) -> TabStripResponse {
         let id = self.id(&key);
         let mut st = mem::take(self.transient::<StripState>(id));
-        let mut events = Vec::new();
-        let mut context = None;
+        let mut out = TabStripResponse::default();
         let mut node = Node::new(id, Role::TabList, opts.name, rect);
         if !self.is_enabled() {
             node.states.insert(State::Disabled);
         }
         self.scope(&key, |ui| {
             ui.node_container(node, |ui| {
-                ui.strip_frame(rect, tabs, opts, &mut st, &mut events, &mut context);
+                ui.strip_frame(rect, tabs, opts, extras, &mut st, &mut out);
             });
         });
         *self.transient::<StripState>(id) = st;
-        TabStripResponse { events, context }
+        out
     }
 
     fn strip_frame(
@@ -393,10 +459,11 @@ impl Ui<'_> {
         rect: Rect,
         tabs: &[Tab<'_>],
         opts: &TabStripOptions<'_>,
+        extras: &TabStripExtras<'_>,
         st: &mut StripState,
-        events: &mut Vec<TabEvent>,
-        context: &mut Option<(TabKey, Rect)>,
+        out: &mut TabStripResponse,
     ) {
+        let TabStripResponse { events, context } = out;
         let keys: Vec<TabKey> = tabs.iter().map(|t| t.key).collect();
         // A tab added, closed or moved under a gesture ends it. The machine sees only a count, and
         // only through the owner's own call, which a closed owner never makes.
@@ -470,6 +537,7 @@ impl Ui<'_> {
         let frame = StripFrame {
             tabs,
             opts,
+            attention: extras.attention,
             keys: &keys,
             items: &items,
             widths: &widths,
@@ -508,9 +576,14 @@ impl Ui<'_> {
         // No tooltip under a gesture: the pointer crosses the other tabs and rests on them. The
         // pressed tab keeps its call, which is what hides its tooltip until the pointer leaves.
         let gesture = st.drag.is_active();
-        for (tab, resp) in tabs.iter().zip(&laid.responses) {
+        for (i, (tab, resp)) in tabs.iter().zip(&laid.responses).enumerate() {
             if !gesture || resp.pressed {
                 self.tooltip(resp, tab.title);
+            }
+            // After the tooltip, which sets the description to the title (the text it shows).
+            if frame.cued(i) {
+                let text = format!("{}, {}", tab.title, self.tr("luneui.tab-strip.attention"));
+                self.patch_node(resp.id, |n| n.description = Some(text));
             }
         }
     }
@@ -556,7 +629,7 @@ impl Ui<'_> {
     fn measured_widths(&mut self, tabs: &[Tab<'_>]) -> Vec<f64> {
         tabs.iter()
             .map(|tab| {
-                let spec = title_spec(self, tab.title, false);
+                let spec = title_spec(self, tab.title, false, false);
                 let title = self.painter().measure(&spec).0;
                 f64::from(tab_width(title, tab.closable))
             })
@@ -738,24 +811,54 @@ impl Ui<'_> {
             .filter(|i| Some(*i) != lifted)
             .chain(lifted);
         let mut active = None;
+        let mut cues = Vec::with_capacity(f.tabs.len());
         for i in order {
             let rect = slot(xs[i] + f64::from(shifts[i]), i);
             if f.active == Some(i) {
                 active = Some((rect.x, rect.w));
             }
+            let key = f.keys[i];
+            let cued = f.cued(i);
+            let was = st.cues.iter().find(|(k, _)| *k == key).map(|(_, c)| *c);
+            let cue = cued.then(|| self.cue_scale(f.items[i].id, was));
+            cues.push((key, cued));
             let looks = TabLooks {
                 resp: &responses[i],
                 close: close_responses[i].as_ref(),
                 lifted: lifted == Some(i),
                 active: f.active == Some(i),
+                cue,
             };
             self.paint_tab(&f.tabs[i], &f.items[i], rect, &looks);
         }
+        st.cues = cues;
         Laid {
             responses,
             active,
             offset: view.offset.0,
             scroll_by,
+        }
+    }
+
+    /// The attention dot's scale this frame, for the tab `id`: `was` is whether it drew the cue
+    /// last frame (`None`: it was not drawn). The pop starts when the cue turns on for a tab drawn
+    /// before, and a tab first drawn cued rests at 1.
+    fn cue_scale(&mut self, id: WidgetId, was: Option<bool>) -> f32 {
+        let pop = id.with("cue");
+        match was {
+            Some(false) => {
+                self.snap_f32(pop, 0.0);
+            }
+            None => {
+                self.snap_f32(pop, 1.0);
+            }
+            Some(true) => {}
+        }
+        let p = self.animate_f32(pop, 1.0, &CUE_POP);
+        if p >= 1.0 {
+            1.0
+        } else {
+            1.0 + (CUE_POP_SCALE - 1.0) * (std::f32::consts::PI * p).sin()
         }
     }
 
@@ -781,13 +884,25 @@ impl Ui<'_> {
         });
         let close_target = ButtonLook::of(&t, ButtonKind::Ghost, close_state);
         let close_fill = self.animate_color(item.close_id.with("fill"), close_target.fill, &HOVER);
-        let title_spec = title_spec(self, tab.title, look.active);
+        // A shining title keeps its base colour, so the band shows: the dot alone is the cue.
+        let bright = look.cue.is_some() && tab.progress.is_none();
+        let title_spec = title_spec(self, tab.title, look.active, bright);
 
         let p = self.painter();
         if fill[3] > 0 {
             p.fill_radii(rect, [RADIUS, RADIUS, 0.0, 0.0], fill);
         }
-        let x = rect.x + PAD_LEFT;
+        let mut x = rect.x + PAD_LEFT;
+        if let Some(scale) = look.cue {
+            let d = CUE_DOT * scale;
+            let c = [x + CUE_DOT / 2.0, rect.y + rect.h / 2.0];
+            p.fill(
+                Rect::new(c[0] - d / 2.0, c[1] - d / 2.0, d, d),
+                d / 2.0,
+                t.attention(),
+            );
+            x += CUE_DOT + CUE_GAP;
+        }
         // The column is reserved whether or not the button shows, so the title never re-elides.
         let room = rect.right()
             - x
@@ -891,6 +1006,8 @@ impl Ui<'_> {
 struct StripFrame<'f> {
     tabs: &'f [Tab<'f>],
     opts: &'f TabStripOptions<'f>,
+    /// The keys the app marked for attention.
+    attention: &'f [TabKey],
     keys: &'f [TabKey],
     items: &'f [Item],
     widths: &'f [f64],
@@ -903,6 +1020,13 @@ struct StripFrame<'f> {
     stop: Option<usize>,
 }
 
+impl StripFrame<'_> {
+    /// Whether tab `i` draws the attention cue: marked, and not the active tab.
+    fn cued(&self, i: usize) -> bool {
+        self.active != Some(i) && self.attention.contains(&self.keys[i])
+    }
+}
+
 /// What a tab's paint reads from the frame's input.
 #[derive(Debug)]
 struct TabLooks<'r> {
@@ -910,11 +1034,19 @@ struct TabLooks<'r> {
     close: Option<&'r Response>,
     lifted: bool,
     active: bool,
+    /// The attention dot's scale, when the tab draws the cue.
+    cue: Option<f32>,
 }
 
-fn title_spec(ui: &Ui<'_>, title: &str, active: bool) -> Spec {
+fn title_spec(ui: &Ui<'_>, title: &str, active: bool, cued: bool) -> Spec {
     let t = ui.theme();
-    let color = if active { t.fg_primary } else { t.fg_muted };
+    let color = if active {
+        t.fg_primary
+    } else if cued {
+        t.fg_bright
+    } else {
+        t.fg_muted
+    };
     Spec::plain(title, Style::ui(t.font_s, color))
 }
 
