@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-105 modules, 1176 items. Left out and counted: 3724 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5364 items of the omitted impls, 1425 items of the trait impls shown as one line, 2496 synthetic impls.
+106 modules, 1182 items. Left out and counted: 3751 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5403 items of the omitted impls, 1436 items of the trait impls shown as one line, 2514 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -75,6 +75,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::list_row`](lune-ui-core/widgets/list_row.md) | 10 |
 | [`lune_ui_core::widgets::markdown`](lune-ui-core/widgets/markdown.md) | 13 |
 | [`lune_ui_core::widgets::menu`](lune-ui-core/widgets/menu.md) | 23 |
+| [`lune_ui_core::widgets::message_list`](lune-ui-core/widgets/message_list.md) | 6 |
 | [`lune_ui_core::widgets::nav_bar`](lune-ui-core/widgets/nav_bar.md) | 4 |
 | [`lune_ui_core::widgets::nav_item`](lune-ui-core/widgets/nav_item.md) | 14 |
 | [`lune_ui_core::widgets::nav_stack`](lune-ui-core/widgets/nav_stack.md) | 1 |
@@ -637,6 +638,7 @@ Every top-level item of the four owning crates, by name.
 - [`HEADER_GAP`](lune-ui-core/widgets/kanban_board.md#constant.HEADER_GAP) - constant, `lune_ui_core::widgets::kanban_board`
 - [`HEADER_GAP`](lune-ui-core/widgets/toast.md#constant.HEADER_GAP) - constant, `lune_ui_core::widgets::toast`
 - [`HEADER_GLYPH`](lune-ui-core/widgets/kanban_board.md#constant.HEADER_GLYPH) - constant, `lune_ui_core::widgets::kanban_board`
+- [`HEADER_HEIGHT`](lune-ui-core/widgets/message_list.md#constant.HEADER_HEIGHT) - constant, `lune_ui_core::widgets::message_list`
 - [`header_height`](lune-ui-core/widgets/page.md#fn.header_height) - function, `lune_ui_core::widgets::page`
 - [`HEADER_INSET`](lune-ui-core/widgets/command_palette.md#constant.HEADER_INSET) - constant, `lune_ui_core::widgets::command_palette`
 - [`HEADER_PAD`](lune-ui-core/widgets/panel.md#constant.HEADER_PAD) - constant, `lune_ui_core::widgets::panel`
@@ -650,6 +652,7 @@ Every top-level item of the four owning crates, by name.
 - [`height`](lune-ui-core/widgets/bar_chart.md#fn.height) - function, `lune_ui_core::widgets::bar_chart`
 - [`height`](lune-ui-core/widgets/code_block.md#fn.height) - function, `lune_ui_core::widgets::code_block`
 - [`height`](lune-ui-core/widgets/list_row.md#fn.height) - function, `lune_ui_core::widgets::list_row`
+- [`height`](lune-ui-core/widgets/message_list.md#fn.height) - function, `lune_ui_core::widgets::message_list`
 - [`HEIGHT_INDETERMINATE`](lune-ui-core/widgets/progress.md#constant.HEIGHT_INDETERMINATE) - constant, `lune_ui_core::widgets::progress`
 - [`Heights`](lune-ui-core/widgets/virtual_list.md#enum.Heights) - enum, `lune_ui_core::widgets::virtual_list`
 - [`HIGHLIGHT`](lune-ui-core/widgets/pie_chart.md#constant.HIGHLIGHT) - constant, `lune_ui_core::widgets::pie_chart`
@@ -872,6 +875,9 @@ Every top-level item of the four owning crates, by name.
 - [`MenuPlace`](lune-ui-core/widgets/menu.md#enum.MenuPlace) - enum, `lune_ui_core::widgets::menu`
 - [`MenuResponse`](lune-ui-core/widgets/menu.md#struct.MenuResponse) - struct, `lune_ui_core::widgets::menu`
 - [`MenuRow`](lune-ui-core/widgets/menu.md#enum.MenuRow) - enum, `lune_ui_core::widgets::menu`
+- [`MessageListOptions`](lune-ui-core/widgets/message_list.md#struct.MessageListOptions) - struct, `lune_ui_core::widgets::message_list`
+- [`MessageListResponse`](lune-ui-core/widgets/message_list.md#struct.MessageListResponse) - struct, `lune_ui_core::widgets::message_list`
+- [`MessageRow`](lune-ui-core/widgets/message_list.md#struct.MessageRow) - struct, `lune_ui_core::widgets::message_list`
 - [`META_DROP`](lune-ui-core/widgets/panel.md#constant.META_DROP) - constant, `lune_ui_core::widgets::panel`
 - [`META_GAP`](lune-ui-core/widgets/panel.md#constant.META_GAP) - constant, `lune_ui_core::widgets::panel`
 - [`META_LINE`](lune-ui-core/widgets/panel.md#constant.META_LINE) - constant, `lune_ui_core::widgets::panel`
@@ -1109,6 +1115,7 @@ Every top-level item of the four owning crates, by name.
 - [`ROW_HEIGHT`](lune-ui-core/widgets/nav_item.md#constant.ROW_HEIGHT) - constant, `lune_ui_core::widgets::nav_item`
 - [`ROW_HEIGHT`](lune-ui-core/widgets/radio_group.md#constant.ROW_HEIGHT) - constant, `lune_ui_core::widgets::radio_group`
 - [`ROW_HEIGHT`](lune-ui-core/widgets/search_picker.md#constant.ROW_HEIGHT) - constant, `lune_ui_core::widgets::search_picker`
+- [`row_height`](lune-ui-core/widgets/message_list.md#fn.row_height) - function, `lune_ui_core::widgets::message_list`
 - [`ROW_PAD`](lune-ui-core/widgets/command_palette.md#constant.ROW_PAD) - constant, `lune_ui_core::widgets::command_palette`
 - [`ROW_PADDING`](lune-ui-core/widgets/search_picker.md#constant.ROW_PADDING) - constant, `lune_ui_core::widgets::search_picker`
 - [`ROW_RADIUS`](lune-ui-core/widgets/command_palette.md#constant.ROW_RADIUS) - constant, `lune_ui_core::widgets::command_palette`

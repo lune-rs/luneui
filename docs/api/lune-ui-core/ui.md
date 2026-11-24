@@ -979,6 +979,46 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
 
 `impl Ui<'_>`
 
+- <a id="method.Ui.message_list"></a>
+
+  ```rust
+  pub fn message_list(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      rows: &[MessageRow<'_>],
+      opts: &MessageListOptions<'_>,
+  ) -> MessageListResponse
+  ```
+
+  A message list under `key` at the top left of `rect`, with the width of `rect`: one row per
+  [`MessageRow`](widgets/message_list.md#struct.MessageRow) in a scroll area at most `opts.max_height` high (and `rect.h`), a `List` node
+  named `opts.label` with a `ListItem` per row (named by its title, described by its body and
+  meta line, "Unread" first when it is). One tab stop; Up, Down, Home and End move focus
+  (Down on the last row wraps), Enter and Space and a click report
+  [`MessageListResponse::clicked`](widgets/message_list.md#structfield.MessageListResponse.clicked), a secondary click or the show-menu action reports
+  `context`. The focused row scrolls into view. With no rows nothing is drawn and the height
+  is 0.
+
+- <a id="method.Ui.message_list_header"></a>
+
+  ```rust
+  pub fn message_list_header(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      title: &str,
+      action: Option<&str>,
+  ) -> bool
+  ```
+
+  The header of a message list in `rect`: `title` bold and bright at the left, centred in the
+  rect's height ([`HEADER_HEIGHT`](widgets/message_list.md#constant.HEADER_HEIGHT) is what the rect is usually given), and when `action` is
+  `Some`, a small ghost text button with that label at the right. Returns whether the button
+  was clicked this frame.
+
+`impl Ui<'_>`
+
 - <a id="method.Ui.nav_bar"></a>`pub fn nav_bar(&mut self, key: impl Hash, rect: Rect, bar: &NavBar<'_>) -> NavBarResponse`
 
   A navigation bar under `key` over `rect`: the background fills the whole rect, a hairline

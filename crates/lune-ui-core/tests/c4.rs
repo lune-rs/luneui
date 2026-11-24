@@ -3968,6 +3968,7 @@ mod m10 {
     use lune_ui_core::ui::FrameConfig;
     use lune_ui_core::widgets::button::{ButtonOptions, IconButton};
     use lune_ui_core::widgets::filter_bar::FilterOptions;
+    use lune_ui_core::widgets::message_list::{HEADER_HEIGHT, MessageListOptions, MessageRow};
     use lune_ui_core::widgets::progress::ProgressOptions;
     use lune_ui_core::widgets::radio_group::RadioOption;
     use lune_ui_core::widgets::ring_gauge::{RingGaugeOptions, RingSegment};
@@ -4346,6 +4347,26 @@ mod m10 {
                 header_tint: None,
             },
             &TabStripExtras::new().with_attention(&[TabKey(2)]),
+        );
+        // The inbox: its header with the action, an unread row with the attention dot and a read one.
+        ui.message_list_header(
+            "inbox-header",
+            Rect::new(560.0, 60.0, 300.0, HEADER_HEIGHT),
+            "Notifications",
+            Some("Clear all"),
+        );
+        ui.message_list(
+            "inbox",
+            Rect::new(560.0, 100.0, 300.0, 200.0),
+            &[
+                MessageRow::new("Build finished")
+                    .with_age("now")
+                    .with_body("All tests passed.")
+                    .with_meta("main")
+                    .with_unread(true),
+                MessageRow::new("Deploy started").with_age("2 m"),
+            ],
+            &MessageListOptions::new("Notifications").with_max_height(200.0),
         );
         ui.filter_bar(
             "filter",

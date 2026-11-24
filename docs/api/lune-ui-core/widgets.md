@@ -40,6 +40,7 @@ Source: `crates/lune-ui-core/src/widgets/mod.rs:1`
 - [`list_row`](widgets/list_row.md) - A list row with a trailing badge, drawn inside the virtual list (`widget.list-row-badge`).
 - [`markdown`](widgets/markdown.md) - The markdown preview (`text.markdown-preview`, D12): a block model drawn in a window.
 - [`menu`](widgets/menu.md) - Luneium's glass context menu (`ContextMenu.css`, `Popup.css`) and its motion, with the row variants (header, danger, disabled, chevron), the keys and the one highlight they share with the pointer, and...
+- [`message_list`](widgets/message_list.md) - Message list (`layout.message-list`): a scrolling list of messages for a popover inbox, and the header that goes above it.
 - [`nav_bar`](widgets/nav_bar.md) - The navigation bar of a phone screen (`widget.nav-bar`, D370): a back button, a title and up to three action buttons on a 44 px row.
 - [`nav_item`](widgets/nav_item.md) - A navigation item and the list that owns the group (`widget.nav-item`, D121).
 - [`nav_stack`](widgets/nav_stack.md) - The navigation stack of a phone app (`layout.nav-stack`, D372): the levels of a drill-down, the top one drawn, pushed in from the right edge, popped back out by a call or by a finger's swipe from the ...
