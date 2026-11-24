@@ -3966,7 +3966,7 @@ mod m10 {
     use lune_ui_core::text::{CaretPos, LineSpan, Spec, TextKey, TextSystem, Unit};
     use lune_ui_core::theme::{DARK, Theme};
     use lune_ui_core::ui::FrameConfig;
-    use lune_ui_core::widgets::button::{ButtonOptions, IconButton};
+    use lune_ui_core::widgets::button::{ButtonOptions, IconButton, IconButtonExtras};
     use lune_ui_core::widgets::filter_bar::FilterOptions;
     use lune_ui_core::widgets::message_list::{HEADER_HEIGHT, MessageListOptions, MessageRow};
     use lune_ui_core::widgets::progress::ProgressOptions;
@@ -4303,6 +4303,19 @@ mod m10 {
                 radius: 4.0,
                 name: "Search",
             },
+        );
+        // A bell with a badge, open: the pill is in `attention()` and its text in `on_attention()`.
+        ui.icon_button_with(
+            "icon-button-badge",
+            Rect::new(540.0, 10.0, 32.0, 32.0),
+            &IconButton {
+                glyph: icon::SEARCH,
+                glyph_size: 16.0,
+                color: None,
+                radius: 4.0,
+                name: "Notifications",
+            },
+            &IconButtonExtras::new().with_badge("3").with_open(true),
         );
         ui.radio_group(
             "radio",

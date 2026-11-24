@@ -20,6 +20,7 @@ use crate::icon;
 use crate::input::NamedKey;
 use crate::motion::{Kind, Motion};
 use crate::paint::{Painter, Rect, Xform};
+use crate::text::{Spec, Style};
 use crate::theme::Theme;
 use crate::ui::{Response, Sense, Ui, WidgetId};
 
@@ -91,6 +92,51 @@ pub struct IconButton<'a> {
     pub radius: f32,
     /// The accessible name.
     pub name: &'a str,
+}
+
+/// The badge's height, which is also its least width: a 15 px circle for an empty badge.
+pub const BADGE_HEIGHT: f32 = 15.0;
+/// The least width of a badge.
+pub const BADGE_MIN_WIDTH: f32 = 15.0;
+/// A badge's horizontal padding round its text.
+pub const BADGE_PAD: f32 = 4.0;
+/// How far a badge's top-right corner lies from the button's right edge and from its top.
+pub const BADGE_INSET: (f32, f32) = (1.0, 4.0);
+
+/// What [`Ui::icon_button_with`] is given besides the [`IconButton`]: a badge over its corner and
+/// the open state. A struct of its own so [`IconButton`], which apps build by literal, gains no
+/// field (R-infra-7); every later field stays additive.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct IconButtonExtras<'a> {
+    /// A badge at the button's top right: a pill in `Theme::attention` with this text in
+    /// `Theme::on_attention`; `Some("")` is a plain 15 px circle; `None` draws no badge.
+    pub badge: Option<&'a str>,
+    /// The button's popover or panel is open: it rests on the ghost hover fill and its node is
+    /// expanded.
+    pub open: bool,
+}
+
+impl<'a> IconButtonExtras<'a> {
+    /// No badge and not open: what [`Ui::icon_button`] draws.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The extras with a badge showing `text`.
+    #[must_use]
+    pub fn with_badge(mut self, text: &'a str) -> Self {
+        self.badge = Some(text);
+        self
+    }
+
+    /// The extras with the open state set or cleared.
+    #[must_use]
+    pub fn with_open(mut self, open: bool) -> Self {
+        self.open = open;
+        self
+    }
 }
 
 /// What the pointer and keyboard are doing to a button.
@@ -219,6 +265,28 @@ pub fn paint_icon<H: Copy + PartialEq>(
         ..*look
     };
     paint_content(p, r, button.radius, content, &look);
+}
+
+/// The badge over `r`'s top right corner: a fully round pill in `attention()`, at least
+/// [`BADGE_MIN_WIDTH`] wide, `text` in `on_attention()` centred in it.
+fn paint_badge<H: Copy + PartialEq>(p: &mut Painter<'_, H>, r: Rect, text: &str) {
+    let t = p.theme;
+    let spec = Spec::plain(text, Style::ui(t.font_s, t.on_attention()).bold());
+    let w = if text.is_empty() {
+        BADGE_MIN_WIDTH
+    } else {
+        (p.measure(&spec).0 + 2.0 * BADGE_PAD).max(BADGE_MIN_WIDTH)
+    };
+    let pill = Rect::new(
+        r.right() - BADGE_INSET.0 - w,
+        r.y + BADGE_INSET.1,
+        w,
+        BADGE_HEIGHT,
+    );
+    p.fill(pill, BADGE_HEIGHT / 2.0, t.attention());
+    if !text.is_empty() {
+        p.text_centered(&spec, pill);
+    }
 }
 
 fn paint_content<H: Copy + PartialEq>(
@@ -355,7 +423,22 @@ impl Ui<'_> {
     /// A ghost button holding only a glyph, centred in `rect` (the caller's rect is its size: 28
     /// by 28, 24 by 24, ...). Role button named `button.name`; Enter and Space click.
     pub fn icon_button(&mut self, key: impl Hash, rect: Rect, button: &IconButton<'_>) -> Response {
-        self.icon_button_sensed(key, rect, button, Sense::CLICK_FOCUS)
+        self.icon_button_with(key, rect, button, &IconButtonExtras::default())
+    }
+
+    /// [`Self::icon_button`] with the [`IconButtonExtras`]: a badge over the button's top right
+    /// corner (drawn above the glyph and never clipped by the button; it takes no input of its
+    /// own) and the open state (the ghost hover fill at rest, the node `Expanded`). The node's
+    /// description is the badge's text when it has one. With the default extras it is exactly
+    /// `icon_button`, and the same key gives the same ids and state.
+    pub fn icon_button_with(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        button: &IconButton<'_>,
+        extras: &IconButtonExtras<'_>,
+    ) -> Response {
+        self.icon_button_extras(key, rect, button, Sense::CLICK_FOCUS, extras)
     }
 
     /// [`Self::icon_button`] registered with `sense`, for a composite that decides which of its
@@ -366,6 +449,17 @@ impl Ui<'_> {
         rect: Rect,
         button: &IconButton<'_>,
         sense: Sense,
+    ) -> Response {
+        self.icon_button_extras(key, rect, button, sense, &IconButtonExtras::default())
+    }
+
+    fn icon_button_extras(
+        &mut self,
+        key: impl Hash,
+        rect: Rect,
+        button: &IconButton<'_>,
+        sense: Sense,
+        extras: &IconButtonExtras<'_>,
     ) -> Response {
         let content = Content::Glyph {
             glyph: button.glyph,
@@ -378,8 +472,8 @@ impl Ui<'_> {
             content,
             ButtonKind::Ghost,
             button.name,
-            button.color,
-            sense,
+            (button.color, sense),
+            extras,
         )
     }
 
@@ -400,8 +494,8 @@ impl Ui<'_> {
             Content::Toolbar { glyph, text },
             ButtonKind::Ghost,
             name,
-            Some(color),
-            Sense::CLICK_FOCUS,
+            (Some(color), Sense::CLICK_FOCUS),
+            &IconButtonExtras::default(),
         )
     }
 
@@ -440,8 +534,8 @@ impl Ui<'_> {
             content,
             kind,
             name,
-            None,
-            Sense::CLICK_FOCUS,
+            (None, Sense::CLICK_FOCUS),
+            &IconButtonExtras::default(),
         )
     }
 
@@ -454,8 +548,8 @@ impl Ui<'_> {
         content: Content<'_>,
         kind: ButtonKind,
         name: &str,
-        color: Option<Rgba>,
-        sense: Sense,
+        (color, sense): (Option<Rgba>, Sense),
+        extras: &IconButtonExtras<'_>,
     ) -> Response {
         let id = self.id(key);
         let mut r = self.interact(id, rect, sense);
@@ -468,7 +562,11 @@ impl Ui<'_> {
             pressed: r.pressed,
             focus_visible: r.focus_visible,
         };
-        let target = ButtonLook::of(self.theme(), kind, state);
+        let mut target = ButtonLook::of(self.theme(), kind, state);
+        if extras.open && !state.hovered && !state.pressed {
+            // Open: at rest the ghost's hover fill.
+            target.fill = self.theme().surface_hover;
+        }
         let look = ButtonLook {
             fill: self.animate_color(id.with("fill"), target.fill, &HOVER),
             label: color.unwrap_or(target.label),
@@ -476,8 +574,15 @@ impl Ui<'_> {
             ring: self.animate_f32(id.with("ring"), target.ring, &FOCUS),
         };
         paint_content(self.painter(), rect, radius, content, &look);
+        if let Some(text) = extras.badge {
+            paint_badge(self.painter(), rect, text);
+        }
 
         let mut node = Node::new(id, Role::Button, name, rect);
+        node.description = extras.badge.filter(|b| !b.is_empty()).map(str::to_owned);
+        if extras.open {
+            node.states.insert(State::Expanded);
+        }
         if r.enabled {
             if sense.focusable {
                 node.states.insert(State::Focusable);

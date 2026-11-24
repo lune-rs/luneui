@@ -22,7 +22,7 @@ summary: Button: primary and secondary fills, measured width, hover and press mo
 
 ## Existing code
 
-`crates/lune-ui-core/src/widgets/mod.rs:146` (`button`, 24 lines) and `:171` (`button_width`). Drawn in the gallery's `controls` scene (`apps/gallery/src/scenes.rs:240-248`).
+`crates/lune-ui-core/src/widgets/mod.rs:146` (`button`, 24 lines) and `:171` (`button_width`). Drawn in the gallery's `controls` scene (`apps/gallery/src/scenes.rs:240-248`). The icon button's badge and open state: `crates/lune-ui-core/src/widgets/button.rs` (`Ui::icon_button_with`, `IconButtonExtras`, `BADGE_HEIGHT`, `BADGE_MIN_WIDTH`, `BADGE_PAD`, `BADGE_INSET`, [D445]).
 
 ## Spec
 
@@ -52,6 +52,8 @@ Conflicts: (1) Wane lists no rest fill for secondary; the moved code fills rest 
 | hover, any kind | fill `surface_hover` (#10FFFFFF) | [L src/Lunegit.Desktop/App.axaml:539-586] |
 | pressed, any kind | fill `surface_active` (#20FFFFFF); the ghost also scales by 0.98, the others do not | [L src/Lunegit.Desktop/App.axaml:539-586], [L src/Lunegit.Desktop/Themes/Animations.axaml:49-60] |
 | focus-visible | the 1 px ring `fg_secondary`, inset, and nothing else changes | [R crates/lune-ui-core/src/widgets/focus_ring.rs] |
+| icon button with a badge ([D445]) | a pill 15 px high (least width 15, 4 px padding, fully round) in `Theme::attention()` with the text in `font_s` bold `Theme::on_attention()`, its top-right corner 1 px in from the button's right edge and 4 px down, drawn above the glyph and not clipped by the button; `Some("")` is a 15 px circle; no input of its own | [derived: Luneterm R3, D445] |
+| icon button open ([D445]) | the ghost hover fill at rest (hover and press as today), the node expanded | [derived: Luneterm R3, D445] |
 | disabled | opacity 0.4, inert | [W docs/ui/components.md:295], [L src/Lunegit.Desktop/App.axaml:481-483] |
 
 ### Transitions
@@ -80,7 +82,7 @@ Lunegit animates classed buttons only (`toolbar-action`, `commit-primary`, `empt
 
 ### Accessibility
 
-- Role `button`; name = the label text the app passes; description none; states focusable, focused, disabled; action `default` activates [infra.accessibility], [W docs/ui/components.md:297].
+- Role `button`; name = the label text the app passes; description none (an icon button with a non-empty badge: the badge text; an open one has the state expanded, [D445]); states focusable, focused, disabled; action `default` activates [infra.accessibility], [W docs/ui/components.md:297].
 
 ### Strings
 
@@ -91,6 +93,7 @@ None: the label is app text.
 - `controls` (existing, scale 2 and 1): primary and secondary at rest.
 - `button-states`: primary and secondary at rest, secondary hovered, pressed, focus-visible, disabled; settled.
 - `button-variants`: ghost, small, icon (28 and 24), icon with label, each at rest and hovered, and a fill-width button; settled.
+- `button-icon-badge`: five icon buttons through `Ui::icon_button_with`: no badge, "3", "9+", "" (a dot) and an open one with a badge; settled ([D445]).
 - `button-hover-mid`: secondary rest → hover, t = 60 ms (half of `instant`).
 - `button-press-mid`: pressed, t = 90 ms (half of `fast`).
 - `button-focus-mid`: focus-visible on, t = 90 ms (half of `fast`).
@@ -110,7 +113,7 @@ None: the label is app text.
 
 ### Build
 
-- Milestone: M4 (retrofit: transitions, focus, semantic node); done by M11. The variants (small, icon, ghost) were deferred by [D74] and are built in M6 step 3 ([D116]): `ButtonKind::Ghost`, `ButtonOptions { kind, small, icon }` with `Ui::button_with` and `button_width_with`, `IconButton` with `Ui::icon_button`; the small button is 24 high (the top of the caller's rect kept), radius 4, padding 0 12; a labelled icon is a 16 px glyph, an 8 gap; fill width needs no code (the caller's rect is the width). The ring follows the corner radius (`RingKind::Edge`).
+- Milestone: M4 (retrofit: transitions, focus, semantic node); done by M11. The variants (small, icon, ghost) were deferred by [D74] and are built in M6 step 3 ([D116]): `ButtonKind::Ghost`, `ButtonOptions { kind, small, icon }` with `Ui::button_with` and `button_width_with`, `IconButton` with `Ui::icon_button`; the small button is 24 high (the top of the caller's rect kept), radius 4, padding 0 12; a labelled icon is a 16 px glyph, an 8 gap; fill width needs no code (the caller's rect is the width). The ring follows the corner radius (`RingKind::Edge`). The icon button's badge and open state are `IconButtonExtras` with `Ui::icon_button_with` ([D445]); `IconButton`, which apps build by literal, gains no field (R-infra-7), and `icon_button` is `icon_button_with` with default extras.
 - Depends on: core.ui, core.focus, infra.accessibility, motion.transitions.
 - Done (D47, M11): tests `crates/lune-ui-core/tests/widget_button.rs::enter_and_space_activate_once_each, crates/lune-ui-core/tests/widget_button.rs::a_disabled_button_reports_no_activation_and_is_marked_disabled, crates/lune-ui-core/tests/widget_button.rs::pixel_probes_at_scale_two, crates/lune-ui-core/tests/widget_button.rs::every_motion_row_conforms_under_every_tier, crates/lune-ui-core/tests/widget_button.rs::the_node_names_the_button_and_follows_focus, crates/lune-ui-core/tests/widget_button.rs::a_chord_on_enter_or_space_is_a_shortcut_and_clicks_nothing, crates/lune-ui-core/tests/widget_button.rs::a_small_button_is_24_high_with_radius_4_and_keeps_the_top, crates/lune-ui-core/tests/widget_button.rs::at_rest_the_ui_button_draws_exactly_what_the_painter_button_does`; page `button`; unverified here: none.
 

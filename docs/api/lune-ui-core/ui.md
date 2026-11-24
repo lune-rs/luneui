@@ -668,6 +668,24 @@ Source: `crates/lune-ui-core/src/ui.rs:132`
   A ghost button holding only a glyph, centred in `rect` (the caller's rect is its size: 28
   by 28, 24 by 24, ...). Role button named `button.name`; Enter and Space click.
 
+- <a id="method.Ui.icon_button_with"></a>
+
+  ```rust
+  pub fn icon_button_with(
+      &mut self,
+      key: impl Hash,
+      rect: Rect,
+      button: &IconButton<'_>,
+      extras: &IconButtonExtras<'_>,
+  ) -> Response
+  ```
+
+  [`Self::icon_button`](ui.md#method.Ui.icon_button) with the [`IconButtonExtras`](widgets/button.md#struct.IconButtonExtras): a badge over the button's top right
+  corner (drawn above the glyph and never clipped by the button; it takes no input of its
+  own) and the open state (the ghost hover fill at rest, the node `Expanded`). The node's
+  description is the badge's text when it has one. With the default extras it is exactly
+  `icon_button`, and the same key gives the same ids and state.
+
 `impl Ui<'_>`
 
 - <a id="method.Ui.callout"></a>`pub fn callout(&mut self, key: impl Hash, rect: Rect, opts: &CalloutOptions<'_>) -> CalloutResponse`

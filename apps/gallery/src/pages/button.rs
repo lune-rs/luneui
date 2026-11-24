@@ -7,7 +7,7 @@ use lune_ui::motion::MotionTier;
 use lune_ui::paint::{Rect, Xform};
 use lune_ui::ui::Ui;
 use lune_ui::widgets::button::{
-    ButtonKind, ButtonLook, ButtonOptions, ButtonState, IconButton, button_width,
+    ButtonKind, ButtonLook, ButtonOptions, ButtonState, IconButton, IconButtonExtras, button_width,
     button_width_with, paint, paint_icon, paint_with,
 };
 
@@ -273,6 +273,45 @@ impl PageState for Variants {
     }
 }
 
+fn badges() -> Box<dyn PageState> {
+    Box::new(Badges)
+}
+
+/// Icon buttons through `Ui::icon_button_with`: no badge, a count, a count with a plus, an empty
+/// badge (a plain dot) and an open button (the ghost hover fill at rest). The toolkit's icon set
+/// has no bell, so the glyph is the info mark; an app passes its own.
+struct Badges;
+
+impl PageState for Badges {
+    fn draw(&mut self, ui: &mut Ui<'_>, stage: &Stage) {
+        let card = card(ui, stage, "Icon button badge");
+        let (x, y) = (card.x + 24.0, card.y + 24.0);
+        heading(ui, "ICON BUTTON BADGE", x, y);
+        let button = IconButton {
+            glyph: icon::INFO,
+            glyph_size: 16.0,
+            color: None,
+            radius: 4.0,
+            name: "Notifications",
+        };
+        let cases = [
+            ("None", IconButtonExtras::new()),
+            ("\"3\"", IconButtonExtras::new().with_badge("3")),
+            ("\"9+\"", IconButtonExtras::new().with_badge("9+")),
+            ("\"\"", IconButtonExtras::new().with_badge("")),
+            (
+                "Open",
+                IconButtonExtras::new().with_badge("3").with_open(true),
+            ),
+        ];
+        for (i, (name, extras)) in cases.iter().enumerate() {
+            let r = Rect::new(x + i as f32 * 72.0, y + 28.0, 32.0, 32.0);
+            ui.icon_button_with(("badge", i), r, &button, extras);
+            caption(ui, name, r.x, r.y + 44.0);
+        }
+    }
+}
+
 const SECONDARY: &[&str] = &["secondary"];
 
 const SCENES: &[UiScene] = &[
@@ -290,6 +329,15 @@ const SCENES: &[UiScene] = &[
         scale: 2.0,
         tier: MotionTier::Full,
         state: variants,
+        script: &[],
+        capture_ms: 0,
+        expect: Expect::Settled,
+    },
+    UiScene {
+        id: "button-icon-badge",
+        scale: 2.0,
+        tier: MotionTier::Full,
+        state: badges,
         script: &[],
         capture_ms: 0,
         expect: Expect::Settled,

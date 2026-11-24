@@ -12,7 +12,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 
 ### `lune-ui-core` (`lune_ui_core`)
 
-106 modules, 1182 items. Left out and counted: 3751 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5403 items of the omitted impls, 1436 items of the trait impls shown as one line, 2514 synthetic impls.
+106 modules, 1187 items. Left out and counted: 3760 blanket impls, 2 intra-doc links left unlinked (private or unresolvable target), 5416 items of the omitted impls, 1440 items of the trait impls shown as one line, 2520 synthetic impls.
 
 | Module | Items |
 | --- | --- |
@@ -51,7 +51,7 @@ Each crate has a page per module (`<crate>/<module path>.md`; the root is `index
 | [`lune_ui_core::widgets::bar_chart`](lune-ui-core/widgets/bar_chart.md) | 18 |
 | [`lune_ui_core::widgets::battery`](lune-ui-core/widgets/battery.md) | 2 |
 | [`lune_ui_core::widgets::bottom_sheet`](lune-ui-core/widgets/bottom_sheet.md) | 3 |
-| [`lune_ui_core::widgets::button`](lune-ui-core/widgets/button.md) | 20 |
+| [`lune_ui_core::widgets::button`](lune-ui-core/widgets/button.md) | 25 |
 | [`lune_ui_core::widgets::callout`](lune-ui-core/widgets/callout.md) | 13 |
 | [`lune_ui_core::widgets::caption`](lune-ui-core/widgets/caption.md) | 2 |
 | [`lune_ui_core::widgets::checkbox`](lune-ui-core/widgets/checkbox.md) | 9 |
@@ -236,8 +236,12 @@ Every top-level item of the four owning crates, by name.
 - [`BADGE_FONT`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_FONT) - constant, `lune_ui_core::widgets::icon_rail`
 - [`BADGE_GAP`](lune-ui-core/widgets/list_row.md#constant.BADGE_GAP) - constant, `lune_ui_core::widgets::list_row`
 - [`BADGE_H`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_H) - constant, `lune_ui_core::widgets::icon_rail`
+- [`BADGE_HEIGHT`](lune-ui-core/widgets/button.md#constant.BADGE_HEIGHT) - constant, `lune_ui_core::widgets::button`
+- [`BADGE_INSET`](lune-ui-core/widgets/button.md#constant.BADGE_INSET) - constant, `lune_ui_core::widgets::button`
 - [`BADGE_MAX`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_MAX) - constant, `lune_ui_core::widgets::icon_rail`
 - [`BADGE_MIN_W`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_MIN_W) - constant, `lune_ui_core::widgets::icon_rail`
+- [`BADGE_MIN_WIDTH`](lune-ui-core/widgets/button.md#constant.BADGE_MIN_WIDTH) - constant, `lune_ui_core::widgets::button`
+- [`BADGE_PAD`](lune-ui-core/widgets/button.md#constant.BADGE_PAD) - constant, `lune_ui_core::widgets::button`
 - [`BADGE_PAD`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_PAD) - constant, `lune_ui_core::widgets::icon_rail`
 - [`BADGE_RIGHT`](lune-ui-core/widgets/icon_rail.md#constant.BADGE_RIGHT) - constant, `lune_ui_core::widgets::icon_rail`
 - [`badge_text`](lune-ui-core/widgets/icon_rail.md#fn.badge_text) - function, `lune_ui_core::widgets::icon_rail`
@@ -713,6 +717,7 @@ Every top-level item of the four owning crates, by name.
 - [`ICON_SIZE`](lune-ui-core/widgets/nav_item.md#constant.ICON_SIZE) - constant, `lune_ui_core::widgets::nav_item`
 - [`ICON_SIZE`](lune-ui-core/widgets/settings_page.md#constant.ICON_SIZE) - constant, `lune_ui_core::widgets::settings_page`
 - [`IconButton`](lune-ui-core/widgets/button.md#struct.IconButton) - struct, `lune_ui_core::widgets::button`
+- [`IconButtonExtras`](lune-ui-core/widgets/button.md#struct.IconButtonExtras) - struct, `lune_ui_core::widgets::button`
 - [`IMAGE_MAX`](lune-ui-core/widgets/markdown.md#constant.IMAGE_MAX) - constant, `lune_ui_core::widgets::markdown`
 - [`image_rect`](lune-ui-core/image.md#fn.image_rect) - function, `lune_ui_core::image`
 - [`image_store_contract`](lune-ui-core/testing.md#fn.image_store_contract) - function, `lune_ui_core::testing`
