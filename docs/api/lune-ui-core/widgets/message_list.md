@@ -207,7 +207,7 @@ pub fn height<H: Copy + PartialEq>(
 The height a list of `rows` at `width` uses: the rows' heights added up, at most `max_height`.
 An app sizes its popover with it before the popover opens; `0` with no rows.
 
-Source: `crates/lune-ui-core/src/widgets/message_list.rs:252`
+Source: `crates/lune-ui-core/src/widgets/message_list.rs:249`
 
 <a id="fn.row_height"></a>
 ### Function `row_height`
@@ -223,7 +223,7 @@ pub fn row_height<H: Copy + PartialEq>(
 The height of `row` at `width`: the padding, the title line, the body (at most two lines) and
 the meta line, with 2 px between the lines.
 
-Source: `crates/lune-ui-core/src/widgets/message_list.rs:242`
+Source: `crates/lune-ui-core/src/widgets/message_list.rs:239`
 
 ## Constants
 

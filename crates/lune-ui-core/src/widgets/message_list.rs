@@ -175,9 +175,11 @@ fn meta_style(t: &Theme, alpha: f32) -> Style {
 struct Measured {
     /// The title line's height (the age shares it).
     first: f32,
-    /// The body's lines (the second already cut with its ellipsis) and each one's offset from the
-    /// body's top; empty with no body.
-    body: Vec<(String, f32)>,
+    /// The body's lines (at most [`BODY_LINES`]) as byte spans of its text, and each one's offset
+    /// from the body's top; empty with no body. The text itself is cut only for a row drawn.
+    body: Vec<(std::ops::Range<usize>, f32)>,
+    /// Whether the body has more lines than are shown, so the last shown one ends in an ellipsis.
+    more: bool,
     /// The body's height.
     body_h: f32,
     /// The meta line's height; 0 with no meta.
@@ -197,19 +199,13 @@ impl Measured {
             );
         let mut body = Vec::new();
         let mut body_h = 0.0;
+        let mut more = false;
         if let Some(text) = row.body.filter(|b| !b.is_empty()) {
             let style = body_style(&t, 1.0);
             let lines = p.text_lines(&Spec::plain(text, style).wrapped(room));
-            let more = lines.len() > BODY_LINES;
-            for (i, line) in lines.iter().take(BODY_LINES).enumerate() {
-                let slice = text.get(line.start..line.end).unwrap_or("").trim_end();
-                let line_text = if more && i + 1 == BODY_LINES {
-                    let cut = Spec::plain(format!("{slice}{ELLIPSIS}"), style);
-                    p.elide(&cut, room).runs.remove(0).0
-                } else {
-                    slice.to_owned()
-                };
-                body.push((line_text, line.y));
+            more = lines.len() > BODY_LINES;
+            for line in lines.iter().take(BODY_LINES) {
+                body.push((line.start..line.end, line.y));
                 body_h = line.y + line.height;
             }
         }
@@ -220,6 +216,7 @@ impl Measured {
         Self {
             first,
             body,
+            more,
             body_h,
             meta_h,
         }
@@ -281,6 +278,7 @@ fn paint_row<H: Copy + PartialEq>(
     m: &Measured,
     fill: crate::color::Rgba,
     ring: f32,
+    room: f32,
 ) {
     let t = p.theme;
     let alpha = if row.unread { 1.0 } else { READ_ALPHA };
@@ -314,12 +312,18 @@ fn paint_row<H: Copy + PartialEq>(
     let mut y = top + m.first;
     if !m.body.is_empty() {
         y += LINE_GAP;
-        for (text, dy) in &m.body {
-            p.text(
-                &Spec::plain(text.as_str(), body_style(&t, alpha)),
-                tx,
-                y + dy,
-            );
+        let text = row.body.unwrap_or("");
+        let style = body_style(&t, alpha);
+        for (i, (span, dy)) in m.body.iter().enumerate() {
+            let slice = text.get(span.clone()).unwrap_or("").trim_end();
+            // The last shown line of a longer body is cut with its ellipsis to the room.
+            let line = if m.more && i + 1 == m.body.len() {
+                let cut = Spec::plain(format!("{slice}{ELLIPSIS}"), style);
+                p.elide(&cut, room).runs.remove(0).0
+            } else {
+                slice.to_owned()
+            };
+            p.text(&Spec::plain(line, style), tx, y + dy);
         }
         y += m.body_h;
     }
@@ -358,6 +362,7 @@ impl Ui<'_> {
         let unread_name = self.tr("luneui.message-list.unread");
         let id = self.id(&key);
         let group_on = self.is_enabled();
+        let room = text_width(rect.w);
         let measured: Vec<Measured> = rows
             .iter()
             .map(|r| Measured::of(self.painter(), r, rect.w))
@@ -443,13 +448,22 @@ impl Ui<'_> {
                             &FOCUS,
                         );
                         if tops[i] + heights[i] > seen.0 && tops[i] < seen.1 {
-                            paint_row(ui.painter(), r, row, &measured[i], fill, ring);
+                            paint_row(ui.painter(), r, row, &measured[i], fill, ring, room);
                         }
                         let mut node = Node::new(kid, Role::ListItem, row.title, r);
                         node.description = description(unread_name, row);
                         if resp.enabled {
                             node.states.insert(State::Focusable);
-                            node.actions.insert(Action::Default);
+                            // The show-menu action is how `context` is reached without a
+                            // pointer (D292); rows out of view scroll in on Focus.
+                            for action in [
+                                Action::Default,
+                                Action::Focus,
+                                Action::ScrollIntoView,
+                                Action::ShowMenu,
+                            ] {
+                                node.actions.insert(action);
+                            }
                         } else {
                             node.states.insert(State::Disabled);
                         }

@@ -2,7 +2,7 @@
 //! body cut to two lines and a meta line, in a scroll area; one roving tab stop; a click, Enter and
 //! Space report `clicked`, a secondary click `context`; the header and its action.
 
-use lune_ui_core::access::{Action, Role, SemanticTree};
+use lune_ui_core::access::{AccessAction, Action, Role, SemanticTree};
 use lune_ui_core::color::{premul, with_alpha};
 use lune_ui_core::input::{FrameOutput, Key, NamedKey, PointerButton};
 use lune_ui_core::paint::Rect;
@@ -294,6 +294,33 @@ fn a_secondary_click_reports_context_not_clicked() {
     let rows = plain_rows(&t);
     let mut h = UiHarness::new(WIN);
     let s = click_row(&mut h, &rows, 1, PointerButton::Secondary);
+    assert_eq!(s.resp.context, Some(1));
+    assert_eq!(s.resp.clicked, None);
+}
+
+#[test]
+fn an_access_show_menu_reports_context_and_each_row_offers_it() {
+    let t = titles(3);
+    let rows = plain_rows(&t);
+    let mut h = UiHarness::new(WIN);
+    let tree = frame(&mut h, &rows).out.tree;
+    for i in 0..3 {
+        let n = tree.get(row_id(i)).expect("row");
+        for a in [
+            Action::Default,
+            Action::Focus,
+            Action::ScrollIntoView,
+            Action::ShowMenu,
+        ] {
+            assert!(n.actions.contains(a), "row {i} lacks {a:?}");
+        }
+    }
+    h.input.access(AccessAction {
+        target: row_id(1),
+        action: Action::ShowMenu,
+        value: None,
+    });
+    let s = frame(&mut h, &rows);
     assert_eq!(s.resp.context, Some(1));
     assert_eq!(s.resp.clicked, None);
 }

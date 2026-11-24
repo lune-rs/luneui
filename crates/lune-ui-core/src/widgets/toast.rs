@@ -111,8 +111,10 @@ pub const ACTION_PAD: (f32, f32) = (16.0, 8.0);
 pub const ACTION_GAP: f32 = 8.0;
 /// A notice's drain line: its height along the card's bottom edge.
 pub const DRAIN: f32 = 2.0;
-/// The space between a notice's title and its message, and between the header's texts.
+/// The space between a notice's title and its message.
 pub const TITLE_GAP: f32 = 2.0;
+/// The least space between a notice header's source and its age, and between the age and the
+/// buttons.
 pub const HEADER_GAP: f32 = 8.0;
 
 /// The history panel: the space above the header, its row, the space below it and above the list
@@ -940,20 +942,23 @@ impl<'a> Ui<'a> {
             let entry = &toasts.entries[i];
             let extras = entry.extras.as_deref();
             // The hold reads the pointer against the settled card, not the one still rising or
-            // sliding, and only a mouse holds.
+            // sliding, and only a mouse holds. The timer is settled here, before the line and
+            // the busy request read it, so the frame that releases a hold already runs.
+            let mut timer = entry.timer;
             if extras.is_some() && !leaving {
                 let over = !finger && pointer.is_some_and(|q| card.contains(q));
                 holds.push((id, over));
+                timer = settle_hold(timer, over, now);
             }
             let drain = match extras {
                 Some(x) if x.drain && tier == MotionTier::Full && !leaving => {
-                    drain_fraction(entry, now)
+                    drain_fraction(entry.total, timer, now)
                 }
                 _ => None,
             };
             // A running line moves with the time: ask for frames at the busy cadence until the
             // deadline, which the repaint request at that time covers. A held line is still.
-            if drain.is_some() && matches!(entry.timer, Timer::At(t) if t > now) {
+            if drain.is_some() && matches!(timer, Timer::At(t) if t > now) {
                 self.request_busy_frame(card);
             }
             self.painter().push_xform(Xform {
@@ -980,11 +985,7 @@ impl<'a> Ui<'a> {
         // A notice's timer holds while the pointer rests on it and resumes with what was left.
         for (id, over) in holds {
             if let Some(e) = toasts.entries.iter_mut().find(|e| e.id == id && !e.leaving) {
-                e.timer = match (over, e.timer) {
-                    (true, Timer::At(t)) => Timer::Held(t.saturating_sub(now)),
-                    (false, Timer::Held(r)) => Timer::At(now + r),
-                    (_, timer) => timer,
-                };
+                e.timer = settle_hold(e.timer, over, now);
             }
         }
 
@@ -1557,10 +1558,20 @@ fn body_rules(spec: &ToastSpec, extras: Option<&ToastExtras>) -> (bool, bool) {
     }
 }
 
+/// A notice's timer after a frame's hold: the pointer over the card turns a running timer into a
+/// held one with its time left, and leaving turns it back into a deadline that far from now.
+fn settle_hold(timer: Timer, over: bool, now: Time) -> Timer {
+    match (over, timer) {
+        (true, Timer::At(t)) => Timer::Held(t.saturating_sub(now)),
+        (false, Timer::Held(r)) => Timer::At(now + r),
+        (_, timer) => timer,
+    }
+}
+
 /// The fraction of its timeout a notice has left, for the drain line; `None` when no timeout runs.
-fn drain_fraction(e: &Entry, now: Time) -> Option<f32> {
-    let total = e.total.filter(|d| !d.is_zero())?;
-    let left = match e.timer {
+fn drain_fraction(total: Option<Duration>, timer: Timer, now: Time) -> Option<f32> {
+    let total = total.filter(|d| !d.is_zero())?;
+    let left = match timer {
         Timer::At(t) => t.saturating_sub(now),
         Timer::Held(r) => r,
         Timer::Pending | Timer::Off => return None,

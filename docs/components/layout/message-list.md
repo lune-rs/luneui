@@ -74,7 +74,7 @@ Never animated: the dot (it appears with the row), the rows' content, the reveal
 
 ### Accessibility
 
-- A `List` named `MessageListOptions::label`; a `ListItem` per row named by its title, described by "Unread" (when it is), the body and the meta line joined by ", "; states focusable, disabled; action default [infra.accessibility]. The header's button is a `Button` named by its label.
+- A `List` named `MessageListOptions::label`; a `ListItem` per row named by its title, described by "Unread" (when it is), the body and the meta line joined by ", "; states focusable, disabled; actions default, focus, scroll into view and show menu (the show-menu action reports `context`, D292) [infra.accessibility]. The header's button is a `Button` named by its label.
 
 ### Strings
 

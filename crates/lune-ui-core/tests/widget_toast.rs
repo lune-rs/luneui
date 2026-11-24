@@ -1577,6 +1577,39 @@ fn a_running_drain_line_asks_for_frames_and_a_held_one_does_not() {
     );
 }
 
+/// The frame that releases a hold asks for a busy frame at once: the drain line moves again,
+/// it does not wait for the deadline. Each way a hold ends is one case.
+#[test]
+fn releasing_a_hold_asks_for_a_busy_frame_that_frame() {
+    let busy = |r: Repaint, from: u64| matches!(r, Repaint::At(t) if t < ms(from + 100));
+    for how in [
+        "pointer moved away",
+        "pointer left the window",
+        "a finger touched",
+    ] {
+        let (mut h, mut toasts, _, over) =
+            notice_bench(info("Draining"), timed(ToastExtras::new().with_drain(true)));
+        frame_at(&mut h, &mut toasts, Some(over), secs(2));
+        let held = frame_at(&mut h, &mut toasts, Some(over), 2500).1.repaint;
+        assert_eq!(held, Repaint::Idle, "{how}: held, no frames");
+        let r = match how {
+            "pointer moved away" => frame_at(&mut h, &mut toasts, None, secs(3)).1.repaint,
+            "pointer left the window" => {
+                h.input.pointer_leave();
+                frame(&mut h, &mut toasts, secs(3)).1.repaint
+            }
+            _ => {
+                h.input.touch_start(1, over.0, over.1);
+                frame(&mut h, &mut toasts, secs(3)).1.repaint
+            }
+        };
+        assert!(
+            busy(r, secs(3)),
+            "{how}: the release frame asks for a busy tick, got {r:?}"
+        );
+    }
+}
+
 #[test]
 fn a_body_action_reports_and_the_toast_leaves_without_toggling_the_log() {
     let mut spec = info("Open me");

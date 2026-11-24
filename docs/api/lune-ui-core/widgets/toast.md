@@ -58,7 +58,7 @@ pub struct ToastAction {
 
 An action button of a toast (a prompt): the app's label and its own number for it.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:154`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:156`
 
 **Fields**
 
@@ -98,7 +98,7 @@ pub struct ToastExtras {
 What a notice adds to a [`ToastSpec`](toast.md#struct.ToastSpec) ([`Toasts::push_with`](toast.md#method.Toasts.push_with)). Build it with [`Self::new`](toast.md#method.ToastExtras.new) and
 the `with_*` methods; new fields stay additive.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:207`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:209`
 
 **Fields**
 
@@ -205,7 +205,7 @@ pub struct ToastId(pub u64);
 
 A toast's identity, stable from [`Toasts::push`](toast.md#method.Toasts.push) until it is gone.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:134`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:136`
 
 **Fields**
 
@@ -235,7 +235,7 @@ pub struct ToastResponse {
 
 What [`Ui::toasts`](../ui.md#method.Ui.toasts) reports for a frame.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:581`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:583`
 
 **Fields**
 
@@ -272,7 +272,7 @@ pub struct ToastSpec {
 
 What a toast shows. Texts are the app's.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:163`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:165`
 
 **Fields**
 
@@ -316,7 +316,7 @@ pub struct ToastStackOptions {
 
 Where [`Ui::toasts_with`](../ui.md#method.Ui.toasts_with) puts the stack. Build it with [`Self::new`](toast.md#method.ToastStackOptions.new) and the `with_*` methods.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:298`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:300`
 
 **Fields**
 
@@ -367,7 +367,7 @@ pub struct Toasts {
 The toasts an app has up and the archive of those that left. The app owns it, pushes from
 anywhere and hands it to [`Ui::toasts`](../ui.md#method.Ui.toasts) and [`Ui::toast_history`](../ui.md#method.Ui.toast_history) every frame.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:369`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:371`
 
 **Methods and associated items**
 
@@ -472,7 +472,7 @@ pub enum ToastKind {
 
 What a toast says it is.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:138`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:140`
 
 **Variants**
 
@@ -520,7 +520,7 @@ pub fn toast_size<H: Copy + PartialEq>(
 The size of a toast with `spec` as it settles, collapsed or `expanded`. A notice's header and
 title add to it; this is the size of a toast pushed with [`Toasts::push`](toast.md#method.Toasts.push).
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:726`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:728`
 
 ## Constants
 
@@ -621,7 +621,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:99`
 pub const CLEAR_GLYPH: f32 = 14.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:125`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:127`
 
 <a id="constant.DETAIL_TOP"></a>
 ### Constant `DETAIL_TOP`
@@ -681,7 +681,10 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:84`
 pub const HEADER_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:116`
+The least space between a notice header's source and its age, and between the age and the
+buttons.
+
+Source: `crates/lune-ui-core/src/widgets/toast.rs:118`
 
 <a id="constant.HISTORY_CAP"></a>
 ### Constant `HISTORY_CAP`
@@ -701,7 +704,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:73`
 pub const HISTORY_DETAIL_INSET: f32 = 22.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:130`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:132`
 
 <a id="constant.HISTORY_GAP"></a>
 ### Constant `HISTORY_GAP`
@@ -710,7 +713,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:130`
 pub const HISTORY_GAP: f32 = 8.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:129`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:131`
 
 <a id="constant.HISTORY_HEADER"></a>
 ### Constant `HISTORY_HEADER`
@@ -719,7 +722,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:129`
 pub const HISTORY_HEADER: f32 = 24.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:122`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:124`
 
 <a id="constant.HISTORY_HEADER_BOTTOM"></a>
 ### Constant `HISTORY_HEADER_BOTTOM`
@@ -728,7 +731,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:122`
 pub const HISTORY_HEADER_BOTTOM: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:123`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:125`
 
 <a id="constant.HISTORY_HEADER_TOP"></a>
 ### Constant `HISTORY_HEADER_TOP`
@@ -741,7 +744,7 @@ The history panel: the space above the header, its row, the space below it and a
 (the shipped panel's margins), the clear-all button, its glyph, and a row's padding, margin and
 glyph.
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:121`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:123`
 
 <a id="constant.HISTORY_ICON"></a>
 ### Constant `HISTORY_ICON`
@@ -750,7 +753,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:121`
 pub const HISTORY_ICON: f32 = 14.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:128`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:130`
 
 <a id="constant.HISTORY_LIST_TOP"></a>
 ### Constant `HISTORY_LIST_TOP`
@@ -759,7 +762,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:128`
 pub const HISTORY_LIST_TOP: f32 = 4.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:124`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:126`
 
 <a id="constant.HISTORY_MARGIN"></a>
 ### Constant `HISTORY_MARGIN`
@@ -768,7 +771,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:124`
 pub const HISTORY_MARGIN: f32 = 1.0;
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:127`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:129`
 
 <a id="constant.HISTORY_PAD"></a>
 ### Constant `HISTORY_PAD`
@@ -777,7 +780,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:127`
 pub const HISTORY_PAD: (f32, f32);
 ```
 
-Source: `crates/lune-ui-core/src/widgets/toast.rs:126`
+Source: `crates/lune-ui-core/src/widgets/toast.rs:128`
 
 <a id="constant.ICON"></a>
 ### Constant `ICON`
@@ -947,7 +950,7 @@ Source: `crates/lune-ui-core/src/widgets/toast.rs:93`
 pub const TITLE_GAP: f32 = 2.0;
 ```
 
-The space between a notice's title and its message, and between the header's texts.
+The space between a notice's title and its message.
 
 Source: `crates/lune-ui-core/src/widgets/toast.rs:115`
 
